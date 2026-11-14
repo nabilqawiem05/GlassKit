@@ -94,6 +94,34 @@ public class LockActivity extends Activity {
     private GaugeRow gauges;
     private LinearLayout bottom, notifList, musicBox;
     private MaxScroll notifScroll;
+    private View notifHead;
+
+    /** Hadkan senarai notifikasi supaya tidak menindih jam & tolok (ia boleh skrol). */
+    private void fitNotifs() {
+        if (notifScroll == null || gauges == null) return;
+        notifScroll.post(() -> {
+            try {
+                int[] g = new int[2], sc = new int[2];
+                View above = gauges.getVisibility() == View.VISIBLE && gauges.getHeight() > 0 ? gauges : null;
+                int topLimit;
+                if (above != null) {
+                    above.getLocationInWindow(g);
+                    topLimit = g[1] + above.getHeight() + dp(6);
+                } else {
+                    topLimit = Math.round(getResources().getDisplayMetrics().heightPixels * 0.42f);
+                }
+                notifScroll.getLocationInWindow(sc);
+                int scrollBottom = sc[1] + notifScroll.getHeight();
+                int head = notifHead != null ? notifHead.getHeight() + dp(8) : 0;
+                int max = Math.max(dp(90), scrollBottom - topLimit - head);
+                if (Math.abs(max - notifScroll.max) > dp(2)) {
+                    notifScroll.max = max;
+                    notifScroll.requestLayout();
+                }
+            } catch (Throwable ignored) {
+            }
+        });
+    }
     private UnlockAnim lockAnim;
     private TextView hint, clearAll;
     private Bitmap frame, bg, fg;
@@ -241,6 +269,7 @@ public class LockActivity extends Activity {
         nhl.topMargin = dp(8);
         bottom.addView(nh, nhl);
 
+        notifHead = nh;
         notifScroll = new MaxScroll(this);
         notifScroll.max = Math.round(H * 0.38f);
         notifScroll.setVerticalScrollBarEnabled(false);
@@ -473,6 +502,7 @@ public class LockActivity extends Activity {
         if (gl.topMargin != top) {
             gl.topMargin = top;
             gauges.setLayoutParams(gl);
+            fitNotifs();
         }
     }
 
@@ -608,6 +638,7 @@ public class LockActivity extends Activity {
                 || x.getPackageName().equals(getPackageName()));
         list.sort((a, b) -> Long.compare(b.getPostTime(), a.getPostTime()));
         clearAll.setVisibility(list.isEmpty() ? View.GONE : View.VISIBLE);
+        fitNotifs();
         for (StatusBarNotification sbn : list) {
             View card = card(sbn);
             if (card == null) continue;

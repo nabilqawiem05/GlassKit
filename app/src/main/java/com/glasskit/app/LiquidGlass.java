@@ -161,7 +161,8 @@ final class LiquidGlass {
 
             c.save();
             c.clipPath(rr);
-            boolean refr = bd != null && bd.ready() && getCallback() instanceof View;
+            // kanta biasan dimatikan: ia menghasilkan bingkai segi empat kabur di dalam kad panjang
+            boolean refr = false;
             float lum = refr ? bd.luminance : 0.4f;
             if (refr) {
                 View host = (View) getCallback();
