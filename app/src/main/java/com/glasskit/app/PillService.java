@@ -198,6 +198,7 @@ public class PillService extends AccessibilityService
             if (a == null) return;
             switch (a) {
                 case Intent.ACTION_SCREEN_ON:
+                    if (lockCover != null) lockCover.onScreenOn();
                     if (patch != null) patch.screenOn();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
                         // cuba serta-merta, kemudian ulang jika sistem lambat (elak lock screen stock terpapar)
@@ -210,7 +211,9 @@ public class PillService extends AccessibilityService
                 case Intent.ACTION_SCREEN_OFF:
                     if (patch != null) patch.hide(false);
                     if (panels != null) panels.close();
-                    if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
+                    if (prefs.getBoolean(Prefs.LOCK_ON, false) && !islandCallActive()) {
+                        if (lockCover == null) lockCover = new LockCover(PillService.this);
+                        lockCover.arm();
                         h.removeCallbacks(ensureLock);
                         h.removeCallbacks(lockWatch);
                         LockActivity.holdUntil = 0;
@@ -220,6 +223,7 @@ public class PillService extends AccessibilityService
                     break;
                 case Intent.ACTION_USER_PRESENT:
                     h.removeCallbacks(lockWatch);
+                    if (lockCover != null) lockCover.hide();
                     if (patch != null) patch.hide(true);
                     hideBanner(false);
                     h.postDelayed(PillService.this::updateStatusBar, 300);
@@ -338,7 +342,17 @@ public class PillService extends AccessibilityService
     }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) { }
+    public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (lockCover == null || !lockCover.shown() || event == null) return;
+        if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        CharSequence p = event.getPackageName();
+        if (p == null) return;
+        String pk = p.toString();
+        // app lain (penggera, panggilan, kamera) di atas lock screen: jangan sekali-kali tutupnya
+        if (!pk.equals(getPackageName()) && !pk.equals("com.android.systemui") && !pk.equals("android")) {
+            lockCover.hide();
+        }
+    }
 
     @Override
     protected boolean onKeyEvent(android.view.KeyEvent e) {
@@ -367,6 +381,7 @@ public class PillService extends AccessibilityService
 
     @Override
     public void onDestroy() {
+        if (lockCover != null) lockCover.destroy();
         inst = null;
         h.removeCallbacksAndMessages(null);
         if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(this);
@@ -421,6 +436,10 @@ public class PillService extends AccessibilityService
             h.post(this::prayerTick);
         }
         if (Prefs.LIVE_ON.equals(key)) h.post(this::refresh);
+        if (Prefs.LOCK_ON.equals(key) && !sp.getBoolean(Prefs.LOCK_ON, false) && lockCover != null) {
+            lockCover.destroy();
+            lockCover = null;
+        }
         if (panels != null) panels.updateEdges();
         updateStatusBar();
         refresh();
@@ -863,6 +882,7 @@ public class PillService extends AccessibilityService
     void islandCall(String key, CharSequence name, String label, Drawable photo, PendingIntent answer,
                     PendingIntent decline, PendingIntent hang, PendingIntent open, boolean ringing, long when, boolean quiet) {
         if (pill == null) return;
+        if (lockCover != null) lockCover.hide();
         boolean isNew = !key.equals(callKey);
         boolean wasRinging = callRinging;
         callKey = key;
@@ -1470,8 +1490,21 @@ public class PillService extends AccessibilityService
         GlassWidget.updateAll(this, StepsWidget.class);
     }
 
+    LockCover lockCover;
+
+    void lockCoverReady() {
+        if (lockCover != null) lockCover.hide();
+    }
+
     private final Runnable ensureLock = () -> {
-        if (lockNeeded()) showLock();
+        if (!lockNeeded()) return;
+        showLock();
+        // sandaran yang pasti: lancar melalui Shizuku (shell tidak disekat oleh had pelancaran latar)
+        if (Shell.granted()) {
+            h.postDelayed(() -> {
+                if (lockNeeded()) Shell.run("am start -n " + getPackageName() + "/.LockActivity -f 0x10030000");
+            }, 250);
+        }
     };
     private int lockMiss;
     /** Pengawas: selagi skrin hidup & berkunci, pastikan lock screen GlassKit di depan (bukan stock). */

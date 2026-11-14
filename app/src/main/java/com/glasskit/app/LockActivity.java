@@ -291,6 +291,10 @@ public class LockActivity extends Activity {
         super.onResume();
         visible = true;
         holdUntil = 0;
+        // tanggalkan penutup selepas bingkai pertama aktiviti ini dilukis
+        getWindow().getDecorView().postDelayed(() -> {
+            if (visible && PillService.inst != null) PillService.inst.lockCoverReady();
+        }, 120);
         hideBars();
         try {
             resetUi();
@@ -363,6 +367,34 @@ public class LockActivity extends Activity {
     }
 
     // ======================= Lukisan =======================
+
+    interface FrameCb { void done(Bitmap b); }
+
+    /** Bingkai terakhir jika saiznya sepadan dengan skrin. */
+    static Bitmap frameFor(android.content.Context c) {
+        synchronized (lastBd) {
+            return lastFrame;
+        }
+    }
+
+    /** Lukis wallpaper + jam (tanpa aktiviti) di thread latar; digunakan oleh penutup lock screen. */
+    static void renderInBackground(android.content.Context c, FrameCb cb) {
+        final android.content.Context app = c.getApplicationContext();
+        RENDER.execute(() -> {
+            Bitmap out = null;
+            try {
+                android.graphics.Rect b = app.getSystemService(android.view.WindowManager.class).getMaximumWindowMetrics().getBounds();
+                int w = b.width(), hh = b.height();
+                Bitmap bgB = DepthRenderer.load(DepthRenderer.bgFile(app));
+                Bitmap fgB = DepthRenderer.load(DepthRenderer.fgFile(app));
+                out = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
+                DepthRenderer.draw(app, new Canvas(out), w, hh, bgB, fgB, Prefs.get(app), true);
+            } catch (Throwable t) {
+                CrashLog.write(app, t);
+            }
+            cb.done(out);
+        });
+    }
 
     private static void copyBd(LiquidGlass.Backdrop from, LiquidGlass.Backdrop to) {
         to.sharp = from.sharp;
