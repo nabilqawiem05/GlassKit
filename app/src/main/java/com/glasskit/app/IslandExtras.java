@@ -197,6 +197,9 @@ final class IslandExtras {
         }
     }
 
+    /** Kamera atau mikrofon sedang digunakan (termasuk oleh rakaman skrin). */
+    boolean busy() { return !camBusy.isEmpty() || micBusy; }
+
     /** 0 tiada, 1 kamera (hijau), 2 mikrofon (oren). */
     int privacy() {
         if (!s.prefs.getBoolean(Prefs.ISL_PRIVACY, true)) return 0;

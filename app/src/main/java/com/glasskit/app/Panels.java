@@ -840,7 +840,6 @@ final class Panels {
                         .setInterpolator(new android.view.animation.OvershootInterpolator(2.2f))
                         .setStartDelay(180 + i * 28L).setDuration(460).start();
             }
-            startTilt();
         }
 
         /** Tepi bawah berayun sekejap sebelum tenang, macam cecair mendap. */
@@ -849,7 +848,7 @@ final class Panels {
             a.setDuration(700);
             a.addUpdateListener(x -> {
                 float t = (float) x.getAnimatedValue();
-                wobble = (float) (Math.sin(t * Math.PI * 3) * Math.exp(-4 * t)) * 0.7f;
+                wobble = (float) (Math.sin(t * Math.PI * 2) * Math.exp(-5 * t)) * 0.3f;
                 invalidate();
             });
             a.start();
@@ -906,15 +905,6 @@ final class Panels {
             float ny = Math.max(-1f, Math.min(1f, (e.values[1] - 6.5f) / 4.5f));
             tx += (nx - tx) * 0.12f;
             ty += (ny - ty) * 0.12f;
-            // kedalaman halus: helaian condong sedikit, titisan beralih (paralaks)
-            setRotationY(tx * 3.5f);
-            setRotationX(-ty * 2.5f);
-            for (View d : drops) {
-                if (d.getAnimation() == null && d.getAlpha() >= 0.99f) {
-                    d.setTranslationX(tx * dp(3));
-                    d.setTranslationY(ty * dp(2));
-                }
-            }
             invalidate();
         }
 

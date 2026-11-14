@@ -176,11 +176,20 @@ class StatusBar extends View {
         return dp(27) + (charging ? dp(9) : 0);
     }
 
+    private boolean solid;
+
+    /** Kapsul legap: menutup cip rakaman / privasi status bar stock supaya tidak bertindih. */
+    void setSolid(boolean v) {
+        if (solid == v) return;
+        solid = v;
+        invalidate();
+    }
+
     private void capsule(Canvas c, float l, float r, float cy) {
         float hh = dp(13.5f);
         RectF rf = new RectF(l, cy - hh, r, cy + hh);
         cap.setShader(null);
-        cap.setColor(dark ? Color.argb(150, 16, 16, 20) : Color.argb(92, 22, 22, 28));
+        cap.setColor(solid ? Color.rgb(20, 20, 24) : dark ? Color.argb(150, 16, 16, 20) : Color.argb(92, 22, 22, 28));
         c.drawRoundRect(rf, hh, hh, cap);
         cap.setShader(new LinearGradient(0, rf.top, 0, rf.bottom,
                 new int[]{Color.argb(dark ? 34 : 60, 255, 255, 255), Color.argb(0, 255, 255, 255)},
