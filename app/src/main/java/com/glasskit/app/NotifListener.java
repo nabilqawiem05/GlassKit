@@ -51,6 +51,13 @@ public class NotifListener extends NotificationListenerService {
             if (p.call != null) p.call.onCallNotification(sbn);
             return;
         }
+        // promosi: kumpul senyap, keluarkan dari bar status (kembali selepas 24 jam jika tidak dibuka)
+        if (Promo.isPromo(p, sbn)) {
+            Promo.add(sbn);
+            try { snoozeNotification(sbn.getKey(), 24 * 3600_000L); } catch (Exception ignored) {}
+            if (p.panels != null) p.panels.onNotificationsChanged();
+            return;
+        }
 
         if (ex != null && ex.containsKey(Notification.EXTRA_MEDIA_SESSION)) {
             p.initMedia();

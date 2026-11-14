@@ -153,6 +153,18 @@ final class Panels {
                     y0[0] = e.getRawY();
                     fired[0] = false;
                     break;
+                case MotionEvent.ACTION_UP:
+                    // ketuk dua kali bar status: kunci skrin
+                    if (!fired[0] && s.prefs.getBoolean(Prefs.DT_LOCK, false)) {
+                        long now = android.os.SystemClock.uptimeMillis();
+                        if (now - lastEdgeTap < 320) {
+                            lastEdgeTap = 0;
+                            s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN);
+                        } else {
+                            lastEdgeTap = now;
+                        }
+                    }
+                    break;
                 case MotionEvent.ACTION_MOVE:
                     if (!fired[0] && e.getRawY() - y0[0] > dp(14)) {
                         fired[0] = true;
@@ -978,7 +990,14 @@ final class Panels {
         }, act(Settings.ACTION_SECURITY_SETTINGS));
         Tile set = new Tile(Icon.GEAR, s.getString(R.string.tg_settings), Color.WHITE,
                 v -> launch(new Intent(Settings.ACTION_SETTINGS)), null);
-        Tile[] all = {tWifi, tBt, tData, tDnd, tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc, shot, rec, cam, lock, set};
+        final Tile[] awk = new Tile[1];
+        awk[0] = new Tile(Icon.SUN, s.getString(R.string.tg_awake), 0xFFFFD60A, v -> {
+            s.setKeepAwake(!s.keepAwake());
+            awk[0].set(s.keepAwake(), null);
+            Toast.makeText(s, s.keepAwake() ? R.string.awake_on : R.string.awake_off, Toast.LENGTH_SHORT).show();
+        }, null);
+        awk[0].set(s.keepAwake(), null);
+        Tile[] all = {tWifi, tBt, tData, tDnd, tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc, shot, rec, awk[0], cam, lock, set};
 
         LinearLayout mid = new LinearLayout(s);
         mid.setClipChildren(false);
@@ -1534,6 +1553,7 @@ final class Panels {
             e.setPadding(0, dp(26), 0, dp(26));
             e.setBackground(Ui.glassStyled(s, 28, dark));
             ncList.addView(e, new LinearLayout.LayoutParams(-1, -2));
+            addPromos();
             return;
         }
         // kumpul ikut app (kekal susunan terbaru dahulu)
@@ -1582,9 +1602,63 @@ final class Panels {
                 ncList.addView(stack, p);
             }
         }
+        addPromos();
     }
 
     private final java.util.Set<String> openGroups = new java.util.HashSet<>();
+    private long lastEdgeTap;
+
+    /** Tindanan "Promosi" di bawah notifikasi biasa. */
+    private void addPromos() {
+        List<StatusBarNotification> pr = Promo.list();
+        if (pr.isEmpty() || ncList == null) return;
+        boolean opened = openGroups.contains("__promo");
+        LinearLayout hdr = new LinearLayout(s);
+        hdr.setGravity(Gravity.CENTER_VERTICAL);
+        hdr.setPadding(dp(6), dp(12), dp(2), dp(8));
+        TextView ht = Ui.line(s, 15, 650, Color.WHITE);
+        ht.setText(s.getString(R.string.promo_title, pr.size()));
+        hdr.addView(ht, new LinearLayout.LayoutParams(0, -2, 1f));
+        View tog = chip(s.getString(opened ? R.string.show_less : R.string.show_all), v -> {
+            if (opened) openGroups.remove("__promo"); else openGroups.add("__promo");
+            fillNotifications();
+        });
+        tog.setPadding(dp(16), 0, dp(16), 0);
+        hdr.addView(tog, new LinearLayout.LayoutParams(-2, dp(34)));
+        LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-2, dp(34));
+        hl.leftMargin = dp(8);
+        View clr = chip(s.getString(R.string.clear_all), v -> {
+            Promo.clear();
+            fillNotifications();
+        });
+        clr.setPadding(dp(16), 0, dp(16), 0);
+        hdr.addView(clr, hl);
+        ncList.addView(hdr, new LinearLayout.LayoutParams(-1, -2));
+        if (!opened) {
+            TextView sum = Ui.text(s, 13, 500, Color.argb(190, 255, 255, 255));
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < Math.min(3, pr.size()); i++) {
+                if (i > 0) sb.append(" · ");
+                sb.append(appName(pr.get(i).getPackageName()));
+            }
+            sum.setText(sb);
+            sum.setPadding(dp(16), dp(12), dp(16), dp(12));
+            sum.setBackground(GlassEngine.drawable(s, 22, true, 25));
+            sum.setOnClickListener(v -> {
+                openGroups.add("__promo");
+                fillNotifications();
+            });
+            ncList.addView(sum, new LinearLayout.LayoutParams(-1, -2));
+            return;
+        }
+        for (StatusBarNotification x : pr) {
+            View card = card(x, true, true);
+            if (card == null) continue;
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+            p.bottomMargin = dp(8);
+            ncList.addView(card, p);
+        }
+    }
     private final java.util.Set<String> openCards = new java.util.HashSet<>();
     private String replyKey;
 
@@ -2003,6 +2077,7 @@ final class Panels {
                         if (Math.abs(dx) > view.getWidth() * 0.33f) {
                             view.animate().translationX(Math.signum(dx) * view.getWidth()).alpha(0f).setDuration(180)
                                     .withEndAction(() -> {
+                                        Promo.remove(sbn.getKey());
                                         if (NotifListener.inst != null) {
                                             try { NotifListener.inst.cancelNotification(sbn.getKey()); } catch (Exception ignored) {}
                                         }

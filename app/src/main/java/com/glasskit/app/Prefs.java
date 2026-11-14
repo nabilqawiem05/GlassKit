@@ -38,6 +38,16 @@ public final class Prefs {
     public static final String REC_AUDIO = "recAudio";
     public static final String CALL_ON = "callOn";
     public static final String LIVE_ON = "liveOn";
+    public static final String SYS_COLOR = "sysColor";
+    public static final String T_120 = "t120";
+    public static final String T_ANIM = "tAnim";
+    public static final String T_FORCE_DARK = "tForceDark";
+    public static final String T_HIDE_STOCK_NOTIF = "tHideStockNotif";
+    public static final String GRAY_SLEEP = "graySleep";
+    public static final String PROMO_ON = "promoOn";
+    public static final String NET_SPEED = "netSpeed";
+    public static final String DT_LOCK = "dtLock";
+    public static final String TEMP_WARN = "tempWarn";
     public static final String PANEL_STYLE = "panelStyle"; // 0 klasik, 1 island cecair
     public static final String FACE = "face";
     public static final String FACE_FOCUS = "faceFocus";

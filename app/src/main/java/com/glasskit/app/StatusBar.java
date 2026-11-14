@@ -164,8 +164,26 @@ class StatusBar extends View {
         return w;
     }
 
+    private String speed;
+    private final Paint sp = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    /** Kelajuan internet (null = sorok). */
+    void setSpeed(String s) {
+        if (s == null ? speed == null : s.equals(speed)) return;
+        speed = s;
+        requestLayout();
+        invalidate();
+    }
+
+    private float speedWidth() {
+        if (speed == null) return 0;
+        sp.setTextSize(dp(10.5f));
+        sp.setTypeface(Ui.font(700));
+        return sp.measureText(speed) + dp(7);
+    }
+
     private float rightWidth() {
-        float w = batteryWidth();
+        float w = batteryWidth() + speedWidth();
         if (wifi >= 0) w += dp(17) + dp(6);
         if (cell >= 0 || airplane) w += dp(16) + dp(6);
         if (dnd) w += dp(13) + dp(6);
@@ -237,8 +255,14 @@ class StatusBar extends View {
             c.drawCircle(x + dp(3), cy, dp(2.4f), fill);
         }
 
-        // ---- kanan: DND, signal, Wi-Fi, bateri ----
+        // ---- kanan: kelajuan, DND, signal, Wi-Fi, bateri ----
         x = rx;
+        if (speed != null) {
+            sp.setColor(Color.WHITE);
+            Paint.FontMetrics sf = sp.getFontMetrics();
+            c.drawText(speed, x, cy - (sf.ascent + sf.descent) / 2f, sp);
+            x += speedWidth();
+        }
         if (dnd) {
             drawMoon(c, x, cy);
             x += dp(13) + dp(6);

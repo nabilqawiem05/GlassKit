@@ -65,7 +65,8 @@ public class MainActivity extends Activity {
     private static final int[] COLORS = {
             Color.WHITE, 0xFF8AB4F8, 0xFFC8B6FF, 0xFFF5D06F, 0xFFFF8A80, 0xFF101418
     };
-    private static final int TEXT2 = Color.argb(165, 235, 235, 245);
+    ToolsPage tools;
+    static final int TEXT2 = Color.argb(165, 235, 235, 245);
 
     private SharedPreferences prefs;
     private ImageView preview;
@@ -192,8 +193,8 @@ public class MainActivity extends Activity {
 
         FrameLayout pagesF = new FrameLayout(this);
         shell.addView(pagesF, new LinearLayout.LayoutParams(-1, 0, 1f));
-        int[] tabNames = {R.string.tab_home, R.string.tab_lock, R.string.tab_island, R.string.tab_panels, R.string.tab_widgets};
-        int[] tabIcons = {Icon.GEAR, Icon.LOCK, Icon.NOTE, Icon.DARK, Icon.SUN};
+        int[] tabNames = {R.string.tab_home, R.string.tab_lock, R.string.tab_island, R.string.tab_panels, R.string.tab_widgets, R.string.tab_tools};
+        int[] tabIcons = {Icon.GEAR, Icon.LOCK, Icon.NOTE, Icon.DARK, Icon.SUN, Icon.BOLT};
         pages = new ScrollView[tabNames.length];
         LinearLayout[] boxes = new LinearLayout[tabNames.length];
         for (int i = 0; i < tabNames.length; i++) {
@@ -225,6 +226,7 @@ public class MainActivity extends Activity {
             tabs.addView(pill, pl2);
         }
         LinearLayout pHome = boxes[0], pLock = boxes[1], pIsland = boxes[2], pPanels = boxes[3], pWidgets = boxes[4];
+        tools = new ToolsPage(this, boxes[5]);
         selectTab(0);
 
         // ---------- Kebenaran ----------
@@ -638,11 +640,12 @@ public class MainActivity extends Activity {
         super.onResume();
         renderWidgetPreview();
         refreshStatus();
+        if (tools != null) tools.refresh();
     }
 
     // ======================= Komponen =======================
 
-    private LinearLayout card(LinearLayout parent, int title, int icon, int color) {
+    LinearLayout card(LinearLayout parent, int title, int icon, int color) {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setBackground(Ui.glass(this, 30, 24));
@@ -686,7 +689,7 @@ public class MainActivity extends Activity {
         t.setBackground(Ui.round(ok ? Color.argb(40, 48, 209, 88) : Color.argb(40, 255, 159, 10), dp(14)));
     }
 
-    private View button(LinearLayout parent, String text, boolean primary, View.OnClickListener l) {
+    View button(LinearLayout parent, String text, boolean primary, View.OnClickListener l) {
         TextView bt = Ui.text(this, 15, 600, primary ? 0xFF0B0B10 : Color.WHITE);
         bt.setText(text);
         bt.setGravity(Gravity.CENTER);
@@ -703,7 +706,7 @@ public class MainActivity extends Activity {
         return bt;
     }
 
-    private void addPair(LinearLayout row, View a, View b) {
+    void addPair(LinearLayout row, View a, View b) {
         LinearLayout.LayoutParams l1 = new LinearLayout.LayoutParams(0, dp(50), 1f);
         l1.topMargin = dp(12);
         LinearLayout.LayoutParams l2 = new LinearLayout.LayoutParams(0, dp(50), 1f);
@@ -713,7 +716,7 @@ public class MainActivity extends Activity {
         row.addView(b, l2);
     }
 
-    private TextView note(LinearLayout parent, String s) {
+    TextView note(LinearLayout parent, String s) {
         TextView t = Ui.text(this, 14, 400, TEXT2);
         t.setText(s);
         t.setLineSpacing(0, 1.2f);
@@ -722,14 +725,14 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    private void label(LinearLayout parent, int res) {
+    void label(LinearLayout parent, int res) {
         TextView t = Ui.text(this, 13, 600, TEXT2);
         t.setText(res);
         t.setPadding(dp(2), dp(18), 0, dp(6));
         parent.addView(t);
     }
 
-    private void toggle(LinearLayout parent, int label, String key, boolean def) {
+    void toggle(LinearLayout parent, int label, String key, boolean def) {
         Switch sw = new Switch(this);
         sw.setText(label);
         sw.setTextSize(16);
@@ -746,7 +749,7 @@ public class MainActivity extends Activity {
 
     interface IntCb { void on(int v); }
 
-    private void slider(LinearLayout parent, int min, int max, int cur, IntCb cb) {
+    void slider(LinearLayout parent, int min, int max, int cur, IntCb cb) {
         SeekBar s = new SeekBar(this);
         s.setMin(min);
         s.setMax(max);
@@ -762,7 +765,7 @@ public class MainActivity extends Activity {
         parent.addView(s, new LinearLayout.LayoutParams(-1, dp(36)));
     }
 
-    private void segmented(LinearLayout parent, int[] labels, int selected, IntCb cb) {
+    void segmented(LinearLayout parent, int[] labels, int selected, IntCb cb) {
         final LinearLayout seg = new LinearLayout(this);
         seg.setBackground(Ui.glass(this, 22, 26));
         seg.setPadding(dp(4), dp(4), dp(4), dp(4));
@@ -1077,7 +1080,7 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    private void toast(String s) {
+    void toast(String s) {
         Toast.makeText(this, s, Toast.LENGTH_SHORT).show();
     }
 

@@ -127,6 +127,74 @@ public class PillService extends AccessibilityService
     private LockPatch patch;
     private int lastNight = -1;
     IslandExtras extras;
+    AppTools.ProfileRunner profiles;
+    private View awakeView;
+    private boolean awakeTile;
+    private long lastHot;
+    private long rx0 = -1, t0;
+
+    /** Skrin kekal hidup (tile atau tetapan ikut app). */
+    void setKeepAwake(boolean on) {
+        awakeTile = on;
+        applyAwake();
+    }
+
+    boolean keepAwake() { return awakeTile; }
+
+    void onProfileChanged() { applyAwake(); }
+
+    private void applyAwake() {
+        boolean want = awakeTile || (profiles != null && profiles.keepAwake());
+        if (want && awakeView == null) {
+            awakeView = new View(this);
+            awakeView.setKeepScreenOn(true);
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(1, 1,
+                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                    android.graphics.PixelFormat.TRANSLUCENT);
+            lp.gravity = Gravity.TOP | Gravity.START;
+            try { wm.addView(awakeView, lp); } catch (Exception e) { awakeView = null; }
+        } else if (!want && awakeView != null) {
+            try { wm.removeViewImmediate(awakeView); } catch (Exception ignored) {}
+            awakeView = null;
+        }
+    }
+
+    /** Meter kelajuan internet setiap 2 saat (hanya bila skrin hidup & dihidupkan). */
+    private final Runnable netTick = new Runnable() {
+        @Override
+        public void run() {
+            h.removeCallbacks(this);
+            if (prefs == null || !prefs.getBoolean(Prefs.NET_SPEED, false) || sbar == null) {
+                if (sbar != null) sbar.setSpeed(null);
+                rx0 = -1;
+                return;
+            }
+            long rx = android.net.TrafficStats.getTotalRxBytes(), now = SystemClock.elapsedRealtime();
+            if (rx0 >= 0 && now > t0) {
+                double bps = (rx - rx0) * 1000.0 / (now - t0);
+                String txt = null;
+                if (bps > 40 * 1024) txt = bps > 1024 * 1024 ? String.format(java.util.Locale.US, "↓%.1fM", bps / 1048576.0)
+                        : String.format(java.util.Locale.US, "↓%dK", Math.round(bps / 1024));
+                sbar.setSpeed(txt);
+            }
+            rx0 = rx;
+            t0 = now;
+            PowerManager pm = getSystemService(PowerManager.class);
+            if (pm != null && pm.isInteractive()) h.postDelayed(this, 2000);
+        }
+    };
+
+    /** Amaran suhu bateri. */
+    private void checkTemp(Intent i) {
+        if (prefs == null || !prefs.getBoolean(Prefs.TEMP_WARN, true)) return;
+        float t = i.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) / 10f;
+        if (t < 43f || System.currentTimeMillis() - lastHot < 20 * 60_000L) return;
+        lastHot = System.currentTimeMillis();
+        Drawable ic = Ui.iconDrawable(this, com.glasskit.app.Icon.BATTERY, Color.WHITE, t >= 46 ? 0xFFFF3B30 : 0xFFFF9F0A, dp(42));
+        showIsland(ic, ic, getString(R.string.hot_title, Math.round(t)), getString(R.string.hot_body), null);
+    }
     private View privDot;
 
     /** Tunjuk mesej dalam island (dipanggil oleh IslandExtras). */
@@ -236,6 +304,7 @@ public class PillService extends AccessibilityService
             switch (a) {
                 case Intent.ACTION_SCREEN_ON:
                     if (lockCover != null) lockCover.onScreenOn();
+                    h.post(netTick);
                     if (patch != null) patch.screenOn();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
                         // cuba serta-merta, kemudian ulang jika sistem lambat (elak lock screen stock terpapar)
@@ -246,6 +315,8 @@ public class PillService extends AccessibilityService
                     updateStatusBar();
                     break;
                 case Intent.ACTION_SCREEN_OFF:
+                    AppTools.rehideAll(PillService.this);
+                    h.removeCallbacks(netTick);
                     if (patch != null) patch.hide(false);
                     if (panels != null) panels.close();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false) && !islandCallActive()) {
@@ -269,12 +340,22 @@ public class PillService extends AccessibilityService
                 case android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED:
                 case "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED":
                     if (extras != null) extras.onBluetooth(i);
+                    if (android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED.equals(i.getAction())) {
+                        try {
+                            android.bluetooth.BluetoothDevice bd = i.getParcelableExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE,
+                                    android.bluetooth.BluetoothDevice.class);
+                            String nm = bd == null ? "" : (bd.getAlias() != null ? bd.getAlias() : bd.getName());
+                            Automation.fire(PillService.this, Automation.T_BT, nm == null ? "" : nm);
+                        } catch (SecurityException ignored) {
+                        }
+                    }
                     break;
                 case android.media.AudioManager.RINGER_MODE_CHANGED_ACTION:
                     if (extras != null) extras.onRinger(i);
                     break;
                 case Intent.ACTION_TIME_TICK:
                     prayerTick();
+                    Automation.tick(PillService.this);
                     if (patch != null) patch.tick();
                     if (sbar != null && sbarShown) sbar.refresh();
                     GlassWidget.tick(PillService.this);
@@ -282,6 +363,8 @@ public class PillService extends AccessibilityService
                 case Intent.ACTION_BATTERY_CHANGED: {
                     int lv = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
                     int pl = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0);
+                    checkTemp(i);
+                    if (lv != lastBat) Automation.fire(PillService.this, Automation.T_BATT, String.valueOf(lv));
                     if (lv != lastBat || pl != lastPlug) {
                         lastBat = lv;
                         lastPlug = pl;
@@ -295,11 +378,13 @@ public class PillService extends AccessibilityService
                     if (sbar != null && sbarShown) sbar.refresh();
                     break;
                 case Intent.ACTION_POWER_DISCONNECTED:
+                    Automation.fire(PillService.this, Automation.T_UNPLUG, "");
                     if (chargeAnim != null) chargeAnim.hide();
                     if (sbar != null && sbarShown) sbar.refresh();
                     GlassWidget.updateAll(PillService.this, BatteryWidget.class);
                     break;
                 case Intent.ACTION_POWER_CONNECTED:
+                    Automation.fire(PillService.this, Automation.T_CHARGE, "");
                     if (sbar != null && sbarShown) sbar.refresh();
                     Sounds.play(PillService.this, Sounds.CHARGE);
                     h.postDelayed(PillService.this::showCharging, 600);
@@ -363,6 +448,23 @@ public class PillService extends AccessibilityService
         call = new CallOverlay(this);
         volume = new VolumePanel(this);
         extras = new IslandExtras(this);
+        profiles = new AppTools.ProfileRunner(this);
+        h.postDelayed(() -> Tweaks.reapply(this), 3000);
+        try {
+            android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
+            cm.registerNetworkCallback(new android.net.NetworkRequest.Builder()
+                    .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).build(),
+                    new android.net.ConnectivityManager.NetworkCallback() {
+                        @Override
+                        public void onAvailable(android.net.Network n) {
+                            h.postDelayed(() -> Shell.run("cmd wifi status", (ok, out) -> {
+                                java.util.regex.Matcher m = java.util.regex.Pattern.compile("SSID: \"([^\"]+)\"").matcher(out == null ? "" : out);
+                                Automation.fire(PillService.this, Automation.T_WIFI, m.find() ? m.group(1) : "");
+                            }), 2500);
+                        }
+                    });
+        } catch (Exception ignored) {
+        }
         h.post(() -> { try { extras.start(); } catch (Throwable t) { CrashLog.write(this, t); } });
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_SCREEN_ON);
@@ -395,7 +497,10 @@ public class PillService extends AccessibilityService
         if (event != null && event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && extras != null
                 && event.getPackageName() != null) {
             String fp = event.getPackageName().toString();
-            if (!fp.equals("com.android.systemui") && !fp.equals(getPackageName()) && !fp.equals("android")) extras.fgPkg = fp;
+            if (!fp.equals("com.android.systemui") && !fp.equals(getPackageName()) && !fp.equals("android")) {
+                extras.fgPkg = fp;
+                if (profiles != null) profiles.onForeground(fp);
+            }
         }
         if (lockCover == null || !lockCover.shown() || event == null) return;
         if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
@@ -491,6 +596,7 @@ public class PillService extends AccessibilityService
             h.post(this::prayerTick);
         }
         if (Prefs.LIVE_ON.equals(key)) h.post(this::refresh);
+        if (Prefs.NET_SPEED.equals(key)) h.post(netTick);
         if (Prefs.LOCK_ON.equals(key) && !sp.getBoolean(Prefs.LOCK_ON, false) && lockCover != null) {
             lockCover.destroy();
             lockCover = null;

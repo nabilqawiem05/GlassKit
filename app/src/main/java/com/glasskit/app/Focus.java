@@ -53,6 +53,7 @@ final class Focus {
                         .putBoolean(Prefs.PILL_NOTI, p.getBoolean("fx_noti", true));
         }
         e.putBoolean(Prefs.GLASS_DARK, (mode == SLEEP || mode == DRIVE)).putInt(Prefs.FOCUS, mode).apply();
+        if (p.getBoolean(Prefs.GRAY_SLEEP, false)) Tweaks.grayscale(mode == SLEEP);
         setFilter(c, dnd);
         GlassWidget.refreshAll(c);
         TasksWidget.refresh(c);
