@@ -686,4 +686,42 @@ final class Cards {
         text(cv, lvl + "%", r.right, y + h * 0.38f + 4 * d, 17 * d, 700, t.primary, AR);
         GlassEngine.bar(cv, new RectF(r.left + r.width() * 0.58f, y + h * 0.3f, r.right - 46 * d, y + h * 0.3f + 6 * d), lvl / 100f, col, t);
     }
+
+    // ======================================================================
+    // WAKTU SOLAT
+    // ======================================================================
+    static void prayer(Context c, Canvas cv, RectF r, GlassEngine.Theme t, float d, int size) {
+        Prayer.Day day = Prayer.today(c);
+        if (day == null) {
+            GlassEngine.icon(c, cv, Icon.PIN, r.centerX(), r.centerY() - 14 * d, 22 * d, t.muted);
+            text(cv, c.getString(R.string.p_need_loc), r.centerX(), r.centerY() + 18 * d, 12 * d, 600, t.muted, AC, r.width());
+            return;
+        }
+        long[] n = Prayer.next(c);
+        int ni = n == null ? -1 : (int) n[0];
+        if (size == SMALL) {
+            text(cv, up(c.getString(R.string.p_next)), r.left, r.top + 12 * d, 11.5f * d, 700, t.accent, AL, r.width());
+            if (n != null) {
+                text(cv, c.getString(Prayer.NAMES[ni]), r.left, r.top + 40 * d, 26 * d, 700, t.primary, AL, r.width());
+                text(cv, Prayer.fmt(c, n[1]), r.left, r.top + 62 * d, 17 * d, 600, t.secondary, AL, r.width());
+                text(cv, countdown(c, n[1]), r.left, r.bottom - 2 * d, 12 * d, 700, t.accent, AL, r.width());
+            }
+            return;
+        }
+        float y = r.top;
+        float rowH = Math.min(30 * d, r.height() / 6f);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        for (int i = 0; i < 6; i++) {
+            boolean next = i == ni;
+            if (next) {
+                p.setColor(GlassEngine.a(t.accent, t.dark ? 70 : 45));
+                cv.drawRoundRect(new RectF(r.left - 6 * d, y + 2 * d, r.right + 6 * d, y + rowH - 2 * d), 10 * d, 10 * d, p);
+            }
+            int col = next ? t.primary : (day.t[i] < System.currentTimeMillis() ? t.muted : t.secondary);
+            text(cv, c.getString(Prayer.NAMES[i]), r.left + 4 * d, y + rowH * 0.66f, 14 * d, next ? 750 : 600, col, AL);
+            text(cv, Prayer.fmt(c, day.t[i]), r.right - 4 * d, y + rowH * 0.66f, 14 * d, next ? 750 : 600, col, AR);
+            if (next && size != SMALL) text(cv, countdown(c, n[1]), r.centerX() + 10 * d, y + rowH * 0.66f, 11 * d, 700, t.accent, AC);
+            y += rowH;
+        }
+    }
 }

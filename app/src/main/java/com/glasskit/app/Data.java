@@ -323,6 +323,8 @@ final class Data {
                 loc = got[0];
             }
             if (loc == null) return false;
+            Prefs.get(c).edit().putFloat("lat", (float) loc.getLatitude()).putFloat("lon", (float) loc.getLongitude()).apply();
+            Prayer.fetch(c);
             String url = String.format(Locale.US,
                     "https://api.open-meteo.com/v1/forecast?latitude=%.3f&longitude=%.3f"
                             + "&current=temperature_2m,weather_code,is_day,relative_humidity_2m,wind_speed_10m"

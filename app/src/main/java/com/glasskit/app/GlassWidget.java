@@ -161,6 +161,7 @@ public abstract class GlassWidget extends AppWidgetProvider {
         updateAll(c, WeatherWidget.class);
         updateAll(c, BatteryWidget.class);
         updateAll(c, WorldWidget.class);
+        updateAll(c, PrayerWidget.class);
         MusicWidget.push(c);
     }
 

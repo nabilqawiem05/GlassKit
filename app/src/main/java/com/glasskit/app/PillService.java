@@ -58,7 +58,7 @@ public class PillService extends AccessibilityService
 
     static PillService inst;
 
-    private static final int IDLE = 0, MUSIC = 1, NOTI = 2, REC = 3, CALL = 4;
+    private static final int IDLE = 0, MUSIC = 1, NOTI = 2, REC = 3, CALL = 4, LIVE = 5;
 
     final Handler h = new Handler(Looper.getMainLooper());
     WindowManager wm;
@@ -226,6 +226,7 @@ public class PillService extends AccessibilityService
                     if (!prefs.getBoolean(Prefs.LOCK_ON, false)) Sounds.play(PillService.this, Sounds.UNLOCK);
                     break;
                 case Intent.ACTION_TIME_TICK:
+                    prayerTick();
                     if (patch != null) patch.tick();
                     if (sbar != null && sbarShown) sbar.refresh();
                     GlassWidget.tick(PillService.this);
@@ -246,6 +247,7 @@ public class PillService extends AccessibilityService
                     if (sbar != null && sbarShown) sbar.refresh();
                     break;
                 case Intent.ACTION_POWER_DISCONNECTED:
+                    if (chargeAnim != null) chargeAnim.hide();
                     if (sbar != null && sbarShown) sbar.refresh();
                     GlassWidget.updateAll(PillService.this, BatteryWidget.class);
                     break;
@@ -271,6 +273,15 @@ public class PillService extends AccessibilityService
         if (expanded && mode == MUSIC) {
             expanded = false;
             refresh();
+        }
+    };
+    private final Runnable liveCollapse = new Runnable() {
+        @Override
+        public void run() {
+            if (mode == LIVE && expanded) {
+                expanded = false;
+                refresh();
+            }
         }
     };
     private final Runnable progTick = new Runnable() {
@@ -400,6 +411,12 @@ public class PillService extends AccessibilityService
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sp, String key) {
+        if (Prefs.PRAYER_ON.equals(key)) {
+            if (sp.getBoolean(Prefs.PRAYER_ON, true)) Prayer.schedule(this);
+            else Prayer.cancel(this);
+            h.post(this::prayerTick);
+        }
+        if (Prefs.LIVE_ON.equals(key)) h.post(this::refresh);
         if (panels != null) panels.updateEdges();
         updateStatusBar();
         refresh();
@@ -637,6 +654,7 @@ public class PillService extends AccessibilityService
             if (!callRinging) sendIntent(callHangOpen);
         });
         pill.addView(expCall, new FrameLayout.LayoutParams(-1, -1));
+        buildLive();
 
         // ---- sentuhan ----
         pill.setOnClickListener(v -> onPillTap());
@@ -671,6 +689,160 @@ public class PillService extends AccessibilityService
     }
 
     private PendingIntent callHangOpen;
+
+    // ================= Aktiviti langsung =================
+
+    /** Cincin kemajuan kecil. */
+    static class Ring extends View {
+        float v = -1;
+        int color = 0xFF0A84FF;
+        String label;
+        private final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+
+        Ring(Context c) { super(c); }
+
+        void set(float frac, int col, String lbl) { v = frac; color = col; label = lbl; invalidate(); }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            float s = Math.min(getWidth(), getHeight()), th = s * 0.12f, r = s / 2f - th;
+            float cx = getWidth() / 2f, cy = getHeight() / 2f;
+            p.setStyle(android.graphics.Paint.Style.STROKE);
+            p.setStrokeWidth(th);
+            p.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            p.setColor(Color.argb(60, 255, 255, 255));
+            c.drawCircle(cx, cy, r, p);
+            if (v >= 0) {
+                p.setColor(color);
+                c.drawArc(cx - r, cy - r, cx + r, cy + r, -90, 360 * Math.min(1f, v), false, p);
+            }
+            if (label != null) {
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                p.setColor(Color.WHITE);
+                p.setTextAlign(android.graphics.Paint.Align.CENTER);
+                p.setTypeface(Ui.font(700));
+                p.setTextSize(s * (label.length() > 3 ? 0.26f : 0.32f));
+                c.drawText(label, cx, cy + p.getTextSize() * 0.36f, p);
+            }
+        }
+    }
+
+    private LinearLayout expLive;
+    private ImageView lIcon;
+    private TextView lTitle, lText, lRight;
+    private Ring lRing, cRing;
+    private Widgets.Bar lBar;
+    private Live.Item liveShown;
+    private final Runnable liveTick = new Runnable() {
+        @Override
+        public void run() {
+            if (mode != LIVE || liveShown == null) return;
+            bindLive(liveShown);
+            h.postDelayed(this, 1000);
+        }
+    };
+
+    private void buildLive() {
+        expLive = new LinearLayout(this);
+        expLive.setOrientation(LinearLayout.VERTICAL);
+        expLive.setPadding(dp(16), dp(14), dp(16), dp(14));
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        lIcon = new ImageView(this);
+        lIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        roundClip(lIcon, dp(12));
+        row.addView(lIcon, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(dp(12), 0, dp(8), 0);
+        lTitle = Ui.line(this, 16, 650, Color.WHITE);
+        lText = Ui.text(this, 13, 450, Color.argb(175, 235, 235, 245));
+        lText.setMaxLines(2);
+        lText.setEllipsize(TextUtils.TruncateAt.END);
+        col.addView(lTitle);
+        col.addView(lText);
+        row.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
+        lRight = Ui.line(this, 20, 700, Color.WHITE);
+        row.addView(lRight);
+        lRing = new Ring(this);
+        row.addView(lRing, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        expLive.addView(row);
+        lBar = new Widgets.Bar(this);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, dp(5));
+        bl.topMargin = dp(12);
+        expLive.addView(lBar, bl);
+        pill.addView(expLive, new FrameLayout.LayoutParams(-1, -1));
+        // cincin kecil dalam island padat
+        cRing = new Ring(this);
+        FrameLayout.LayoutParams rl = new FrameLayout.LayoutParams(compactH - dp(12), compactH - dp(12), Gravity.END | Gravity.CENTER_VERTICAL);
+        rl.rightMargin = dp(9);
+        compact.addView(cRing, rl);
+        cRing.setVisibility(View.GONE);
+    }
+
+    private static int liveColor(Live.Item i) {
+        switch (i.kind) {
+            case Live.K_NAV: return 0xFF34C759;
+            case Live.K_RIDE: return 0xFF30D158;
+            case Live.K_TIMER: return 0xFFFF9F0A;
+            case Live.K_PRAYER: return 0xFF64D2FF;
+            case Live.K_PROGRESS: return 0xFF0A84FF;
+            default: return Color.WHITE;
+        }
+    }
+
+    private void bindLive(Live.Item i) {
+        int col = liveColor(i);
+        Drawable ic = i.kind == Live.K_NAV && i.big != null ? i.big : (i.big != null && i.kind == Live.K_RIDE ? i.big : i.icon);
+        cAppIcon.setImageDrawable(ic != null ? ic : i.icon);
+        lIcon.setImageDrawable(ic != null ? ic : i.icon);
+        lIcon.setBackgroundColor(i.kind == Live.K_NAV ? 0xFF1C7C3C : Color.TRANSPARENT);
+        String ct = Live.compactText(this, i);
+        boolean ring = i.kind == Live.K_PROGRESS && (i.progress >= 0 || i.indeterminate);
+        cRing.setVisibility(ring ? View.VISIBLE : View.GONE);
+        cText.setVisibility(ring ? View.GONE : View.VISIBLE);
+        cText.setTextColor(col);
+        cText.setText(ct);
+        if (ring) cRing.set(i.progress >= 0 ? i.progress / 100f : -1, col, null);
+
+        lTitle.setText(i.title != null ? i.title : "");
+        CharSequence body = i.text;
+        if (i.sub != null && i.kind == Live.K_RIDE) body = (body == null ? "" : body + " · ") + i.sub;
+        lText.setText(body);
+        lText.setVisibility(TextUtils.isEmpty(body) ? View.GONE : View.VISIBLE);
+        boolean timed = (i.kind == Live.K_TIMER || i.kind == Live.K_STOPWATCH || i.kind == Live.K_PRAYER) && i.when > 0;
+        lRing.setVisibility(ring ? View.VISIBLE : View.GONE);
+        if (ring) lRing.set(i.progress >= 0 ? i.progress / 100f : -1, col, i.progress >= 0 ? String.valueOf(i.progress) : null);
+        String right = timed ? ct : (i.kind == Live.K_RIDE ? Live.findMinutes(i) : null);
+        lRight.setVisibility(right != null && !ring ? View.VISIBLE : View.GONE);
+        lRight.setTextColor(col);
+        if (right != null) lRight.setText(right);
+        lBar.setVisibility(i.progress >= 0 ? View.VISIBLE : View.GONE);
+        if (i.progress >= 0) {
+            lBar.setColor(col);
+            lBar.setValue(i.progress / 100f);
+        }
+    }
+
+    /** Dipanggil oleh NotifListener untuk notifikasi berterusan. Pulangkan true jika dikendalikan. */
+    boolean onLive(StatusBarNotification sbn) {
+        if (prefs == null || !prefs.getBoolean(Prefs.LIVE_ON, true)) return false;
+        Live.Item it = Live.from(this, sbn);
+        if (it == null) {
+            if (Live.items.remove(sbn.getKey()) != null) h.post(this::refresh);
+            return false;
+        }
+        Live.Item old = Live.items.get(it.key);
+        // kemas kini kemajuan tidak dikira "baru" (elak lompat ke depan setiap peratus)
+        if (old != null && old.kind == it.kind) it.updated = old.updated;
+        Live.items.put(it.key, it);
+        h.post(this::refresh);
+        return true;
+    }
+
+    void onLiveRemoved(String key) {
+        if (Live.items.remove(key) != null) h.post(this::refresh);
+    }
 
     private FrameLayout callBtn(int color, boolean hang, View.OnClickListener l) {
         FrameLayout f = new FrameLayout(this);
@@ -754,7 +926,7 @@ public class PillService extends AccessibilityService
 
     private void onPillSwipe(boolean down) {
         if (down) {
-            if (!expanded && (mode == MUSIC || mode == CALL)) {
+            if (!expanded && (mode == MUSIC || mode == CALL || mode == LIVE)) {
                 expanded = true;
                 refresh();
                 h.removeCallbacks(autoCollapse);
@@ -864,6 +1036,7 @@ public class PillService extends AccessibilityService
             newMode = REC;
         } else if (on && !land && (panels == null || !panels.isOpen())) {
             if (notiActive) newMode = NOTI;
+            else if (Live.current() != null && prefs.getBoolean(Prefs.LIVE_ON, true)) newMode = LIVE;
             else if (musicOn) newMode = MUSIC;
         }
         boolean wasExpanded = compact.getVisibility() == View.GONE && attached;
@@ -882,6 +1055,14 @@ public class PillService extends AccessibilityService
         boolean showMusic = expanded && mode == MUSIC;
         boolean showNoti = expanded && mode == NOTI;
         boolean showCall = expanded && mode == CALL;
+        boolean showLive = expanded && mode == LIVE;
+        if (showLive && expLive.getVisibility() != View.VISIBLE) fadeIn(expLive);
+        expLive.setVisibility(showLive ? View.VISIBLE : View.GONE);
+        if (mode != LIVE) {
+            cRing.setVisibility(View.GONE);
+            h.removeCallbacks(liveTick);
+            liveShown = null;
+        }
         if (showMusic && expMusic.getVisibility() != View.VISIBLE) fadeIn(expMusic);
         if (showNoti && expNoti.getVisibility() != View.VISIBLE) fadeIn(expNoti);
         if (showCall && expCall.getVisibility() != View.VISIBLE) fadeIn(expCall);
@@ -891,7 +1072,20 @@ public class PillService extends AccessibilityService
         expCall.setVisibility(showCall ? View.VISIBLE : View.GONE);
         kWave.setRunning(showCall && !callRinging);
 
-        if (mode == CALL) {
+        if (mode == LIVE) {
+            Live.Item li = Live.current();
+            cArt.setVisibility(View.GONE);
+            cAppIcon.setVisibility(View.VISIBLE);
+            cWave.setVisibility(View.GONE);
+            cWave.setRunning(false);
+            mWave.setRunning(false);
+            if (li != liveShown) {
+                liveShown = li;
+                h.removeCallbacks(liveTick);
+                h.post(liveTick);
+            }
+            bindLive(li);
+        } else if (mode == CALL) {
             cArt.setVisibility(View.GONE);
             cAppIcon.setVisibility(View.VISIBLE);
             cText.setVisibility(View.VISIBLE);
@@ -942,6 +1136,7 @@ public class PillService extends AccessibilityService
 
         int tw = expanded ? Math.min(screenW - dp(44), dp(400)) : compactW;
         int th = expanded ? (mode == MUSIC ? dp(172)
+                : mode == LIVE ? (liveShown != null && liveShown.progress >= 0 ? dp(96) : dp(78))
                 : mode == NOTI && nActions.getChildCount() > 0 ? dp(122) : dp(76)) : compactH;
         animateTo(tw, th, tw >= curW);
 
@@ -951,6 +1146,19 @@ public class PillService extends AccessibilityService
     }
 
     private void onPillTap() {
+        if (mode == LIVE) {
+            if (!expanded) {
+                expanded = true;
+                refresh();
+                h.removeCallbacks(autoCollapse);
+                h.postDelayed(liveCollapse, 7000);
+            } else if (liveShown != null) {
+                sendIntent(liveShown.open);
+                expanded = false;
+                refresh();
+            }
+            return;
+        }
         if (mode == CALL) {
             if (!expanded) {
                 expanded = true;
@@ -1218,6 +1426,7 @@ public class PillService extends AccessibilityService
 
     /** Daftar sensor langkah, pemerhati kalendar dan ambil cuaca bila kebenaran ada. */
     void onDataPermissions() {
+        h.post(this::prayerTick);
         if (!stepReg && Data.has(this, android.Manifest.permission.ACTIVITY_RECOGNITION)) {
             try {
                 android.hardware.SensorManager sm = getSystemService(android.hardware.SensorManager.class);
@@ -1309,8 +1518,67 @@ public class PillService extends AccessibilityService
         }
     }
 
+    private ChargeAnim chargeAnim;
+    private String prayDay;
+
+    /** Setiap minit: kira detik solat dalam island (15 min sebelum), sandaran azan, kira semula harian. */
+    void prayerTick() {
+        if (prefs == null) return;
+        boolean on = prefs.getBoolean(Prefs.PRAYER_ON, true);
+        if (!on || !Prayer.hasLocation(this)) {
+            if (Live.items.remove("gk_prayer") != null) refresh();
+            return;
+        }
+        String day = new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(new java.util.Date());
+        if (!day.equals(prayDay)) {
+            prayDay = day;
+            Prayer.fetch(this);
+            Prayer.schedule(this);
+            GlassWidget.updateAll(this, PrayerWidget.class);
+        }
+        Prayer.Day d = Prayer.today(this);
+        long now = System.currentTimeMillis();
+        if (d != null) {
+            for (int i = 0; i < 6; i++) {
+                if (i == Prayer.SUNRISE) continue;
+                if (now >= d.t[i] && now - d.t[i] < 3 * 60_000L) {
+                    Prayer.fire(this, i, d.t[i]);
+                    if (prefs.getLong("prayIsland", 0) != d.t[i]) {
+                        prefs.edit().putLong("prayIsland", d.t[i]).apply();
+                        Drawable ic = Ui.iconDrawable(this, com.glasskit.app.Icon.BELL, Color.WHITE, 0xFF0A84FF, dp(42));
+                        show(ic, ic, getString(R.string.p_time_now, getString(Prayer.NAMES[i])), Prayer.fmt(this, d.t[i]), null);
+                    }
+                }
+            }
+        }
+        long[] n = Prayer.next(this);
+        if (n != null && n[1] - now <= 15 * 60_000L && n[1] > now) {
+            Live.Item it = new Live.Item();
+            it.key = "gk_prayer";
+            it.kind = Live.K_PRAYER;
+            it.title = getString(Prayer.NAMES[(int) n[0]]);
+            it.text = getString(R.string.p_at, Prayer.fmt(this, n[1]));
+            it.when = n[1];
+            it.countDown = true;
+            it.icon = Ui.iconDrawable(this, com.glasskit.app.Icon.BELL, Color.WHITE, 0xFF0A84FF, dp(42));
+            it.updated = now;
+            Live.items.put(it.key, it);
+            refresh();
+        } else if (Live.items.remove("gk_prayer") != null) {
+            refresh();
+        }
+        if (now / 60000 % 15 == 0) GlassWidget.updateAll(this, PrayerWidget.class);
+    }
+
     private void showCharging() {
-        if (prefs == null || !prefs.getBoolean(Prefs.PILL_ON, true)) return;
+        if (prefs == null) return;
+        PowerManager pm = getSystemService(PowerManager.class);
+        if (prefs.getBoolean(Prefs.CHARGE_ANIM, true) && pm != null && pm.isInteractive() && !islandCallActive()) {
+            if (chargeAnim == null) chargeAnim = new ChargeAnim(this);
+            chargeAnim.show();
+            return;
+        }
+        if (!prefs.getBoolean(Prefs.PILL_ON, true)) return;
         int lvl = Ui.battery(this);
         Drawable d = Ui.iconDrawable(this, com.glasskit.app.Icon.BOLT, Color.BLACK, 0xFF30D158, dp(42));
         show(d, d, getString(R.string.charging), lvl >= 0 ? lvl + "%" : "", null);

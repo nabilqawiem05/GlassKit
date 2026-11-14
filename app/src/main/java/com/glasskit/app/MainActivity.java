@@ -48,7 +48,20 @@ public class MainActivity extends Activity {
     static final String EXTRA_WIDGET_ID = "widgetId";
     private int pickWidgetId = -1;
     private boolean pickFromWidget;
-    private static final int REQ_BG = 1, REQ_FG = 2, REQ_PHOTOS = 3, REQ_PERMS = 77;
+    private static final int REQ_BG = 1, REQ_FG = 2, REQ_PHOTOS = 3, REQ_PERMS = 77, REQ_AZAN = 4;
+    private TextView prayerNote;
+
+    private String prayerSummary() {
+        Prayer.Day d = Prayer.today(this);
+        if (d == null) return getString(R.string.p_need_loc);
+        StringBuilder sb = new StringBuilder(getString(R.string.p_today)).append("\n");
+        for (int i = 0; i < 6; i++) {
+            sb.append(getString(Prayer.NAMES[i])).append("  ").append(Prayer.fmt(this, d.t[i]));
+            if (i < 5) sb.append("   ·   ");
+        }
+        sb.append("\n").append(getString(R.string.p_note));
+        return sb.toString();
+    }
     private static final int[] COLORS = {
             Color.WHITE, 0xFF8AB4F8, 0xFFC8B6FF, 0xFFF5D06F, 0xFFFF8A80, 0xFF101418
     };
@@ -269,10 +282,36 @@ public class MainActivity extends Activity {
         toggle(isl, R.string.island_on, Prefs.PILL_ON, true);
         toggle(isl, R.string.island_music, Prefs.PILL_MUSIC, true);
         toggle(isl, R.string.island_noti, Prefs.PILL_NOTI, true);
+        toggle(isl, R.string.live_on, Prefs.LIVE_ON, true);
+        note(isl, getString(R.string.live_note));
+        toggle(isl, R.string.charge_anim, Prefs.CHARGE_ANIM, true);
         button(isl, getString(R.string.btn_test), false, v -> {
             if (PillService.inst != null) PillService.inst.test();
             else toast(getString(R.string.need_acc));
         });
+
+        // ---------- Waktu solat ----------
+        LinearLayout pr = card(pIsland, R.string.sec_prayer, Icon.BELL, 0xFF0A84FF);
+        toggle(pr, R.string.prayer_on, Prefs.PRAYER_ON, true);
+        prayerNote = note(pr, prayerSummary());
+        LinearLayout prr = new LinearLayout(this);
+        pr.addView(prr);
+        addPair(prr, button(null, getString(R.string.p_pick_sound), true, v -> {
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("audio/*");
+                    startActivityForResult(i, REQ_AZAN);
+                }),
+                button(null, getString(R.string.p_test), false, v -> Prayer.play(this)));
+        LinearLayout prr2 = new LinearLayout(this);
+        pr.addView(prr2);
+        addPair(prr2, button(null, getString(R.string.p_sound_default), false, v -> {
+                    prefs.edit().putString(Prefs.PRAYER_SOUND, "default").apply();
+                    toast(getString(R.string.p_sound_set));
+                }),
+                button(null, getString(R.string.p_sound_none), false, v -> {
+                    prefs.edit().putString(Prefs.PRAYER_SOUND, "none").apply();
+                    Prayer.stopSound();
+                    toast(getString(R.string.p_sound_set));
+                }));
 
         // ---------- Lock screen ----------
         LinearLayout lk = card(pLock, R.string.sec_lock, Icon.LOCK, 0xFFFF9F0A);
@@ -857,6 +896,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
+        if (req == REQ_AZAN) {
+            if (res == RESULT_OK && data != null && data.getData() != null) {
+                try {
+                    getContentResolver().takePersistableUriPermission(data.getData(), Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Exception ignored) {
+                }
+                prefs.edit().putString(Prefs.PRAYER_SOUND, data.getData().toString()).apply();
+                toast(getString(R.string.p_sound_set));
+            }
+            return;
+        }
         if (req == REQ_PHOTOS) {
             if (res == RESULT_OK && data != null) addPhotos(data);
             else if (pickFromWidget) finish();
