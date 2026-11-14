@@ -157,8 +157,8 @@ public class MainActivity extends Activity {
 
     private String shellCmds() {
         String pkg = getPackageName();
-        return "appops set " + pkg + " ACCESS_RESTRICTED_SETTINGS allow\n"
-                + "cmd notification allow_listener " + pkg + "/" + NotifListener.class.getName() + "\n"
+        return "appops set " + pkg + " ACCESS_RESTRICTED_SETTINGS allow; "
+                + "cmd notification allow_listener " + pkg + "/" + NotifListener.class.getName() + "; "
                 + "s=$(settings get secure enabled_accessibility_services); "
                 + "[ \"$s\" = null ] && s=''; "
                 + "settings put secure enabled_accessibility_services \"${s:+$s:}" + pkg + "/" + PillService.class.getName() + "\"; "
