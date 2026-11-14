@@ -38,6 +38,9 @@ public final class Prefs {
     public static final String REC_AUDIO = "recAudio";
     public static final String CALL_ON = "callOn";
     public static final String LIVE_ON = "liveOn";
+    public static final String WALL_MOOD = "wallMood";
+    public static final String FOCUS = "focus";           // 0 tiada, 1 kerja, 2 rumah, 3 tidur, 4 memandu
+    public static final String NIGHTSTAND = "nightstand";
     public static final String CHARGE_ANIM = "chargeAnim";
     public static final String PRAYER_ON = "prayerOn";
     public static final String PRAYER_SOUND = "prayerSound";

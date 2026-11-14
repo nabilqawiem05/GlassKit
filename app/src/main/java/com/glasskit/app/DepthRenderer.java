@@ -150,6 +150,9 @@ public final class DepthRenderer {
         if (fg != null) {
             c.drawBitmap(fg, null, centerCrop(fg, w, h), bmp);
         }
+        if (p.getBoolean(Prefs.WALL_MOOD, false)) {
+            try { Mood.apply(ctx, c, w, h); } catch (Throwable ignored) {}
+        }
     }
 
     /** Kedudukan Y (piksel skrin) bahagian paling atas subjek, atau -1. */

@@ -255,6 +255,10 @@ public class PillService extends AccessibilityService
                     if (sbar != null && sbarShown) sbar.refresh();
                     Sounds.play(PillService.this, Sounds.CHARGE);
                     h.postDelayed(PillService.this::showCharging, 600);
+                    if (prefs.getBoolean(Prefs.NIGHTSTAND, false)) {
+                        KeyguardManager kg = getSystemService(KeyguardManager.class);
+                        if (kg != null && kg.isKeyguardLocked()) h.postDelayed(PillService.this::showNightstand, 4200);
+                    }
                     break;
             }
         }
@@ -1489,8 +1493,29 @@ public class PillService extends AccessibilityService
         }
     };
 
+    void focusChanged(int mode) {
+        Drawable ic = Ui.iconDrawable(this, mode == Focus.SLEEP ? com.glasskit.app.Icon.MOON : com.glasskit.app.Icon.BELL,
+                Color.WHITE, mode == Focus.OFF ? 0xFF636366 : 0xFF5E5CE6, dp(42));
+        show(ic, ic, getString(mode == Focus.OFF ? R.string.f_off_now : R.string.f_on_now, getString(Focus.NAMES[mode])), "", null);
+        updateStatusBar();
+    }
+
+    private void showNightstand() {
+        try {
+            Intent i = new Intent(this, NightstandActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            ActivityOptions o = ActivityOptions.makeBasic();
+            if (Build.VERSION.SDK_INT >= 34) {
+                o.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+            }
+            startActivity(i, o.toBundle());
+        } catch (Exception ignored) {
+        }
+    }
+
     private boolean lockNeeded() {
         if (prefs == null || !prefs.getBoolean(Prefs.LOCK_ON, false) || LockActivity.visible) return false;
+        if (NightstandActivity.visible) return false;
         if (System.currentTimeMillis() < LockActivity.holdUntil) return false;
         KeyguardManager km = getSystemService(KeyguardManager.class);
         if (km == null || !km.isKeyguardLocked()) return false;

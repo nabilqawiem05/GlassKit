@@ -290,6 +290,16 @@ public class MainActivity extends Activity {
             else toast(getString(R.string.need_acc));
         });
 
+        // ---------- Mod Fokus ----------
+        LinearLayout fc = card(pIsland, R.string.sec_focus, Icon.MOON, 0xFF5E5CE6);
+        segmented(fc, new int[]{R.string.f_off, R.string.f_work, R.string.f_home, R.string.f_sleep, R.string.f_drive},
+                Focus.current(this), i -> Focus.set(this, i));
+        note(fc, getString(R.string.f_note));
+        toggle(fc, R.string.nightstand_on, Prefs.NIGHTSTAND, false);
+        note(fc, getString(R.string.nightstand_note));
+        toggle(fc, R.string.wall_mood, Prefs.WALL_MOOD, false);
+        note(fc, getString(R.string.wall_mood_note));
+
         // ---------- Waktu solat ----------
         LinearLayout prayCard = card(pIsland, R.string.sec_prayer, Icon.BELL, 0xFF0A84FF);
         toggle(prayCard, R.string.prayer_on, Prefs.PRAYER_ON, true);
@@ -496,6 +506,8 @@ public class MainActivity extends Activity {
         button(wg, getString(R.string.w_pick_zones), false, v -> pickZones());
         note(wg, getString(R.string.widgets_hint));
         button(wg, getString(R.string.btn_refresh_widgets), false, v -> GlassWidget.refreshAll(this));
+
+        button(wg, getString(R.string.btn_open_notes), true, v -> startActivity(new Intent(this, NotesActivity.class)));
 
         LinearLayout dc = card(pWidgets, R.string.sec_data, Icon.PIN, 0xFF34C759);
         note(dc, getString(R.string.data_hint));

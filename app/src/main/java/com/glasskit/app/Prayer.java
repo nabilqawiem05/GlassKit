@@ -135,7 +135,7 @@ final class Prayer {
         String name = c.getString(NAMES[idx]);
         Intent stop = new Intent(c, Receiver.class).setAction("stop");
         Notification n = new Notification.Builder(c, "prayer2")
-                .setSmallIcon(R.drawable.ic_w_play)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
                 .setContentTitle(c.getString(R.string.p_time_now, name))
                 .setContentText(fmt(c, at) + " · " + c.getString(R.string.p_source))
                 .setAutoCancel(true)
