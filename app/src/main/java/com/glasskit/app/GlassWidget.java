@@ -82,16 +82,27 @@ public abstract class GlassWidget extends AppWidgetProvider {
     /** Dipanggil setiap minit. */
     static void tick(Context c) {
         updateAll(c, ClockWidget.class);
-        updateAll(c, StackWidget.class);
         updateAll(c, AnalogWidget.class);
-        updateAll(c, DashboardWidget.class);
+        updateAll(c, ClockCalWidget.class);
         Calendar now = Calendar.getInstance();
-        if (now.get(Calendar.HOUR_OF_DAY) == 0 && now.get(Calendar.MINUTE) == 0) updateAll(c, DateWidget.class);
+        int m = now.get(Calendar.MINUTE);
+        if (m % 15 == 0) {
+            updateAll(c, UpNextWidget.class);
+            updateAll(c, StepsWidget.class);
+        }
+        if (m == 0) {
+            updateAll(c, PhotoWidget.class);
+            if (now.get(Calendar.HOUR_OF_DAY) == 0) updateAll(c, MonthWidget.class);
+        }
     }
 
     static void refreshAll(Context c) {
         tick(c);
-        updateAll(c, DateWidget.class);
+        updateAll(c, MonthWidget.class);
+        updateAll(c, UpNextWidget.class);
+        updateAll(c, PhotoWidget.class);
+        updateAll(c, StepsWidget.class);
+        updateAll(c, WeatherWidget.class);
         updateAll(c, BatteryWidget.class);
         MusicWidget.push(c);
     }

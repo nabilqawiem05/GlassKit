@@ -44,7 +44,7 @@ import rikka.shizuku.Shizuku;
 
 public class MainActivity extends Activity {
 
-    private static final int REQ_BG = 1, REQ_FG = 2;
+    private static final int REQ_BG = 1, REQ_FG = 2, REQ_PHOTOS = 3, REQ_PERMS = 77;
     private static final int[] COLORS = {
             Color.WHITE, 0xFF8AB4F8, 0xFFC8B6FF, 0xFFF5D06F, 0xFFFF8A80, 0xFF101418
     };
@@ -274,6 +274,31 @@ public class MainActivity extends Activity {
         note(wg, getString(R.string.themed_hint));
         button(wg, getString(R.string.btn_open_icons), true, v -> startActivity(new Intent(this, IconsActivity.class)));
 
+        LinearLayout dc = card(box, R.string.sec_data, Icon.PIN, 0xFF34C759);
+        note(dc, getString(R.string.data_hint));
+        button(dc, getString(R.string.btn_allow_data), true, v -> requestPermissions(new String[]{
+                android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACTIVITY_RECOGNITION}, REQ_PERMS));
+        LinearLayout pr2 = new LinearLayout(this);
+        dc.addView(pr2);
+        addPair(pr2, button(null, getString(R.string.btn_pick_photos), false, v -> {
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("image/*");
+                    i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                    startActivityForResult(i, REQ_PHOTOS);
+                }),
+                button(null, getString(R.string.btn_clear_photos), false, v -> {
+                    File[] fs = Data.photoDir(this).listFiles();
+                    if (fs != null) for (File f : fs) f.delete();
+                    GlassWidget.updateAll(this, PhotoWidget.class);
+                }));
+        label(dc, R.string.lbl_step_goal);
+        slider(dc, 2, 30, prefs.getInt("stepGoal", 10000) / 1000, val -> {
+            prefs.edit().putInt("stepGoal", val * 1000).apply();
+            GlassWidget.updateAll(this, StepsWidget.class);
+        });
+
         prefs.registerOnSharedPreferenceChangeListener(prefL);
         try { Shizuku.addRequestPermissionResultListener(shizukuL); } catch (Throwable ignored) {}
         renderPreview();
@@ -500,8 +525,41 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(code, perms, res);
+        if (PillService.inst != null) PillService.inst.onDataPermissions();
+        GlassWidget.refreshAll(this);
+    }
+
+    private void addPhotos(Intent data) {
+        java.util.List<Uri> uris = new java.util.ArrayList<>();
+        if (data.getClipData() != null) {
+            for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
+        } else if (data.getData() != null) {
+            uris.add(data.getData());
+        }
+        int n = 0;
+        for (Uri u : uris) {
+            try {
+                Bitmap b = decode(u);
+                float sc = Math.min(1f, 1200f / Math.max(b.getWidth(), b.getHeight()));
+                if (sc < 1f) b = Bitmap.createScaledBitmap(b, Math.round(b.getWidth() * sc), Math.round(b.getHeight() * sc), true);
+                save(b, new File(Data.photoDir(this), System.currentTimeMillis() + "_" + n + ".jpg"), false);
+                n++;
+            } catch (Exception ignored) {
+            }
+        }
+        toast(getString(R.string.photos_added, n));
+        GlassWidget.updateAll(this, PhotoWidget.class);
+    }
+
+    @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
+        if (req == REQ_PHOTOS && res == RESULT_OK && data != null) {
+            addPhotos(data);
+            return;
+        }
         if (res != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         try {

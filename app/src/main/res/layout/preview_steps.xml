@@ -7,12 +7,13 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
+        android:gravity="center"
         android:fontFamily="sans-serif"
-        android:textFontWeight="900"
-        android:shadowColor="#66000000"
-        android:shadowDy="2"
+        android:textFontWeight="800"
+        android:shadowColor="#88000000"
+        android:shadowDy="3"
         android:shadowRadius="8"
-        android:text="10:09"
-        android:textColor="#DDFFFFFF"
-        android:textSize="48sp" />
+        android:text="👟 6,240"
+        android:textColor="#FFFFFFFF"
+        android:textSize="30sp" />
 </FrameLayout>

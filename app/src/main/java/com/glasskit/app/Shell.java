@@ -79,6 +79,8 @@ final class Shell {
                 + "cmd notification allow_dnd " + pkg + "; "
                 + "appops set " + pkg + " WRITE_SETTINGS allow; "
                 + "appops set " + pkg + " SYSTEM_ALERT_WINDOW allow; "
+                + "for p in READ_CALENDAR ACCESS_COARSE_LOCATION ACCESS_FINE_LOCATION ACCESS_BACKGROUND_LOCATION ACTIVITY_RECOGNITION; do "
+                + "pm grant " + pkg + " android.permission.$p 2>/dev/null; done; "
                 + "s=$(settings get secure enabled_accessibility_services); "
                 + "case \"$s\" in *" + acc + "*) ;; null|'') settings put secure enabled_accessibility_services " + acc + ";; "
                 + "*) settings put secure enabled_accessibility_services \"$s:" + acc + "\";; esac; "

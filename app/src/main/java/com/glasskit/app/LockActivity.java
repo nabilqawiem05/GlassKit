@@ -125,7 +125,7 @@ public class LockActivity extends Activity {
         ui.addView(lockIcon, ll);
 
         gauges = new GaugeRow(this);
-        ui.addView(gauges, new FrameLayout.LayoutParams(-1, dp(84)));
+        ui.addView(gauges, new FrameLayout.LayoutParams(-1, dp(130)));
 
         bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.VERTICAL);
@@ -258,14 +258,46 @@ public class LockActivity extends Activity {
 
         @Override
         protected void onDraw(Canvas c) {
-            int[] types = {Gauges.BATTERY, Gauges.DATE, Gauges.ALARM, Gauges.NOTIFS};
-            float r = dp(31), gap = dp(16);
-            float total = types.length * 2 * r + (types.length - 1) * gap;
-            float x = (getWidth() - total) / 2f + r;
-            for (int t : types) {
-                Gauges.draw(getContext(), c, t, x, getHeight() / 2f, r, prefs.getBoolean(Prefs.GLASS_DARK, false));
-                x += 2 * r + gap;
+            Context ctx = getContext();
+            float w = getWidth(), cx = w / 2f;
+            float u = dp(1);
+            // baris 1: acara seterusnya
+            List<Data.Event> ev = Data.events(ctx, 2, 1);
+            String line;
+            int col = Ui.accent(ctx, false);
+            if (ev.isEmpty()) {
+                line = Data.dayLabel(ctx, System.currentTimeMillis()) + " · " + getString(R.string.no_events);
+            } else {
+                Data.Event e = ev.get(0);
+                col = e.color;
+                line = (e.allDay ? getString(R.string.all_day) : Data.eventTime(ctx, e).split(" – ")[0]) + "  " + e.title;
             }
+            line = Draw3D.fit(line, 16 * u, 700, w - 60 * u);
+            float tw = Draw3D.measure(line, 16 * u, 700);
+            Path bar = new Path();
+            bar.addRoundRect(new RectF(cx - tw / 2f - 12 * u, 8 * u, cx - tw / 2f - 7 * u, 26 * u), 3 * u, 3 * u, Path.Direction.CW);
+            Draw3D.shape(c, bar, 10 * u, col);
+            Draw3D.text(c, line, cx + 2 * u, 23 * u, 16 * u, 700, Color.WHITE, Draw3D.CENTER);
+
+            // baris 2: cuaca, langkah, bateri
+            float cy = 82 * u, gap = 96 * u;
+            Data.Weather wx = Data.weather(ctx);
+            if (wx != null) {
+                Draw3D.weather(c, wx.code, wx.day, cx - gap, cy - 12 * u, 40 * u);
+                Draw3D.text(c, Math.round(wx.temp) + "°", cx - gap, cy + 34 * u, 17 * u, 700, Color.WHITE, Draw3D.CENTER);
+            } else {
+                Draw3D.weather(c, 2, true, cx - gap, cy - 12 * u, 40 * u);
+            }
+            int steps = Data.steps(ctx);
+            int goal = Math.max(1000, prefs.getInt("stepGoal", 10000));
+            Draw3D.ring(c, cx, cy, 27 * u, 6 * u, steps / (float) goal, 0xFF30D158, Color.argb(70, 48, 209, 88));
+            String st = steps >= 10000 ? (steps / 1000) + "k" : String.valueOf(steps);
+            Draw3D.text(c, st, cx, cy + 5 * u, 14 * u, 800, Color.WHITE, Draw3D.CENTER);
+            int lvl = Math.max(0, Ui.battery(ctx));
+            boolean ch = Ui.charging(ctx);
+            Draw3D.ring(c, cx + gap, cy, 27 * u, 6 * u, lvl / 100f, ch ? 0xFF30D158 : (lvl <= 20 ? 0xFFFF453A : Color.WHITE),
+                    Color.argb(70, 255, 255, 255));
+            Draw3D.text(c, lvl + "%", cx + gap, cy + 5 * u, 14 * u, 800, Color.WHITE, Draw3D.CENTER);
         }
     }
 

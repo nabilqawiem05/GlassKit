@@ -93,6 +93,36 @@ public class PillService extends AccessibilityService
     private long holdMusicUntil, duration;
 
     private LockPatch patch;
+    private boolean stepReg, calObs;
+    private final android.hardware.SensorEventListener stepL = new android.hardware.SensorEventListener() {
+        @Override
+        public void onSensorChanged(android.hardware.SensorEvent e) {
+            Data.onStepCounter(PillService.this, e.values[0]);
+        }
+
+        @Override
+        public void onAccuracyChanged(android.hardware.Sensor s, int a) { }
+    };
+    private final android.database.ContentObserver calL = new android.database.ContentObserver(new Handler(Looper.getMainLooper())) {
+        @Override
+        public void onChange(boolean self) {
+            h.removeCallbacks(calUpdate);
+            h.postDelayed(calUpdate, 2000);
+        }
+    };
+    private final Runnable calUpdate = () -> {
+        GlassWidget.updateAll(this, ClockCalWidget.class);
+        GlassWidget.updateAll(this, UpNextWidget.class);
+        if (LockActivity.inst != null) LockActivity.inst.render();
+    };
+    private final Runnable dataTick = new Runnable() {
+        @Override
+        public void run() {
+            onDataPermissions();
+            h.postDelayed(this, 15 * 60_000);
+        }
+    };
+    private long lastWx;
     private int lastBat = -2, lastPlug = -2;
     private StatusBar sbar;
     private boolean sbarShown;
@@ -214,6 +244,7 @@ public class PillService extends AccessibilityService
         } catch (Exception ignored) {
         }
         h.postDelayed(sbarTick, 30_000);
+        h.post(dataTick);
         updateStatusBar();
         initMedia();
         refresh();
@@ -242,6 +273,8 @@ public class PillService extends AccessibilityService
             registered = false;
         }
         hideStatusBar();
+        try { getSystemService(android.hardware.SensorManager.class).unregisterListener(stepL); } catch (Exception ignored) {}
+        try { getContentResolver().unregisterContentObserver(calL); } catch (Exception ignored) {}
         detach();
         super.onDestroy();
     }
@@ -782,7 +815,7 @@ public class PillService extends AccessibilityService
         }
         if (panels != null) panels.onMediaChanged();
         MusicWidget.push(this);
-        GlassWidget.updateAll(this, DashboardWidget.class);
+        GlassWidget.updateAll(this, ClockCalWidget.class);
         if (LockActivity.inst != null) LockActivity.inst.refreshMusic();
         refresh();
     }
@@ -812,6 +845,39 @@ public class PillService extends AccessibilityService
             mElapsed.setText("");
             mRemain.setText("");
         }
+    }
+
+    /** Daftar sensor langkah, pemerhati kalendar dan ambil cuaca bila kebenaran ada. */
+    void onDataPermissions() {
+        if (!stepReg && Data.has(this, android.Manifest.permission.ACTIVITY_RECOGNITION)) {
+            try {
+                android.hardware.SensorManager sm = getSystemService(android.hardware.SensorManager.class);
+                android.hardware.Sensor sc = sm.getDefaultSensor(android.hardware.Sensor.TYPE_STEP_COUNTER);
+                if (sc != null) {
+                    stepReg = sm.registerListener(stepL, sc, android.hardware.SensorManager.SENSOR_DELAY_NORMAL, 120_000_000);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (!calObs && Data.has(this, android.Manifest.permission.READ_CALENDAR)) {
+            try {
+                getContentResolver().registerContentObserver(android.provider.CalendarContract.CONTENT_URI, true, calL);
+                calObs = true;
+            } catch (Exception ignored) {
+            }
+        }
+        if (System.currentTimeMillis() - lastWx > 40 * 60_000L && Data.has(this, android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
+            lastWx = System.currentTimeMillis();
+            new Thread(() -> {
+                if (Data.fetchWeather(this)) {
+                    h.post(() -> {
+                        GlassWidget.updateAll(this, WeatherWidget.class);
+                        if (LockActivity.inst != null) LockActivity.inst.render();
+                    });
+                }
+            }).start();
+        }
+        GlassWidget.updateAll(this, StepsWidget.class);
     }
 
     void showLock() {

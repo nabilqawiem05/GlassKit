@@ -5,6 +5,12 @@
 
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
@@ -99,18 +105,6 @@
         </receiver>
 
         <receiver
-            android:name=".StackWidget"
-            android:exported="true"
-            android:label="@string/widget_stack_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_stack_info" />
-        </receiver>
-
-        <receiver
             android:name=".AnalogWidget"
             android:exported="true"
             android:label="@string/widget_analog_name">
@@ -123,15 +117,75 @@
         </receiver>
 
         <receiver
-            android:name=".DateWidget"
+            android:name=".ClockCalWidget"
             android:exported="true"
-            android:label="@string/widget_date_name">
+            android:label="@string/widget_clockcal_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_date_info" />
+                android:resource="@xml/widget_clockcal_info" />
+        </receiver>
+
+        <receiver
+            android:name=".MonthWidget"
+            android:exported="true"
+            android:label="@string/widget_month_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_month_info" />
+        </receiver>
+
+        <receiver
+            android:name=".UpNextWidget"
+            android:exported="true"
+            android:label="@string/widget_upnext_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_upnext_info" />
+        </receiver>
+
+        <receiver
+            android:name=".PhotoWidget"
+            android:exported="true"
+            android:label="@string/widget_photo_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_photo_info" />
+        </receiver>
+
+        <receiver
+            android:name=".StepsWidget"
+            android:exported="true"
+            android:label="@string/widget_steps_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_steps_info" />
+        </receiver>
+
+        <receiver
+            android:name=".WeatherWidget"
+            android:exported="true"
+            android:label="@string/widget_weather_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_weather_info" />
         </receiver>
 
         <receiver
@@ -144,18 +198,6 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_battery_info" />
-        </receiver>
-
-        <receiver
-            android:name=".DashboardWidget"
-            android:exported="true"
-            android:label="@string/widget_dash_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_dash_info" />
         </receiver>
 
         <receiver
