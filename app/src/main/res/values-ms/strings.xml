@@ -386,4 +386,5 @@
     <string name="bk_working">Sedang diproses…</string>
     <string name="bk_saved">Sandaran disimpan</string>
     <string name="bk_restored">Dipulihkan (%d fail)</string>
+    <string name="w_up_next">Seterusnya</string>
 </resources>

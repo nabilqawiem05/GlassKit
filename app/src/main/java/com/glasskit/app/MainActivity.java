@@ -840,7 +840,7 @@ public class MainActivity extends Activity {
     }
 
     private void pickZones() {
-        final String[] ids = {"Asia/Makkah", "Asia/Dubai", "Europe/London", "Europe/Paris", "Europe/Istanbul",
+        final String[] ids = {"Asia/Riyadh", "Asia/Dubai", "Europe/London", "Europe/Paris", "Europe/Istanbul",
                 "America/New_York", "America/Los_Angeles", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore",
                 "Asia/Jakarta", "Asia/Bangkok", "Asia/Kolkata", "Australia/Sydney", "Asia/Kuala_Lumpur"};
         String[] names = new String[ids.length];

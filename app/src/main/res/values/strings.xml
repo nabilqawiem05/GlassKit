@@ -393,4 +393,5 @@
     <string name="bk_working">Working…</string>
     <string name="bk_saved">Backup saved</string>
     <string name="bk_restored">Restored (%d files)</string>
+    <string name="w_up_next">Up next</string>
 </resources>

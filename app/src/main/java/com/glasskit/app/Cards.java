@@ -76,9 +76,11 @@ final class Cards {
             float fs = GlassEngine.fit(time(c), 700, 58 * d, lw);
             text(cv, time(c), r.left - 1 * d, r.centerY() + fs * 0.36f, fs, 700, t.primary, AL);
             String ap = ampm(c, null);
-            text(cv, fmt("d MMMM yyyy") + (ap != null ? "  ·  " + ap : ""), r.left, r.bottom - 2 * d, 13 * d, 600, t.secondary, AL, lw);
-            // kanan: jam dunia
-            worldList(c, cv, new RectF(r.left + lw + 10 * d, r.top, r.right, r.bottom), t, d, 2, alarm);
+            text(cv, fmt("d MMMM yyyy") + (ap != null ? "  ·  " + ap : ""), r.left, r.bottom - 2 * d, 13 * d, 650, t.primary, AL, lw);
+            // kanan: acara kalendar seterusnya
+            RectF er = new RectF(r.left + lw + 10 * d, r.top, r.right, r.bottom);
+            text(cv, up(c.getString(R.string.w_up_next)), er.left, er.top + 12 * d, 11 * d, 700, t.muted, AL, er.width());
+            agenda(c, cv, new RectF(er.left, er.top + 20 * d, er.right, er.bottom), t, d, 2, true);
             return;
         }
         // besar
@@ -91,7 +93,7 @@ final class Cards {
             y += 10 * d;
         }
         hair(cv, r.left, r.right, y, t);
-        worldList(c, cv, new RectF(r.left, y + 8 * d, r.right, r.bottom), t, d, 4, null);
+        agenda(c, cv, new RectF(r.left, y + 10 * d, r.right, r.bottom), t, d, 5, false);
     }
 
     private static void alarmLine(Context c, Canvas cv, float x, float y, String alarm, GlassEngine.Theme t, float d) {
@@ -110,13 +112,16 @@ final class Cards {
     // JAM DUNIA
     // ======================================================================
     static List<String> zones(Context c) {
-        String s = Prefs.get(c).getString(Prefs.W_ZONES, "Asia/Makkah,Europe/London,America/New_York,Asia/Tokyo");
+        String s = Prefs.get(c).getString(Prefs.W_ZONES, "Asia/Riyadh,Europe/London,America/New_York,Asia/Tokyo")
+                .replace("Asia/Makkah", "Asia/Riyadh"); // Makkah tiada zon sendiri; guna Riyadh (+3)
         List<String> out = new java.util.ArrayList<>();
         for (String z : s.split(",")) if (!z.trim().isEmpty()) out.add(z.trim());
         return out;
     }
 
     static String city(String zone) {
+        if (zone.equals("Asia/Riyadh") || zone.equals("Asia/Makkah")) return "Makkah";
+        if (zone.equals("Asia/Kolkata")) return "India";
         String n = zone.substring(zone.lastIndexOf('/') + 1).replace('_', ' ');
         return n;
     }
@@ -708,9 +713,32 @@ final class Cards {
             }
             return;
         }
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        if (r.height() < 150 * d) {
+            // widget rendah & lebar: 6 waktu dalam satu baris
+            if (n != null) {
+                text(cv, c.getString(R.string.p_next) + " · " + c.getString(Prayer.NAMES[ni]),
+                        r.left, r.top + 12 * d, 11.5f * d, 700, t.accent, AL, r.width() * 0.6f);
+                text(cv, countdown(c, n[1]), r.right, r.top + 12 * d, 11.5f * d, 700, t.accent, AR);
+            }
+            float cw = r.width() / 6f, top = r.top + 22 * d;
+            float fs = Math.min(13 * d, cw * 0.2f);
+            for (int i = 0; i < 6; i++) {
+                float cx = r.left + cw * (i + 0.5f);
+                boolean next = i == ni;
+                if (next) {
+                    p.setColor(GlassEngine.a(t.accent, t.dark ? 80 : 50));
+                    cv.drawRoundRect(new RectF(cx - cw / 2f + 2 * d, top, cx + cw / 2f - 2 * d, r.bottom), 12 * d, 12 * d, p);
+                }
+                int col = next ? t.primary : (day.t[i] < System.currentTimeMillis() ? t.muted : t.secondary);
+                float mid = (top + r.bottom) / 2f;
+                text(cv, c.getString(Prayer.NAMES[i]), cx, mid - 3 * d, fs * 0.92f, next ? 750 : 600, col, AC, cw - 4 * d);
+                text(cv, Prayer.fmt(c, day.t[i]), cx, mid + fs + 2 * d, fs * 1.05f, next ? 750 : 600, col, AC, cw - 4 * d);
+            }
+            return;
+        }
         float y = r.top;
         float rowH = Math.min(30 * d, r.height() / 6f);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         for (int i = 0; i < 6; i++) {
             boolean next = i == ni;
             if (next) {
