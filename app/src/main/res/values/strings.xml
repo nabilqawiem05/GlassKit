@@ -214,4 +214,6 @@
     <string name="sec_crash">Last error</string>
     <string name="btn_copy_crash">Copy error</string>
     <string name="btn_clear_crash">Clear</string>
+    <string name="tg_rec">Screen record</string>
+    <string name="rec_saved">Recording saved to Movies/GlassKit</string>
 </resources>

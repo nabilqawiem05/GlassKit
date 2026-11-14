@@ -43,6 +43,20 @@ final class Shell {
 
     static void run(String cmd) { run(cmd, null); }
 
+    /** Jalankan proses panjang di thread sendiri (tidak menyekat arahan lain). */
+    static void spawn(final String cmd) {
+        new Thread(() -> {
+            try {
+                if (!granted()) return;
+                Method m = Shizuku.class.getDeclaredMethod("newProcess", String[].class, String[].class, String.class);
+                m.setAccessible(true);
+                Process p = (Process) m.invoke(null, new String[]{"sh", "-c", cmd}, null, null);
+                p.waitFor();
+            } catch (Throwable ignored) {
+            }
+        }, "gk-spawn").start();
+    }
+
     static void run(final String cmd, final Cb cb) {
         EX.execute(() -> {
             boolean ok = false;

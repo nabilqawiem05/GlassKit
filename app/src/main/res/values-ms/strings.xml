@@ -207,4 +207,6 @@
     <string name="sec_crash">Ralat terakhir</string>
     <string name="btn_copy_crash">Salin ralat</string>
     <string name="btn_clear_crash">Padam</string>
+    <string name="tg_rec">Rakam skrin</string>
+    <string name="rec_saved">Rakaman disimpan dalam Movies/GlassKit</string>
 </resources>

@@ -112,6 +112,8 @@ final class LiquidGlass {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final Path rr = new Path();
         private final int[] loc = new int[2];
+        private final Rect cacheB = new Rect();
+        private Path cacheBand;
 
         Surface(Context c, float radiusPx, boolean dark, Backdrop bd, int tint) {
             this.radius = radiusPx;
@@ -142,8 +144,13 @@ final class LiquidGlass {
             if (b.isEmpty()) return;
             RectF r = new RectF(b);
             float rad = Math.min(radius, Math.min(r.width(), r.height()) / 2f);
-            rr.reset();
-            rr.addRoundRect(r, rad, rad, Path.Direction.CW);
+            boolean same = cacheB.equals(b);
+            if (!same) {
+                rr.reset();
+                rr.addRoundRect(r, rad, rad, Path.Direction.CW);
+                cacheB.set(b);
+                cacheBand = null;
+            }
 
             c.save();
             c.clipPath(rr);
@@ -156,13 +163,17 @@ final class LiquidGlass {
                 float sy = (float) bd.soft.getHeight() / Math.max(1, bd.screenH);
                 // kanta: badan dibesarkan 4%, tepi dibesarkan 14%
                 drawLens(c, bd.soft, r, loc[0], loc[1], sx, sy, 1.04f, null);
-                float e = Math.min(r.width(), r.height()) * 0.12f;
-                Path band = new Path(rr);
-                Path inner = new Path();
-                RectF ir = new RectF(r);
-                ir.inset(e, e);
-                inner.addRoundRect(ir, Math.max(0, rad - e), Math.max(0, rad - e), Path.Direction.CW);
-                band.op(inner, Path.Op.DIFFERENCE);
+                if (cacheBand == null) {
+                    float e = Math.min(r.width(), r.height()) * 0.12f;
+                    Path bnd = new Path(rr);
+                    Path inner = new Path();
+                    RectF ir = new RectF(r);
+                    ir.inset(e, e);
+                    inner.addRoundRect(ir, Math.max(0, rad - e), Math.max(0, rad - e), Path.Direction.CW);
+                    bnd.op(inner, Path.Op.DIFFERENCE);
+                    cacheBand = bnd;
+                }
+                Path band = cacheBand;
                 c.save();
                 c.clipPath(band);
                 ColorMatrix cm = new ColorMatrix();

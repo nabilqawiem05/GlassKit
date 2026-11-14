@@ -58,7 +58,7 @@ public class PillService extends AccessibilityService
 
     static PillService inst;
 
-    private static final int IDLE = 0, MUSIC = 1, NOTI = 2;
+    private static final int IDLE = 0, MUSIC = 1, NOTI = 2, REC = 3;
 
     final Handler h = new Handler(Looper.getMainLooper());
     WindowManager wm;
@@ -171,6 +171,7 @@ public class PillService extends AccessibilityService
                     break;
                 case Intent.ACTION_USER_PRESENT:
                     if (patch != null) patch.hide(true);
+                    hideBanner(false);
                     h.postDelayed(PillService.this::updateStatusBar, 300);
                     if (!prefs.getBoolean(Prefs.LOCK_ON, false)) Sounds.play(PillService.this, Sounds.UNLOCK);
                     break;
@@ -295,6 +296,8 @@ public class PillService extends AccessibilityService
         if (panels != null) panels.destroy();
         if (patch != null) patch.hide(false);
         if (call != null) call.hide(false);
+        hideBanner(false);
+        if (Recorder.recording()) Recorder.stop(this);
         if (volume != null) volume.hide();
         if (registered) {
             try { unregisterReceiver(sysRx); } catch (Exception ignored) {}
@@ -605,7 +608,9 @@ public class PillService extends AccessibilityService
                 && (playing || SystemClock.uptimeMillis() < holdMusicUntil);
 
         int newMode = IDLE;
-        if (on && !land && (panels == null || !panels.isOpen())) {
+        if (Recorder.recording() && !land && (panels == null || !panels.isOpen())) {
+            newMode = REC;
+        } else if (on && !land && (panels == null || !panels.isOpen())) {
             if (notiActive) newMode = NOTI;
             else if (musicOn) newMode = MUSIC;
         }
@@ -630,7 +635,22 @@ public class PillService extends AccessibilityService
         expMusic.setVisibility(showMusic ? View.VISIBLE : View.GONE);
         expNoti.setVisibility(showNoti ? View.VISIBLE : View.GONE);
 
-        if (mode == MUSIC) {
+        if (mode == REC) {
+            expanded = false;
+            compact.setVisibility(View.VISIBLE);
+            expMusic.setVisibility(View.GONE);
+            expNoti.setVisibility(View.GONE);
+            cArt.setVisibility(View.GONE);
+            cAppIcon.setVisibility(View.VISIBLE);
+            cAppIcon.setImageDrawable(Ui.circle(0xFFFF3B30));
+            cText.setVisibility(View.VISIBLE);
+            cText.setTextColor(0xFFFF453A);
+            cText.setText("● " + Ui.mmss(Recorder.elapsed()));
+            cWave.setVisibility(View.GONE);
+            cWave.setRunning(false);
+            mWave.setRunning(false);
+        } else if (mode == MUSIC) {
+            cText.setTextColor(Color.WHITE);
             cArt.setVisibility(View.VISIBLE);
             cAppIcon.setVisibility(View.GONE);
             if (art != null) cArt.setImageBitmap(art);
@@ -642,6 +662,7 @@ public class PillService extends AccessibilityService
             mWave.setColor(artColor);
             mWave.setRunning(playing && expanded);
         } else {
+            cText.setTextColor(Color.WHITE);
             cArt.setVisibility(View.GONE);
             cAppIcon.setVisibility(View.VISIBLE);
             cText.setVisibility(View.VISIBLE);
@@ -660,6 +681,10 @@ public class PillService extends AccessibilityService
     }
 
     private void onPillTap() {
+        if (mode == REC) {
+            Recorder.stop(this);
+            return;
+        }
         if (mode == NOTI) {
             sendIntent(notiIntent);
             h.removeCallbacks(endNoti);
@@ -697,8 +722,12 @@ public class PillService extends AccessibilityService
     // ================= Notifikasi =================
 
     void onNotification(StatusBarNotification sbn) {
-        if (prefs == null || !prefs.getBoolean(Prefs.PILL_ON, true)
-                || !prefs.getBoolean(Prefs.PILL_NOTI, true)) return;
+        if (prefs == null) return;
+        if (LockActivity.visible) {
+            lockBanner(sbn);
+            return;
+        }
+        if (!prefs.getBoolean(Prefs.PILL_ON, true) || !prefs.getBoolean(Prefs.PILL_NOTI, true)) return;
         if (panels != null && panels.isOpen()) return;
         Notification n = sbn.getNotification();
         if ((n.flags & Notification.FLAG_ONLY_ALERT_ONCE) != 0) {
@@ -1046,6 +1075,120 @@ public class PillService extends AccessibilityService
                 try { wm.removeViewImmediate(old); } catch (Exception ignored) {}
             }
         }
+    }
+
+    // ================= Banner kaca lock screen (tutup heads-up stock) =================
+
+    private FrameLayout banner;
+    private final Runnable bannerHide = () -> hideBanner(true);
+
+    private void lockBanner(StatusBarNotification sbn) {
+        Notification n = sbn.getNotification();
+        CharSequence t = n.extras.getCharSequence(Notification.EXTRA_TITLE);
+        CharSequence body = n.extras.getCharSequence(Notification.EXTRA_TEXT);
+        if (TextUtils.isEmpty(t) && TextUtils.isEmpty(body)) return;
+        hideBanner(false);
+        LiquidGlass.Backdrop prev = LiquidGlass.current;
+        LiquidGlass.current = LockActivity.inst != null ? LockActivity.inst.bd : null;
+        FrameLayout win = new FrameLayout(this);
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(14), dp(16), dp(12));
+        LiquidGlass.apply(card, 26, false);
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView ic = new ImageView(this);
+        ic.setImageDrawable(appIcon(sbn.getPackageName()));
+        top.addView(ic, new LinearLayout.LayoutParams(dp(22), dp(22)));
+        TextView app = Ui.line(this, 13, 600, Color.argb(220, 255, 255, 255));
+        String an;
+        try {
+            an = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(sbn.getPackageName(), 0)).toString();
+        } catch (Exception e) {
+            an = sbn.getPackageName();
+        }
+        app.setText(an + " • " + getString(R.string.now));
+        app.setPadding(dp(8), 0, 0, 0);
+        top.addView(app, new LinearLayout.LayoutParams(0, -2, 1f));
+        card.addView(top);
+        if (!TextUtils.isEmpty(t)) {
+            TextView tv = Ui.line(this, 16, 650, Color.WHITE);
+            tv.setText(t);
+            tv.setPadding(0, dp(8), 0, 0);
+            card.addView(tv);
+        }
+        if (!TextUtils.isEmpty(body)) {
+            TextView bv = Ui.text(this, 14, 400, Color.argb(230, 255, 255, 255));
+            bv.setText(body);
+            bv.setMaxLines(2);
+            bv.setEllipsize(TextUtils.TruncateAt.END);
+            bv.setPadding(0, dp(3), 0, 0);
+            card.addView(bv);
+        }
+        final String key = sbn.getKey();
+        card.setOnClickListener(v -> {
+            hideBanner(true);
+            if (LockActivity.inst != null) LockActivity.inst.expand(key);
+        });
+        LiquidGlass.current = prev;
+        FrameLayout.LayoutParams cl = new FrameLayout.LayoutParams(-1, -1);
+        cl.leftMargin = dp(10);
+        cl.rightMargin = dp(10);
+        cl.topMargin = dp(4);
+        cl.bottomMargin = dp(8);
+        win.addView(card, cl);
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, dp(168),
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        p.gravity = Gravity.TOP;
+        p.y = Math.max(0, statusH - dp(2));
+        p.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        p.setTitle("GlassKitLockBanner");
+        try {
+            wm.addView(win, p);
+        } catch (Exception e) {
+            return;
+        }
+        banner = win;
+        card.setTranslationY(-dp(170));
+        card.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(560).start();
+        h.removeCallbacks(bannerHide);
+        h.postDelayed(bannerHide, 6500);
+        if (LockActivity.inst != null) h.postDelayed(() -> { if (LockActivity.inst != null) LockActivity.inst.refreshNotifs(); }, 200);
+    }
+
+    void hideBanner(boolean anim) {
+        final FrameLayout b = banner;
+        banner = null;
+        h.removeCallbacks(bannerHide);
+        if (b == null) return;
+        if (anim && b.getChildCount() > 0) {
+            b.getChildAt(0).animate().translationY(-dp(170)).alpha(0f).setDuration(240).withEndAction(() -> {
+                try { wm.removeViewImmediate(b); } catch (Exception ignored) {}
+            }).start();
+        } else {
+            try { wm.removeViewImmediate(b); } catch (Exception ignored) {}
+        }
+    }
+
+    // ================= Rakaman skrin pada island =================
+
+    private final Runnable recTick = new Runnable() {
+        @Override
+        public void run() {
+            if (!Recorder.recording()) return;
+            if (cText != null) cText.setText("● " + Ui.mmss(Recorder.elapsed()));
+            h.postDelayed(this, 1000);
+        }
+    };
+
+    void onRecChanged() {
+        h.removeCallbacks(recTick);
+        if (Recorder.recording()) h.post(recTick);
+        refresh();
     }
 
     void onPanelChanged() {

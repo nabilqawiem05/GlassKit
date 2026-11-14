@@ -521,13 +521,16 @@ final class Panels {
         }, act(Settings.ACTION_SECURITY_SETTINGS));
         Tile cam = new Tile(Icon.CAMERA, s.getString(R.string.tg_camera), false, shh,
                 v -> launch(new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)), null);
-        Tile vol = new Tile(Icon.SPEAKER, s.getString(R.string.tg_volume), false, shh, v -> {
-            close();
-            s.h.postDelayed(() -> {
-                AudioManager am = s.getSystemService(AudioManager.class);
-                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI);
-            }, 260);
-        }, act(Settings.ACTION_SOUND_SETTINGS));
+        Tile vol = new Tile(Icon.REC, s.getString(R.string.tg_rec), false, shh, v -> {
+            if (Recorder.recording()) {
+                Recorder.stop(s);
+                close();
+            } else {
+                close();
+                s.h.postDelayed(() -> Recorder.start(s), 700);
+            }
+        }, null);
+        vol.set(Recorder.recording(), null);
         Tile set = new Tile(Icon.GEAR, s.getString(R.string.tg_settings), false, shh,
                 v -> launch(new Intent(Settings.ACTION_SETTINGS)), null);
         Tile[] small = {tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc, shot, lock, cam, vol, set};

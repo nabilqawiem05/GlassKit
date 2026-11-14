@@ -85,7 +85,7 @@ public class LockActivity extends Activity {
     private Runnable afterUnlock;
     private boolean leaving, soundPlayed;
     private long lastSensorTouch;
-    private final LiquidGlass.Backdrop bd = new LiquidGlass.Backdrop();
+    final LiquidGlass.Backdrop bd = new LiquidGlass.Backdrop();
 
     private final BroadcastReceiver rx = new BroadcastReceiver() {
         @Override
@@ -261,6 +261,7 @@ public class LockActivity extends Activity {
     protected void onPause() {
         super.onPause();
         visible = false;
+        if (PillService.inst != null) PillService.inst.hideBanner(false);
         h.removeCallbacks(lockPoll);
         if (PillService.inst != null) PillService.inst.updateStatusBar();
     }
@@ -414,6 +415,13 @@ public class LockActivity extends Activity {
     }
 
     // ======================= Notifikasi =======================
+
+    /** Kembangkan notifikasi (dari banner) dan skrol ke atas. */
+    void expand(String key) {
+        expanded.add(key);
+        refreshNotifs();
+        if (notifScroll != null) notifScroll.post(() -> notifScroll.smoothScrollTo(0, 0));
+    }
 
     void refreshNotifs() {
         if (notifList == null) return;

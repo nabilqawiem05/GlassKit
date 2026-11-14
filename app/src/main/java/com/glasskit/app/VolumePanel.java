@@ -98,14 +98,28 @@ final class VolumePanel {
                         new AccessibilityService.TakeScreenshotCallback() {
                             @Override
                             public void onSuccess(AccessibilityService.ScreenshotResult r) {
+                                Bitmap sw = null;
                                 try {
                                     Bitmap hw = Bitmap.wrapHardwareBuffer(r.getHardwareBuffer(), r.getColorSpace());
-                                    if (hw != null) bd.set(hw.copy(Bitmap.Config.ARGB_8888, false), s.screenW, s.screenH);
+                                    if (hw != null) sw = hw.copy(Bitmap.Config.ARGB_8888, false);
                                 } catch (Throwable ignored) {
                                 } finally {
                                     try { r.getHardwareBuffer().close(); } catch (Throwable ignored) {}
                                 }
-                                if (root != null) LiquidGlass.invalidateTree(root);
+                                final Bitmap src = sw;
+                                if (src == null) return;
+                                new Thread(() -> {
+                                    final LiquidGlass.Backdrop nb = new LiquidGlass.Backdrop();
+                                    nb.set(src, s.screenW, s.screenH);
+                                    s.h.post(() -> {
+                                        bd.sharp = nb.sharp;
+                                        bd.soft = nb.soft;
+                                        bd.screenW = nb.screenW;
+                                        bd.screenH = nb.screenH;
+                                        bd.luminance = nb.luminance;
+                                        if (root != null) LiquidGlass.invalidateTree(root);
+                                    });
+                                }, "gk-vol").start();
                             }
 
                             @Override
