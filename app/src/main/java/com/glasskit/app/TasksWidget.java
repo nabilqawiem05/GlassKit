@@ -102,7 +102,6 @@ public class TasksWidget extends AppWidgetProvider {
                 v.setViewVisibility(R.id.w_sub, android.view.View.GONE);
             }
             v.setCompoundButtonChecked(R.id.w_check, k.done);
-            v.setColorStateList(R.id.w_check, "setButtonTintList", ColorStateList.valueOf(k.done ? 0xFF30D158 : t.secondary));
             v.setOnCheckedChangeResponse(R.id.w_check,
                     RemoteViews.RemoteResponse.fromFillInIntent(new Intent().putExtra("id", k.id)));
             v.setOnClickFillInIntent(R.id.w_text, new Intent().putExtra("id", k.id));
