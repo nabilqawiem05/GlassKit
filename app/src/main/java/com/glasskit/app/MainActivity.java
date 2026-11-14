@@ -55,6 +55,7 @@ public class MainActivity extends Activity {
     private TextView status;
     private TextView stShizuku, stAcc, stNotif;
     private Bitmap cacheBg, cacheFg;
+    private StatusBar statusPreview;
     private long cacheVer = Long.MIN_VALUE;
 
     private final Shizuku.OnRequestPermissionResultListener shizukuL = (code, result) -> {
@@ -118,6 +119,41 @@ public class MainActivity extends Activity {
             if (PillService.inst != null) PillService.inst.test();
             else toast(getString(R.string.need_acc));
         });
+
+        // ---------- Status bar ----------
+        LinearLayout sb = card(box, R.string.sec_sbar, Icon.BATTERY, 0xFF30D158);
+        FrameLayout sbPrev = new FrameLayout(this);
+        sbPrev.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{0xFF3A6EA5, 0xFF7A5C8E, 0xFFC98A5A}));
+        sbPrev.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) {
+                o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(18));
+            }
+        });
+        sbPrev.setClipToOutline(true);
+        statusPreview = new StatusBar(this);
+        statusPreview.setGeometry(dp(26), -1, dp(16));
+        sbPrev.addView(statusPreview, new FrameLayout.LayoutParams(-1, -1));
+        View cam = new View(this);
+        cam.setBackground(Ui.circle(Color.BLACK));
+        sbPrev.addView(cam, new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
+        LinearLayout.LayoutParams spl = new LinearLayout.LayoutParams(-1, dp(52));
+        spl.topMargin = dp(14);
+        sb.addView(sbPrev, spl);
+        toggle(sb, R.string.sbar_on, Prefs.SBAR_ON, false);
+        toggle(sb, R.string.sbar_pct, Prefs.SBAR_PCT, true);
+        label(sb, R.string.sbar_style);
+        segmented(sb, new int[]{R.string.sbar_capsule, R.string.sbar_minimal, R.string.sbar_island},
+                prefs.getInt(Prefs.SBAR_STYLE, 0), i -> prefs.edit().putInt(Prefs.SBAR_STYLE, i).apply());
+        LinearLayout sr = new LinearLayout(this);
+        sb.addView(sr);
+        addPair(sr, button(null, getString(R.string.btn_hide_sys), false, v -> runShell(
+                "settings put secure icon_blacklist clock,battery,wifi,mobile,airplane,rotate,headset,alarm_clock,"
+                        + "nfc,hotspot,zen,volume,cast,bluetooth,vpn,data_saver,location,managed_profile,ethernet,ims,"
+                        + "call_strength,mobile_data,speakerphone,dnd")),
+                button(null, getString(R.string.btn_restore_sys), false, v -> runShell("settings delete secure icon_blacklist")));
+        note(sb, getString(R.string.sbar_note));
 
         // ---------- Panel ----------
         LinearLayout pan = card(box, R.string.sec_panels, Icon.GEAR, Ui.BLUE);
@@ -234,7 +270,16 @@ public class MainActivity extends Activity {
         renderPreview();
     }
 
-    private final SharedPreferences.OnSharedPreferenceChangeListener prefL = (sp, k) -> renderPreview();
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefL = (sp, k) -> {
+        renderPreview();
+        if (statusPreview != null) statusPreview.refresh();
+    };
+
+    private void runShell(String cmd) {
+        if (!Shell.running()) { toast(getString(R.string.shizuku_hint)); return; }
+        if (!Shell.granted()) { Shell.request(); return; }
+        Shell.run(cmd, (ok, out) -> toast(ok ? getString(R.string.done) : out.trim()));
+    }
 
     @Override
     protected void onDestroy() {

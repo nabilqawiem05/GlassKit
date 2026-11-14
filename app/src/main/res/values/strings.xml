@@ -115,4 +115,15 @@
     <string name="manage">Manage</string>
     <string name="charging">Charging</string>
     <string name="tile_hint">Tap a tile to switch it, hold it to open its settings.</string>
+    <string name="sec_sbar">Status bar</string>
+    <string name="sbar_on">Custom status bar</string>
+    <string name="sbar_style">Style</string>
+    <string name="sbar_capsule">Glass capsules</string>
+    <string name="sbar_minimal">Minimal</string>
+    <string name="sbar_island">Around island</string>
+    <string name="sbar_pct">Battery percentage</string>
+    <string name="btn_hide_sys">Hide system status icons</string>
+    <string name="btn_restore_sys">Restore system status bar</string>
+    <string name="sbar_note">Hiding uses Shizuku and removes the stock clock, battery, Wi-Fi and signal icons. App notification icons from the system can\'t be hidden without root. Full-screen portrait apps may still show this bar.</string>
+    <string name="done">Done</string>
 </resources>

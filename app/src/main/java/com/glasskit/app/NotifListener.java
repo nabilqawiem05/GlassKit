@@ -25,6 +25,7 @@ public class NotifListener extends NotificationListenerService {
     public void onNotificationRemoved(StatusBarNotification sbn) {
         PillService p = PillService.inst;
         if (p != null && p.panels != null) p.panels.onNotificationsChanged();
+        if (p != null) p.onNotifsChanged();
     }
 
     @Override
@@ -32,6 +33,7 @@ public class NotifListener extends NotificationListenerService {
         PillService p = PillService.inst;
         if (p == null || sbn == null) return;
         if (p.panels != null) p.panels.onNotificationsChanged();
+        p.onNotifsChanged();
 
         Notification n = sbn.getNotification();
         Bundle ex = n.extras;

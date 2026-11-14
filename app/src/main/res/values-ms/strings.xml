@@ -108,4 +108,15 @@
     <string name="manage">Urus</string>
     <string name="charging">Mengecas</string>
     <string name="tile_hint">Tekan tile untuk on/off, tekan lama untuk buka tetapannya.</string>
+    <string name="sec_sbar">Status bar</string>
+    <string name="sbar_on">Status bar tersuai</string>
+    <string name="sbar_style">Gaya</string>
+    <string name="sbar_capsule">Kapsul kaca</string>
+    <string name="sbar_minimal">Minimal</string>
+    <string name="sbar_island">Keliling island</string>
+    <string name="sbar_pct">Peratus bateri</string>
+    <string name="btn_hide_sys">Sorok ikon status sistem</string>
+    <string name="btn_restore_sys">Pulihkan status bar sistem</string>
+    <string name="sbar_note">Sorok guna Shizuku dan buang jam, bateri, Wi-Fi dan signal stock. Ikon notifikasi app daripada sistem tak boleh disorok tanpa root. App skrin penuh menegak mungkin masih tunjuk bar ini.</string>
+    <string name="done">Siap</string>
 </resources>

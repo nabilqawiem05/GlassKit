@@ -93,6 +93,27 @@ public class PillService extends AccessibilityService
     private long holdMusicUntil, duration;
 
     private LockPatch patch;
+    private StatusBar sbar;
+    private boolean sbarShown;
+    private final Runnable sbarTick = new Runnable() {
+        @Override
+        public void run() {
+            if (sbar != null && sbarShown) sbar.refresh();
+            h.postDelayed(this, 30_000);
+        }
+    };
+    private final android.net.ConnectivityManager.NetworkCallback netCb =
+            new android.net.ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onCapabilitiesChanged(android.net.Network n, android.net.NetworkCapabilities nc) {
+                    h.post(() -> { if (sbar != null && sbarShown) sbar.refresh(); });
+                }
+
+                @Override
+                public void onLost(android.net.Network n) {
+                    h.post(() -> { if (sbar != null && sbarShown) sbar.refresh(); });
+                }
+            };
     private boolean registered;
     private final BroadcastReceiver sysRx = new BroadcastReceiver() {
         @Override
@@ -112,6 +133,12 @@ public class PillService extends AccessibilityService
                     break;
                 case Intent.ACTION_TIME_TICK:
                     if (patch != null) patch.tick();
+                    if (sbar != null && sbarShown) sbar.refresh();
+                    break;
+                case Intent.ACTION_BATTERY_CHANGED:
+                case Intent.ACTION_AIRPLANE_MODE_CHANGED:
+                case android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED:
+                    if (sbar != null && sbarShown) sbar.refresh();
                     break;
                 case Intent.ACTION_POWER_CONNECTED:
                     h.postDelayed(PillService.this::showCharging, 600);
@@ -164,8 +191,17 @@ public class PillService extends AccessibilityService
         f.addAction(Intent.ACTION_USER_PRESENT);
         f.addAction(Intent.ACTION_TIME_TICK);
         f.addAction(Intent.ACTION_POWER_CONNECTED);
+        f.addAction(Intent.ACTION_BATTERY_CHANGED);
+        f.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        f.addAction(android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED);
         registerReceiver(sysRx, f, Context.RECEIVER_EXPORTED);
         registered = true;
+        try {
+            getSystemService(android.net.ConnectivityManager.class).registerDefaultNetworkCallback(netCb, h);
+        } catch (Exception ignored) {
+        }
+        h.postDelayed(sbarTick, 30_000);
+        updateStatusBar();
         initMedia();
         refresh();
     }
@@ -189,8 +225,10 @@ public class PillService extends AccessibilityService
         if (patch != null) patch.hide(false);
         if (registered) {
             try { unregisterReceiver(sysRx); } catch (Exception ignored) {}
+            try { getSystemService(android.net.ConnectivityManager.class).unregisterNetworkCallback(netCb); } catch (Exception ignored) {}
             registered = false;
         }
+        hideStatusBar();
         detach();
         super.onDestroy();
     }
@@ -206,12 +244,15 @@ public class PillService extends AccessibilityService
             try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
         }
         if (panels != null) panels.updateEdges();
+        hideStatusBar();
+        updateStatusBar();
         refresh();
     }
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sp, String key) {
         if (panels != null) panels.updateEdges();
+        updateStatusBar();
         refresh();
     }
 
@@ -488,6 +529,7 @@ public class PillService extends AccessibilityService
         boolean wasExpanded = compact.getVisibility() == View.GONE && attached;
         mode = newMode;
         if (mode == IDLE) {
+            if (sbar != null && sbarShown) sbar.setGeometry(topY + compactH / 2f, screenW / 2f + xOff, compactH / 2f + dp(4));
             expanded = false;
             cWave.setRunning(false);
             mWave.setRunning(false);
@@ -531,6 +573,7 @@ public class PillService extends AccessibilityService
 
         h.removeCallbacks(progTick);
         if (expanded && mode == MUSIC) h.post(progTick);
+        if (sbar != null && sbarShown) sbar.setGeometry(topY + compactH / 2f, screenW / 2f + xOff, compactW / 2f);
     }
 
     private void onPillTap() {
@@ -851,7 +894,57 @@ public class PillService extends AccessibilityService
     }
 
     void onPanelChanged() {
+        updateStatusBar();
         refresh();
+    }
+
+    void onNotifsChanged() {
+        if (sbar != null && sbarShown) h.post(() -> { if (sbar != null) sbar.refresh(); });
+    }
+
+    // ================= Status bar tersuai =================
+
+    void updateStatusBar() {
+        if (wm == null || prefs == null) return;
+        boolean want = prefs.getBoolean(Prefs.SBAR_ON, false)
+                && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE
+                && (panels == null || !panels.isOpen());
+        if (!want) {
+            hideStatusBar();
+            return;
+        }
+        if (sbar == null) sbar = new StatusBar(this);
+        float gap = mode != IDLE ? compactW / 2f : compactH / 2f + dp(4);
+        sbar.setGeometry(topY + compactH / 2f, screenW / 2f + xOff, gap);
+        if (sbarShown) {
+            sbar.refresh();
+            return;
+        }
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, Math.max(statusH, topY + compactH + dp(2)),
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        p.gravity = Gravity.TOP | Gravity.LEFT;
+        p.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        p.setTitle("GlassKitStatusBar");
+        try {
+            wm.addView(sbar, p);
+            sbarShown = true;
+            sbar.refresh();
+            detach(); // pastikan island sentiasa di atas status bar (refresh() akan pasang semula)
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void hideStatusBar() {
+        if (sbar != null && sbarShown) {
+            try { wm.removeViewImmediate(sbar); } catch (Exception ignored) {}
+        }
+        sbarShown = false;
     }
 
     void togglePlay() {

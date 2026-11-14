@@ -23,6 +23,9 @@ public final class Prefs {
     public static final String CLOCK_GLASS = "clockGlass"; // gaya liquid glass
     public static final String HIDE_STOCK = "hideStock";
     public static final String HIDE_H = "hideH";           // dp
+    public static final String SBAR_ON = "sbarOn";
+    public static final String SBAR_STYLE = "sbarStyle";
+    public static final String SBAR_PCT = "sbarPct";
 
     private Prefs() {}
 
