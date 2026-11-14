@@ -1,0 +1,397 @@
+package com.glasskit.app;
+
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
+import android.app.ActivityOptions;
+import android.app.Notification;
+import android.app.PendingIntent;
+import android.app.Person;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Outline;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.os.Bundle;
+import android.service.notification.StatusBarNotification;
+import android.text.TextUtils;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewOutlineProvider;
+import android.view.WindowManager;
+import android.view.animation.LinearInterpolator;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import java.util.Locale;
+
+/**
+ * Skrin panggilan masuk kaca untuk SEMUA app panggilan (Telefon, WhatsApp, Truecaller, Telegram...).
+ * Dikesan dari notifikasi panggilan (CallStyle / kategori CALL) yang ada tindakan jawab & tolak.
+ */
+final class CallOverlay {
+    private final PillService s;
+    private FrameLayout root;
+    private String key;
+    private PendingIntent answer, decline;
+    private TextView nameV, subV;
+    private ImageView avatar;
+    private final LiquidGlass.Backdrop bd = new LiquidGlass.Backdrop();
+
+    CallOverlay(PillService s) { this.s = s; }
+
+    private int dp(float v) { return Ui.dp(s, v); }
+
+    boolean showing() { return root != null; }
+
+    String key() { return key; }
+
+    @SuppressWarnings("deprecation")
+    private static PendingIntent pi(Bundle ex, String k) {
+        try {
+            Object o = ex.getParcelable(k);
+            return o instanceof PendingIntent ? (PendingIntent) o : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Cari tindakan jawab/tolak. Kembalikan false jika ini bukan panggilan masuk. */
+    private boolean resolve(Notification n) {
+        Bundle ex = n.extras;
+        answer = pi(ex, Notification.EXTRA_ANSWER_INTENT);
+        decline = pi(ex, Notification.EXTRA_DECLINE_INTENT);
+        if (decline == null && answer != null) decline = pi(ex, Notification.EXTRA_HANG_UP_INTENT);
+        if (answer == null && n.actions != null) {
+            for (Notification.Action a : n.actions) {
+                if (a.title == null || a.actionIntent == null) continue;
+                String t = a.title.toString().toLowerCase(Locale.ROOT);
+                if (answer == null && (t.contains("answer") || t.contains("jawab") || t.contains("accept") || t.contains("terima")
+                        || t.contains("angkat"))) answer = a.actionIntent;
+                else if (decline == null && (t.contains("decline") || t.contains("tolak") || t.contains("reject")
+                        || t.contains("abaikan") || t.contains("dismiss"))) decline = a.actionIntent;
+            }
+        }
+        return answer != null;
+    }
+
+    static boolean isCall(Notification n) {
+        return Notification.CATEGORY_CALL.equals(n.category)
+                || (n.extras != null && n.extras.containsKey(Notification.EXTRA_ANSWER_INTENT));
+    }
+
+    @SuppressWarnings("deprecation")
+    void onCallNotification(StatusBarNotification sbn) {
+        if (!s.prefs.getBoolean(Prefs.CALL_ON, true)) return;
+        Notification n = sbn.getNotification();
+        if (!resolve(n)) {
+            // panggilan sudah dijawab / sedang berlangsung
+            if (sbn.getKey().equals(key)) hide(true);
+            return;
+        }
+        Bundle ex = n.extras;
+        CharSequence name = null;
+        Drawable photo = null;
+        try {
+            Object po = ex.getParcelable(Notification.EXTRA_CALL_PERSON);
+            if (po instanceof Person) {
+                Person p = (Person) po;
+                name = p.getName();
+                if (p.getIcon() != null) photo = p.getIcon().loadDrawable(s);
+            }
+        } catch (Exception ignored) {
+        }
+        if (TextUtils.isEmpty(name)) name = ex.getCharSequence(Notification.EXTRA_TITLE);
+        if (photo == null && n.getLargeIcon() != null) {
+            try { photo = n.getLargeIcon().loadDrawable(s); } catch (Exception ignored) {}
+        }
+        CharSequence sub = ex.getCharSequence(Notification.EXTRA_TEXT);
+        String app = appName(sbn.getPackageName());
+        String subtitle = (TextUtils.isEmpty(sub) ? s.getString(R.string.incoming_call) : sub.toString()) + " · " + app;
+
+        if (root != null && sbn.getKey().equals(key)) {
+            nameV.setText(name);
+            subV.setText(subtitle);
+            return;
+        }
+        hide(false);
+        key = sbn.getKey();
+        build(name, subtitle, photo, sbn.getPackageName());
+    }
+
+    void onRemoved(String k) {
+        if (k.equals(key)) hide(true);
+    }
+
+    private String appName(String pkg) {
+        try {
+            return s.getPackageManager().getApplicationLabel(s.getPackageManager().getApplicationInfo(pkg, 0)).toString();
+        } catch (Exception e) {
+            return pkg;
+        }
+    }
+
+    private static Bitmap toBitmap(Drawable d, int size) {
+        if (d == null) return null;
+        if (d instanceof BitmapDrawable && ((BitmapDrawable) d).getBitmap() != null) return ((BitmapDrawable) d).getBitmap();
+        Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        d.setBounds(0, 0, size, size);
+        d.draw(c);
+        return b;
+    }
+
+    // ======================= Paparan =======================
+
+    private void build(CharSequence name, String subtitle, Drawable photo, String pkg) {
+        root = new FrameLayout(s);
+        root.setBackgroundColor(Color.BLACK);
+        Bitmap ph = toBitmap(photo, dp(160));
+
+        // latar: gambar pemanggil yang dikaburkan, atau wallpaper
+        ImageView bg = new ImageView(s);
+        bg.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        Bitmap src = ph != null ? ph : DepthRenderer.load(DepthRenderer.bgFile(s));
+        if (src != null) {
+            Bitmap bl = GlassArt.blur(src, 120, 6);
+            bg.setImageBitmap(bl);
+            bd.set(src, s.screenW, s.screenH);
+        }
+        root.addView(bg, new FrameLayout.LayoutParams(-1, -1));
+        View dim = new View(s);
+        dim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(120, 0, 0, 0), Color.argb(70, 0, 0, 0), Color.argb(170, 0, 0, 0)}));
+        root.addView(dim, new FrameLayout.LayoutParams(-1, -1));
+
+        LinearLayout col = new LinearLayout(s);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.setPadding(dp(24), s.statusH + dp(36), dp(24), dp(40));
+        root.addView(col, new FrameLayout.LayoutParams(-1, -1));
+
+        // cip app
+        LinearLayout chip = new LinearLayout(s);
+        chip.setGravity(Gravity.CENTER_VERTICAL);
+        chip.setPadding(dp(10), dp(6), dp(14), dp(6));
+        LiquidGlass.Backdrop prev = LiquidGlass.current;
+        LiquidGlass.current = bd;
+        LiquidGlass.apply(chip, 16, false);
+        ImageView ai = new ImageView(s);
+        try { ai.setImageDrawable(s.getPackageManager().getApplicationIcon(pkg)); } catch (Exception ignored) {}
+        chip.addView(ai, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        TextView at = Ui.text(s, 13, 600, Color.WHITE);
+        at.setText(appName(pkg));
+        at.setPadding(dp(8), 0, 0, 0);
+        chip.addView(at);
+        col.addView(chip, new LinearLayout.LayoutParams(-2, -2));
+
+        nameV = Ui.text(s, 34, 700, Color.WHITE);
+        nameV.setText(name);
+        nameV.setGravity(Gravity.CENTER);
+        nameV.setMaxLines(2);
+        nameV.setShadowLayer(dp(6), 0, dp(1), Color.argb(120, 0, 0, 0));
+        LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(-1, -2);
+        nl.topMargin = dp(22);
+        col.addView(nameV, nl);
+        subV = Ui.text(s, 16, 500, Color.argb(220, 255, 255, 255));
+        subV.setText(subtitle);
+        subV.setGravity(Gravity.CENTER);
+        subV.setPadding(0, dp(8), 0, 0);
+        col.addView(subV, new LinearLayout.LayoutParams(-1, -2));
+
+        // avatar + cincin berdenyut
+        FrameLayout av = new FrameLayout(s);
+        int as = dp(136);
+        for (int i = 0; i < 3; i++) {
+            View ring = new View(s);
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setStroke(dp(2), Color.argb(150, 255, 255, 255));
+            ring.setBackground(g);
+            av.addView(ring, new FrameLayout.LayoutParams(as, as, Gravity.CENTER));
+            ObjectAnimator a = ObjectAnimator.ofPropertyValuesHolder(ring,
+                    PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.9f),
+                    PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.9f),
+                    PropertyValuesHolder.ofFloat(View.ALPHA, 0.7f, 0f));
+            a.setDuration(2400);
+            a.setStartDelay(i * 800L);
+            a.setRepeatCount(ValueAnimator.INFINITE);
+            a.setInterpolator(new android.view.animation.DecelerateInterpolator());
+            a.start();
+        }
+        avatar = new ImageView(s);
+        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        if (ph != null) avatar.setImageBitmap(ph);
+        else {
+            avatar.setImageDrawable(Ui.iconDrawable(s, Icon.PHONE, Color.WHITE, 0, dp(56)));
+            avatar.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        }
+        LiquidGlass.apply(avatar, 68, false);
+        avatar.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) {
+                o.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
+        avatar.setClipToOutline(true);
+        av.addView(avatar, new FrameLayout.LayoutParams(as, as, Gravity.CENTER));
+        LinearLayout.LayoutParams avl = new LinearLayout.LayoutParams(-1, 0, 1f);
+        col.addView(av, avl);
+
+        // butang tolak
+        LinearLayout dcol = new LinearLayout(s);
+        dcol.setOrientation(LinearLayout.VERTICAL);
+        dcol.setGravity(Gravity.CENTER_HORIZONTAL);
+        FrameLayout dec = new FrameLayout(s);
+        dec.setBackground(new LiquidGlass.Surface(s, dp(36), false, bd, 0xFFFF3B30));
+        Icon hang = new Icon(s, Icon.PHONE, Color.WHITE);
+        hang.setRotation(135);
+        dec.addView(hang, new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER));
+        dec.setElevation(dp(4));
+        dec.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) {
+                o.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
+        dec.setOnClickListener(v -> act(false));
+        Ui.press(dec);
+        dcol.addView(dec, new LinearLayout.LayoutParams(dp(72), dp(72)));
+        TextView dl = Ui.text(s, 13, 600, Color.WHITE);
+        dl.setText(R.string.call_decline);
+        dl.setPadding(0, dp(8), 0, 0);
+        dcol.addView(dl);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-2, -2);
+        dlp.bottomMargin = dp(26);
+        col.addView(dcol, dlp);
+
+        // leret untuk jawab
+        col.addView(slider(), new LinearLayout.LayoutParams(-1, dp(76)));
+        LiquidGlass.current = prev;
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                        | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT);
+        lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        lp.setTitle("GlassKitCall");
+        try {
+            s.wm.addView(root, lp);
+        } catch (Exception e) {
+            root = null;
+            key = null;
+            return;
+        }
+        root.setAlpha(0f);
+        root.animate().alpha(1f).setDuration(260).start();
+        av.setScaleX(0.6f);
+        av.setScaleY(0.6f);
+        av.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(700).start();
+        col.setTranslationY(dp(40));
+        col.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(700).start();
+    }
+
+    /** Trek kaca "leret untuk jawab" dengan tombol hijau dan teks berkilau. */
+    private View slider() {
+        final FrameLayout track = new FrameLayout(s);
+        track.setBackground(new LiquidGlass.Surface(s, dp(38), false, bd, 0));
+        final TextView label = Ui.text(s, 17, 600, Color.WHITE);
+        label.setText(R.string.call_slide);
+        label.setGravity(Gravity.CENTER);
+        label.setPadding(dp(70), 0, dp(10), 0);
+        track.addView(label, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        ObjectAnimator shimmer = ObjectAnimator.ofFloat(label, View.ALPHA, 1f, 0.35f, 1f);
+        shimmer.setDuration(1800);
+        shimmer.setRepeatCount(ValueAnimator.INFINITE);
+        shimmer.setInterpolator(new LinearInterpolator());
+        shimmer.start();
+
+        final FrameLayout knob = new FrameLayout(s);
+        knob.setBackground(new LiquidGlass.Surface(s, dp(32), false, bd, 0xFF34C759));
+        knob.addView(new Icon(s, Icon.PHONE, Color.WHITE), new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER));
+        knob.setElevation(dp(4));
+        knob.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) {
+                o.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
+        FrameLayout.LayoutParams kl = new FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER_VERTICAL | Gravity.START);
+        kl.leftMargin = dp(6);
+        track.addView(knob, kl);
+        // isyarat kecil: tombol bergoyang ke kanan
+        ObjectAnimator nudge = ObjectAnimator.ofFloat(knob, View.TRANSLATION_X, 0f, dp(14), 0f);
+        nudge.setDuration(900);
+        nudge.setStartDelay(600);
+        nudge.setRepeatCount(ValueAnimator.INFINITE);
+        nudge.setRepeatMode(ValueAnimator.RESTART);
+        nudge.start();
+
+        final float[] x0 = new float[1];
+        knob.setOnTouchListener((v, e) -> {
+            float max = track.getWidth() - knob.getWidth() - dp(12);
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    nudge.cancel();
+                    x0[0] = e.getRawX() - v.getTranslationX();
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float t = Math.max(0, Math.min(max, e.getRawX() - x0[0]));
+                    v.setTranslationX(t);
+                    label.setAlpha(1f - t / Math.max(1, max));
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (v.getTranslationX() > max * 0.8f) {
+                        v.animate().translationX(max).setDuration(120).withEndAction(() -> act(true)).start();
+                    } else {
+                        v.animate().translationX(0).setInterpolator(Ui.SPRING).setDuration(500).start();
+                        label.animate().alpha(1f).setDuration(300).start();
+                    }
+                    return true;
+            }
+            return false;
+        });
+        return track;
+    }
+
+    private void act(boolean accept) {
+        PendingIntent pi = accept ? answer : decline;
+        if (pi != null) {
+            try {
+                ActivityOptions o = ActivityOptions.makeBasic();
+                if (Build.VERSION.SDK_INT >= 34) {
+                    o.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                }
+                pi.send(s, 0, null, null, null, null, o.toBundle());
+            } catch (Exception ignored) {
+            }
+        }
+        if (accept && LockActivity.inst != null) LockActivity.inst.finish();
+        hide(true);
+    }
+
+    void hide(boolean fade) {
+        final FrameLayout r = root;
+        root = null;
+        key = null;
+        if (r == null) return;
+        if (fade) {
+            r.animate().alpha(0f).setDuration(220).withEndAction(() -> {
+                try { s.wm.removeViewImmediate(r); } catch (Exception ignored) {}
+            }).start();
+        } else {
+            try { s.wm.removeViewImmediate(r); } catch (Exception ignored) {}
+        }
+    }
+}

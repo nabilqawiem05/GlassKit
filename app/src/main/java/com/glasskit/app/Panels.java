@@ -91,6 +91,7 @@ final class Panels {
     private boolean askedWrite;
 
     private LinearLayout ncList;
+    private LiquidGlass.Backdrop bd = new LiquidGlass.Backdrop();
 
     Panels(PillService s) {
         this.s = s;
@@ -258,6 +259,7 @@ final class Panels {
                                 if (hw != null) {
                                     Bitmap sw = hw.copy(Bitmap.Config.ARGB_8888, false);
                                     blurred = GlassArt.blur(sw, 200, 9);
+                                    bd.set(sw, s.screenW, s.screenH);
                                 }
                             } catch (Throwable ignored) {
                             } finally {
@@ -303,6 +305,7 @@ final class Panels {
             return;
         }
         r.requestFocus();
+        LiquidGlass.invalidateTree(r);
         r.setAlpha(0f);
         r.animate().alpha(1f).setDuration(180).start();
         content.setTranslationY(-dp(48));
@@ -386,9 +389,9 @@ final class Panels {
         }
 
         void set(boolean on, String state) {
-            if (on) v.setBackground(Ui.round(Ui.accent(s, dark), rOnPx));
-            else v.setBackground(Ui.glassStyled(s, rOffDp, dark));
-            int fg = on ? Ui.onAccent(s) : Color.WHITE;
+            if (on) v.setBackground(new LiquidGlass.Surface(s, rOnPx, dark, bd, Ui.accent(s, true)));
+            else v.setBackground(new LiquidGlass.Surface(s, dp(rOffDp), dark, bd, 0));
+            int fg = Color.WHITE;
             ic.setColor(fg);
             if (label != null) {
                 label.setTextColor(fg);
@@ -468,6 +471,8 @@ final class Panels {
 
     void openControl() {
         if (open == QS) return;
+        bd = new LiquidGlass.Backdrop();
+        LiquidGlass.current = bd;
         dark = s.prefs.getBoolean(Prefs.GLASS_DARK, false);
         int m = dp(14), gap = dp(10);
         int w = Math.min(s.screenW, dp(460)) - 2 * m;
@@ -564,6 +569,7 @@ final class Panels {
         col.addView(r4, r4l);
         col.addView(handle());
 
+        LiquidGlass.current = null;
         show(QS, sv, sv);
         refreshControl();
         startTorchWatch();
@@ -914,6 +920,8 @@ final class Panels {
 
     void openNotifications() {
         if (open == SHADE) return;
+        bd = new LiquidGlass.Backdrop();
+        LiquidGlass.current = bd;
         dark = s.prefs.getBoolean(Prefs.GLASS_DARK, false);
         tData = null;
         int m = dp(14), gap = dp(8);
@@ -980,6 +988,7 @@ final class Panels {
 
         open = SHADE;
         fillNotifications();
+        LiquidGlass.current = null;
         show(SHADE, sv, sv);
         refreshShadeTiles();
         startTorchWatch();
@@ -1032,7 +1041,7 @@ final class Panels {
             View card = card(list.get(i), i == 0, i == total - 1);
             if (card == null) continue;
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-            p.bottomMargin = dp(3);
+            p.bottomMargin = dp(10);
             ncList.addView(card, p);
         }
     }
@@ -1072,7 +1081,10 @@ final class Panels {
 
         LinearLayout c = new LinearLayout(s);
         c.setGravity(Gravity.TOP);
-        c.setBackground(stackBg(first, last));
+        LiquidGlass.Backdrop prevBd = LiquidGlass.current;
+        LiquidGlass.current = bd;
+        LiquidGlass.apply(c, 24, dark);
+        LiquidGlass.current = prevBd;
         c.setPadding(dp(14), dp(14), dp(16), dp(14));
 
         ImageView ic = new ImageView(s);

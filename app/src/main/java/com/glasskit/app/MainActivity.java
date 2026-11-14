@@ -229,6 +229,11 @@ public class MainActivity extends Activity {
             toast(getString(R.string.copied));
         });
 
+        LinearLayout sys = card(pHome, R.string.sec_system, Icon.PHONE, 0xFF34C759);
+        toggle(sys, R.string.call_on, Prefs.CALL_ON, true);
+        toggle(sys, R.string.vol_on, Prefs.VOLUME_ON, true);
+        note(sys, getString(R.string.system_note));
+
         LinearLayout snd = card(pHome, R.string.sec_sound, Icon.SPEAKER, 0xFFFF375F);
         toggle(snd, R.string.sound_charge, Prefs.SOUND_CHARGE, true);
         toggle(snd, R.string.sound_unlock, Prefs.SOUND_UNLOCK, true);

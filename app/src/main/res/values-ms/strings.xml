@@ -197,4 +197,11 @@
     <string name="wtheme_none">3D padu</string>
     <string name="widgets_hint">Tekan lama home screen, pilih Widget, kemudian GlassKit. Widget tiada bingkai: nombor, perkataan dan ikon itu sendiri jadi liquid glass. Tekan widget Gambar untuk pilih gambarnya sendiri dari album.</string>
     <string name="photo_pick_hint">Tekan untuk pilih gambar</string>
+    <string name="incoming_call">Panggilan masuk</string>
+    <string name="call_decline">Tolak</string>
+    <string name="call_slide">leret untuk jawab</string>
+    <string name="sec_system">Panggilan dan volume</string>
+    <string name="call_on">Skrin panggilan masuk kaca</string>
+    <string name="vol_on">Panel volume kaca</string>
+    <string name="system_note">Berfungsi untuk app Telefon, WhatsApp, Truecaller, Telegram dan app panggilan lain yang tunjuk notifikasi panggilan. Panel volume ganti panel sistem untuk media; semasa panggilan, panel sistem digunakan. Lepas update, tekan Beri semua guna Shizuku sekali lagi supaya kebenaran kekunci volume dihidupkan.</string>
 </resources>

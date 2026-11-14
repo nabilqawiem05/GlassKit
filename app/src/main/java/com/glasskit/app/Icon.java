@@ -13,7 +13,7 @@ class Icon extends View {
     static final int PLAY = 1, PAUSE = 2, NEXT = 3, PREV = 4, WIFI = 5, BT = 6, CELL = 7, PLANE = 8,
             TORCH = 9, MOON = 10, SUN = 11, SPEAKER = 12, DARK = 13, ROTATE = 14, BATTERY = 15,
             SHOT = 16, LOCK = 17, CAMERA = 18, BELL = 19, CLOSE = 20, NOTE = 21, GEAR = 22,
-            PIN = 23, NFC = 24, BOLT = 25, UNLOCK = 26;
+            PIN = 23, NFC = 24, BOLT = 25, UNLOCK = 26, PHONE = 27;
 
     private int kind;
     private final Paint f = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -187,6 +187,26 @@ class Icon extends View {
                     c.drawLine((float) (12 + 7 * Math.cos(an)), (float) (12 + 7 * Math.sin(an)),
                             (float) (12 + 9.5 * Math.cos(an)), (float) (12 + 9.5 * Math.sin(an)), s);
                 }
+                break;
+            case PHONE:
+                p.moveTo(6.6f, 10.8f);
+                p.cubicTo(8.0f, 13.6f, 10.4f, 16.0f, 13.2f, 17.4f);
+                p.lineTo(15.4f, 15.2f);
+                p.cubicTo(15.7f, 14.9f, 16.1f, 14.8f, 16.4f, 15.0f);
+                p.cubicTo(17.5f, 15.4f, 18.7f, 15.6f, 20f, 15.6f);
+                p.cubicTo(20.6f, 15.6f, 21f, 16f, 21f, 16.6f);
+                p.lineTo(21f, 20f);
+                p.cubicTo(21f, 20.6f, 20.6f, 21f, 20f, 21f);
+                p.cubicTo(10.6f, 21f, 3f, 13.4f, 3f, 4f);
+                p.cubicTo(3f, 3.4f, 3.4f, 3f, 4f, 3f);
+                p.lineTo(7.5f, 3f);
+                p.cubicTo(8.1f, 3f, 8.5f, 3.4f, 8.5f, 4f);
+                p.cubicTo(8.5f, 5.2f, 8.7f, 6.4f, 9.1f, 7.6f);
+                p.cubicTo(9.2f, 7.9f, 9.1f, 8.3f, 8.8f, 8.6f);
+                p.close();
+                f.setPathEffect(null);
+                c.drawPath(p, f);
+                f.setPathEffect(new CornerPathEffect(1.6f));
                 break;
             case UNLOCK:
                 c.drawRoundRect(5.5f, 10.5f, 18.5f, 21, 2.5f, 2.5f, f);

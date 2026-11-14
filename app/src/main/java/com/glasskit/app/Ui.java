@@ -41,6 +41,7 @@ final class Ui {
 
     /** Kaca ikut gaya pilihan: jernih (putih lut sinar) atau gelap (hitam lut sinar). */
     static Drawable glassStyled(Context c, float radiusDp, boolean dark) {
+        if (LiquidGlass.current != null) return new LiquidGlass.Surface(c, dp(c, radiusDp), dark, LiquidGlass.current, 0);
         if (!dark) return glass(c, radiusDp, 44);
         float r = dp(c, radiusDp);
         GradientDrawable fill = new GradientDrawable();

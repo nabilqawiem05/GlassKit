@@ -48,70 +48,16 @@ final class Draw3D {
     /**
      * Lukis laluan sebagai kaca. tint = 0 untuk kaca neutral, atau warna untuk kaca berwarna.
      */
+    /** Latar untuk biasan (koordinat kanvas), atau null = telus sebenar. */
+    static Bitmap backdrop;
+    static RectF backdropRect;
+
     static void glass(Canvas c, Path path, float size, int tint) {
         if (mode == SOLID) {
             solid(c, path, size, tint == 0 ? Color.WHITE : tint);
             return;
         }
-        boolean dark = mode == DARK;
-        RectF b = new RectF();
-        path.computeBounds(b, true);
-        if (b.isEmpty()) return;
-        float edge = Math.max(1.5f, size * 0.07f);
-
-        // 1) bayang lembut di luar huruf sahaja
-        c.save();
-        c.clipOutPath(path);
-        Paint sh = new Paint(Paint.ANTI_ALIAS_FLAG);
-        sh.setColor(Color.argb(dark ? 120 : 70, 0, 0, 0));
-        sh.setMaskFilter(new BlurMaskFilter(Math.max(2f, size * 0.07f), BlurMaskFilter.Blur.NORMAL));
-        c.translate(0, size * 0.04f);
-        c.drawPath(path, sh);
-        c.restore();
-
-        c.save();
-        c.clipPath(path);
-        // 2) isi lut sinar (wallpaper sebenar nampak di belakang)
-        int tr = tint == 0 ? 255 : Color.red(tint), tg = tint == 0 ? 255 : Color.green(tint), tb = tint == 0 ? 255 : Color.blue(tint);
-        Paint body = new Paint(Paint.ANTI_ALIAS_FLAG);
-        if (dark) {
-            int dr = tint == 0 ? 18 : tr / 3, dg = tint == 0 ? 18 : tg / 3, db = tint == 0 ? 24 : tb / 3;
-            body.setShader(new LinearGradient(0, b.top, 0, b.bottom,
-                    Color.argb(150, dr, dg, db), Color.argb(105, dr, dg, db), Shader.TileMode.CLAMP));
-        } else {
-            int a0 = tint == 0 ? 70 : 150, a1 = tint == 0 ? 26 : 95;
-            body.setShader(new LinearGradient(0, b.top, 0, b.bottom,
-                    Color.argb(a0, tr, tg, tb), Color.argb(a1, tr, tg, tb), Shader.TileMode.CLAMP));
-        }
-        c.drawRect(b, body);
-
-        // 3) cahaya dalam di tepi (bevel): terang atas-kiri, lembut bawah-kanan
-        Paint in = new Paint(Paint.ANTI_ALIAS_FLAG);
-        in.setStyle(Paint.Style.STROKE);
-        in.setStrokeWidth(edge * 2f);
-        in.setMaskFilter(new BlurMaskFilter(edge * 0.7f, BlurMaskFilter.Blur.NORMAL));
-        in.setShader(new LinearGradient(b.left, b.top, b.right, b.bottom,
-                new int[]{Color.argb(dark ? 140 : 235, 255, 255, 255), Color.argb(dark ? 20 : 50, 255, 255, 255),
-                        Color.argb(0, 255, 255, 255), Color.argb(dark ? 60 : 140, 255, 255, 255)},
-                new float[]{0f, 0.38f, 0.62f, 1f}, Shader.TileMode.CLAMP));
-        c.drawPath(path, in);
-
-        // 4) bayang dalam halus di bawah supaya nampak tebal
-        Paint low = new Paint(Paint.ANTI_ALIAS_FLAG);
-        low.setShader(new LinearGradient(0, b.top + b.height() * 0.55f, 0, b.bottom,
-                Color.argb(0, 0, 0, 0), Color.argb(dark ? 70 : 35, 0, 0, 0), Shader.TileMode.CLAMP));
-        c.drawRect(b, low);
-        c.restore();
-
-        // 5) bingkai cahaya nipis (specular rim)
-        Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
-        rim.setStyle(Paint.Style.STROKE);
-        rim.setStrokeWidth(Math.max(1.1f, size * 0.014f));
-        rim.setShader(new LinearGradient(b.left, b.top, b.right, b.bottom,
-                new int[]{Color.argb(dark ? 170 : 250, 255, 255, 255), Color.argb(dark ? 40 : 80, 255, 255, 255),
-                        Color.argb(dark ? 30 : 50, 255, 255, 255), Color.argb(dark ? 120 : 200, 255, 255, 255)},
-                new float[]{0f, 0.35f, 0.65f, 1f}, Shader.TileMode.CLAMP));
-        c.drawPath(path, rim);
+        LiquidGlass.glyph(c, path, size, backdrop, backdropRect, mode == DARK, tint);
     }
 
     private static void solid(Canvas c, Path path, float size, int color) {

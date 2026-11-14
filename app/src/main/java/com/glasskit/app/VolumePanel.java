@@ -1,0 +1,188 @@
+package com.glasskit.app;
+
+import android.accessibilityservice.AccessibilityService;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PixelFormat;
+import android.graphics.RectF;
+import android.media.AudioManager;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewOutlineProvider;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
+
+/** Panel volume kaca di sisi kanan (gantikan panel volume sistem untuk media). */
+final class VolumePanel {
+    private final PillService s;
+    private final LiquidGlass.Backdrop bd = new LiquidGlass.Backdrop();
+    private FrameLayout root;
+    private Level level;
+    private final Runnable autoHide = this::hide;
+    private long lastShot;
+
+    VolumePanel(PillService s) { this.s = s; }
+
+    private int dp(float v) { return Ui.dp(s, v); }
+
+    private AudioManager am() { return s.getSystemService(AudioManager.class); }
+
+    /** Dipanggil dari onKeyEvent. Kembalikan true jika kekunci digunakan. */
+    boolean onKey(boolean up) {
+        AudioManager am = am();
+        int mode = am.getMode();
+        if (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION
+                || mode == AudioManager.MODE_RINGTONE) return false;
+        am.adjustStreamVolume(AudioManager.STREAM_MUSIC, up ? AudioManager.ADJUST_RAISE : AudioManager.ADJUST_LOWER, 0);
+        show();
+        return true;
+    }
+
+    private float value() {
+        AudioManager am = am();
+        int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        return max > 0 ? (float) am.getStreamVolume(AudioManager.STREAM_MUSIC) / max : 0;
+    }
+
+    void show() {
+        s.h.removeCallbacks(autoHide);
+        s.h.postDelayed(autoHide, 2200);
+        if (root != null) {
+            level.animateTo(value());
+            return;
+        }
+        root = new FrameLayout(s);
+        level = new Level();
+        level.v = value();
+        level.shown = level.v;
+        FrameLayout pill = new FrameLayout(s);
+        pill.setBackground(new LiquidGlass.Surface(s, dp(30), false, bd, 0));
+        pill.setElevation(dp(6));
+        pill.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) {
+                o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(30));
+            }
+        });
+        pill.setClipToOutline(true);
+        pill.addView(level, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout.LayoutParams pl = new FrameLayout.LayoutParams(dp(60), dp(210), Gravity.CENTER);
+        root.addView(pill, pl);
+        root.setPadding(dp(8), dp(8), dp(8), dp(8));
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(dp(76), dp(226),
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
+        lp.x = dp(6);
+        lp.y = -dp(80);
+        lp.setTitle("GlassKitVolume");
+        try {
+            s.wm.addView(root, lp);
+        } catch (Exception e) {
+            root = null;
+            return;
+        }
+        pill.setTranslationX(dp(90));
+        pill.animate().translationX(0).setInterpolator(Ui.SPRING).setDuration(520).start();
+        // biasan latar: tangkap skrin sekali (dihadkan)
+        if (System.currentTimeMillis() - lastShot > 1500) {
+            lastShot = System.currentTimeMillis();
+            try {
+                s.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, s.getMainExecutor(),
+                        new AccessibilityService.TakeScreenshotCallback() {
+                            @Override
+                            public void onSuccess(AccessibilityService.ScreenshotResult r) {
+                                try {
+                                    Bitmap hw = Bitmap.wrapHardwareBuffer(r.getHardwareBuffer(), r.getColorSpace());
+                                    if (hw != null) bd.set(hw.copy(Bitmap.Config.ARGB_8888, false), s.screenW, s.screenH);
+                                } catch (Throwable ignored) {
+                                } finally {
+                                    try { r.getHardwareBuffer().close(); } catch (Throwable ignored) {}
+                                }
+                                if (root != null) LiquidGlass.invalidateTree(root);
+                            }
+
+                            @Override
+                            public void onFailure(int code) { }
+                        });
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    void hide() {
+        final FrameLayout r = root;
+        root = null;
+        if (r == null) return;
+        View pill = r.getChildAt(0);
+        pill.animate().translationX(dp(90)).alpha(0f).setDuration(220).withEndAction(() -> {
+            try { s.wm.removeViewImmediate(r); } catch (Exception ignored) {}
+        }).start();
+    }
+
+    /** Isi aras volume + ikon, boleh diseret. */
+    private class Level extends View {
+        float v, shown;
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Icon ic = new Icon(s, Icon.SPEAKER, Color.WHITE);
+
+        Level() {
+            super(s);
+            setLayerType(LAYER_TYPE_SOFTWARE, null);
+        }
+
+        void animateTo(float t) {
+            v = t;
+            android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(shown, t);
+            a.setDuration(220);
+            a.addUpdateListener(x -> {
+                shown = (float) x.getAnimatedValue();
+                invalidate();
+            });
+            a.start();
+        }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            float w = getWidth(), h = getHeight();
+            float top = h * (1 - shown);
+            Path fill = new Path();
+            fill.addRect(0, top, w, h, Path.Direction.CW);
+            p.setShader(new android.graphics.LinearGradient(0, top, 0, h,
+                    Color.argb(235, 255, 255, 255), Color.argb(200, 235, 240, 250), android.graphics.Shader.TileMode.CLAMP));
+            c.drawPath(fill, p);
+            p.setShader(null);
+            p.setColor(Color.argb(120, 255, 255, 255));
+            c.drawRect(0, top, w, top + Math.max(1, dp(1)), p);
+            int is = dp(24);
+            ic.layout(0, 0, is, is);
+            ic.setColor(top < h - dp(14) - is ? Color.rgb(40, 40, 46) : Color.WHITE);
+            c.save();
+            c.translate((w - is) / 2f, h - is - dp(14));
+            ic.draw(c);
+            c.restore();
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent e) {
+            s.h.removeCallbacks(autoHide);
+            float t = 1f - Math.max(0, Math.min(1, e.getY() / getHeight()));
+            AudioManager am = am();
+            int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(t * max), 0);
+            v = shown = t;
+            invalidate();
+            if (e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                s.h.postDelayed(autoHide, 1600);
+            }
+            return true;
+        }
+    }
+}

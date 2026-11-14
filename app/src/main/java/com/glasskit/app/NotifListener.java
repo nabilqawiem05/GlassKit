@@ -26,6 +26,7 @@ public class NotifListener extends NotificationListenerService {
         PillService p = PillService.inst;
         if (p != null && p.panels != null) p.panels.onNotificationsChanged();
         if (p != null) p.onNotifsChanged();
+        if (p != null && p.call != null && sbn != null) p.call.onRemoved(sbn.getKey());
     }
 
     @Override
@@ -37,6 +38,11 @@ public class NotifListener extends NotificationListenerService {
 
         Notification n = sbn.getNotification();
         Bundle ex = n.extras;
+
+        if (CallOverlay.isCall(n)) {
+            if (p.call != null) p.call.onCallNotification(sbn);
+            return;
+        }
 
         if (ex != null && ex.containsKey(Notification.EXTRA_MEDIA_SESSION)) {
             p.initMedia();

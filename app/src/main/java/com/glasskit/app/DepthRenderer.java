@@ -31,7 +31,14 @@ import java.util.Locale;
 public final class DepthRenderer {
     private DepthRenderer() {}
 
-    private static Bitmap blurSrc, blurOut;
+    private static Bitmap blurSrc, blurOut, sharpSrc, sharpOut;
+
+    private static synchronized Bitmap sharp(Bitmap bg) {
+        if (bg == sharpSrc && sharpOut != null) return sharpOut;
+        sharpOut = GlassArt.blur(bg, 720, 1);
+        sharpSrc = bg;
+        return sharpOut;
+    }
 
     public static File bgFile(Context c) { return new File(c.getFilesDir(), "bg.jpg"); }
     public static File fgFile(Context c) { return new File(c.getFilesDir(), "fg.png"); }
@@ -50,7 +57,7 @@ public final class DepthRenderer {
             case 1: return Typeface.create(Typeface.SANS_SERIF, 300, false);
             case 2: return Typeface.create(Typeface.SERIF, Typeface.BOLD);
             case 3: return Typeface.create(Typeface.MONOSPACE, 700, false);
-            default: return Typeface.create(Typeface.SANS_SERIF, 900, false);
+            default: return Typeface.create(Typeface.create("google-sans", Typeface.NORMAL), 800, false);
         }
     }
 
@@ -123,7 +130,8 @@ public final class DepthRenderer {
             c.drawText(date, w / 2f, b.top - size * 0.1f, dp);
 
             if (glass) {
-                GlassArt.draw(c, path, size, color, dark, bg != null ? blurred(bg) : null, bgRect);
+                int tint = (color & 0x00FFFFFF) == 0x00FFFFFF ? 0 : (color | 0xFF000000);
+                LiquidGlass.glyph(c, path, size, bg != null ? sharp(bg) : null, bgRect, dark, tint);
             } else {
                 Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
                 fp.setColor(color);

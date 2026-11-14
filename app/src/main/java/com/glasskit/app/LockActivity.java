@@ -84,6 +84,7 @@ public class LockActivity extends Activity {
     private Runnable afterUnlock;
     private boolean leaving, soundPlayed;
     private long lastSensorTouch;
+    private final LiquidGlass.Backdrop bd = new LiquidGlass.Backdrop();
 
     private final BroadcastReceiver rx = new BroadcastReceiver() {
         @Override
@@ -151,6 +152,7 @@ public class LockActivity extends Activity {
                 .getInsets(WindowInsets.Type.statusBars()).top;
         if (statusH <= 0) statusH = dp(32);
 
+        LiquidGlass.current = bd;
         Root root = new Root(this);
         root.setBackgroundColor(Color.BLACK);
         wall = new ImageView(this);
@@ -221,6 +223,7 @@ public class LockActivity extends Activity {
         ui.addView(bottom, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
         setContentView(root);
+        LiquidGlass.current = null;
         hideBars();
 
         IntentFilter f = new IntentFilter();
@@ -313,6 +316,8 @@ public class LockActivity extends Activity {
             DepthRenderer.draw(this, new Canvas(frame), W, H, bg, fg, prefs, true);
             wall.setImageBitmap(frame);
             wall.invalidate();
+            bd.set(frame, W, H);
+            LiquidGlass.invalidateTree(ui);
         } catch (Throwable ignored) {
         }
         Path p = DepthRenderer.clockPath(this, prefs, W, H);
@@ -335,6 +340,10 @@ public class LockActivity extends Activity {
         protected void onDraw(Canvas c) {
             Context ctx = getContext();
             Draw3D.useWidgetTheme(ctx);
+            int[] lc = new int[2];
+            getLocationOnScreen(lc);
+            Draw3D.backdrop = bd.sharp;
+            Draw3D.backdropRect = new RectF(-lc[0], -lc[1], W - lc[0], H - lc[1]);
             float w = getWidth(), cx = w / 2f;
             float u = dp(1);
             // baris 1: acara seterusnya
@@ -390,6 +399,16 @@ public class LockActivity extends Activity {
 
     void refreshNotifs() {
         if (notifList == null) return;
+        LiquidGlass.Backdrop prevBd = LiquidGlass.current;
+        LiquidGlass.current = bd;
+        try {
+            buildNotifs();
+        } finally {
+            LiquidGlass.current = prevBd;
+        }
+    }
+
+    private void buildNotifs() {
         notifList.removeAllViews();
         NotifListener l = NotifListener.inst;
         List<StatusBarNotification> list = new ArrayList<>();
@@ -468,7 +487,7 @@ public class LockActivity extends Activity {
 
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(Ui.glassStyled(this, 24, prefs.getBoolean(Prefs.GLASS_DARK, false)));
+        LiquidGlass.apply(c, 24, prefs.getBoolean(Prefs.GLASS_DARK, false));
         c.setPadding(dp(14), dp(12), dp(14), dp(12));
 
         LinearLayout top = new LinearLayout(this);
@@ -674,6 +693,16 @@ public class LockActivity extends Activity {
 
     void refreshMusic() {
         if (musicBox == null) return;
+        LiquidGlass.Backdrop prevBd = LiquidGlass.current;
+        LiquidGlass.current = bd;
+        try {
+            buildMusic();
+        } finally {
+            LiquidGlass.current = prevBd;
+        }
+    }
+
+    private void buildMusic() {
         musicBox.removeAllViews();
         PillService s = PillService.inst;
         if (s == null || s.mc == null || (s.title == null && !s.playing)) return;

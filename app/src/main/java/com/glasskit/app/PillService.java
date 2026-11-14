@@ -93,6 +93,8 @@ public class PillService extends AccessibilityService
     private long holdMusicUntil, duration;
 
     private LockPatch patch;
+    CallOverlay call;
+    VolumePanel volume;
     private boolean stepReg, calObs;
     private final android.hardware.SensorEventListener stepL = new android.hardware.SensorEventListener() {
         @Override
@@ -230,6 +232,8 @@ public class PillService extends AccessibilityService
         panels = new Panels(this);
         panels.updateEdges();
         patch = new LockPatch();
+        call = new CallOverlay(this);
+        volume = new VolumePanel(this);
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_SCREEN_ON);
         f.addAction(Intent.ACTION_SCREEN_OFF);
@@ -256,6 +260,18 @@ public class PillService extends AccessibilityService
     public void onAccessibilityEvent(AccessibilityEvent event) { }
 
     @Override
+    protected boolean onKeyEvent(android.view.KeyEvent e) {
+        int k = e.getKeyCode();
+        if (volume == null || prefs == null || !prefs.getBoolean(Prefs.VOLUME_ON, true)) return false;
+        if (k != android.view.KeyEvent.KEYCODE_VOLUME_UP && k != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return false;
+        if (call != null && call.showing()) return false;
+        if (e.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+            return volume.onKey(k == android.view.KeyEvent.KEYCODE_VOLUME_UP);
+        }
+        return true;
+    }
+
+    @Override
     public void onInterrupt() { }
 
     @Override
@@ -269,6 +285,8 @@ public class PillService extends AccessibilityService
         }
         if (panels != null) panels.destroy();
         if (patch != null) patch.hide(false);
+        if (call != null) call.hide(false);
+        if (volume != null) volume.hide();
         if (registered) {
             try { unregisterReceiver(sysRx); } catch (Exception ignored) {}
             try { getSystemService(android.net.ConnectivityManager.class).unregisterNetworkCallback(netCb); } catch (Exception ignored) {}

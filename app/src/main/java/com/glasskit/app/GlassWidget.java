@@ -68,6 +68,8 @@ public abstract class GlassWidget extends AppWidgetProvider {
             Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             Canvas cv = new Canvas(bmp);
             Draw3D.useWidgetTheme(c);
+            Draw3D.backdrop = null;
+            Draw3D.backdropRect = null;
             currentId = id;
             float pad = Math.min(w, h) * 0.03f;
             cv.save();
