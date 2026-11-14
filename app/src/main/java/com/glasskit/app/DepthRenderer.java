@@ -35,7 +35,7 @@ public final class DepthRenderer {
 
     private static synchronized Bitmap sharp(Bitmap bg) {
         if (bg == sharpSrc && sharpOut != null) return sharpOut;
-        sharpOut = GlassArt.blur(bg, 720, 1);
+        sharpOut = GlassArt.blur(bg, 480, 5); // kaca beku: latar dalam digit dikaburkan lembut
         sharpSrc = bg;
         return sharpOut;
     }
@@ -99,7 +99,7 @@ public final class DepthRenderer {
         Paint tp = new Paint(Paint.ANTI_ALIAS_FLAG);
         tp.setTextAlign(Paint.Align.CENTER);
         tp.setTextSize(size);
-        tp.setLetterSpacing(-0.03f);
+        tp.setLetterSpacing(0.01f); // jarak kecil: digit tidak bersentuh / bertindih
         tp.setTypeface(font(p.getInt(Prefs.CLOCK_FONT, 0)));
         Path path = new Path();
         tp.getTextPath(time, 0, time.length(), w / 2f, y, path);
@@ -139,7 +139,7 @@ public final class DepthRenderer {
             dp.setTypeface(Typeface.create(Typeface.SANS_SERIF, 600, false));
             dp.setShadowLayer(size * 0.03f, 0, size * 0.008f, Color.argb(70, 0, 0, 0));
             String date = new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(new Date());
-            c.drawText(date, w / 2f, b.top - size * 0.1f, dp);
+            c.drawText(date, w / 2f, b.top - size * 0.16f, dp);
 
             if (glass) {
                 int tint = (color & 0x00FFFFFF) == 0x00FFFFFF ? 0 : (color | 0xFF000000);

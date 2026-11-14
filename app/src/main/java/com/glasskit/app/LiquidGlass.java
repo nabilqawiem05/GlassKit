@@ -285,91 +285,71 @@ final class LiquidGlass {
         c.restoreToCount(sc);
     }
 
+    /**
+     * Digit kaca beku yang bersih: latar di belakang (tidak dianjak / dibesarkan, jadi tiada "digit berganda"),
+     * dicerahkan seperti kaca, kilauan atas, garis cahaya dalam yang tajam dan bingkai halus. Tiada jalur kanta.
+     */
     private static void glyphImpl(Canvas c, Path path, float size, Bitmap bg, RectF bgRect, boolean dark, int tint) {
         RectF b = new RectF();
         path.computeBounds(b, true);
         if (b.isEmpty()) return;
+        boolean tinted = tint != 0;
+        int tr = tinted ? Color.red(tint) : 255, tg = tinted ? Color.green(tint) : 255, tb = tinted ? Color.blue(tint) : 255;
 
-        // bayang terapung di luar glyph sahaja
+        // 1) bayang lembut di luar digit sahaja (beri kedalaman, tidak kotor)
         c.save();
         c.clipOutPath(path);
         Paint sh = new Paint(Paint.ANTI_ALIAS_FLAG);
-        sh.setColor(Color.argb(dark ? 110 : 60, 0, 0, 0));
-        sh.setMaskFilter(new BlurMaskFilter(Math.max(2f, size * 0.06f), BlurMaskFilter.Blur.NORMAL));
-        c.translate(0, size * 0.03f);
+        sh.setColor(Color.argb(55, 0, 0, 0));
+        sh.setMaskFilter(new BlurMaskFilter(Math.max(2f, size * 0.05f), BlurMaskFilter.Blur.NORMAL));
+        c.translate(0, size * 0.025f);
         c.drawPath(path, sh);
         c.restore();
 
         c.save();
         c.clipPath(path);
-        Paint fp = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+        // 2) latar yang sama kedudukan, dicerahkan (kaca beku)
         if (bg != null && bgRect != null) {
-            // biasan: latar dibesarkan dari pusat glyph
+            Paint fp = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
             ColorMatrix cm = new ColorMatrix();
-            float k = dark ? 0.72f : 1.04f, t = dark ? -8 : 22;
-            cm.set(new float[]{k, 0, 0, 0, t, 0, k, 0, 0, t, 0, 0, k, 0, t, 0, 0, 0, 1, 0});
+            cm.setSaturation(0.75f);
+            ColorMatrix lift = new ColorMatrix(new float[]{0.78f, 0, 0, 0, 48, 0, 0.78f, 0, 0, 48, 0, 0, 0.78f, 0, 50, 0, 0, 0, 1, 0});
+            cm.postConcat(lift);
             fp.setColorFilter(new ColorMatrixColorFilter(cm));
-            c.drawBitmap(bg, null, scaleAbout(bgRect, b.centerX(), b.centerY(), 1.07f), fp);
-            // tepi: biasan lebih kuat dalam jalur di sepanjang garis luar glyph
-            Paint st = new Paint(Paint.ANTI_ALIAS_FLAG);
-            st.setStyle(Paint.Style.STROKE);
-            st.setStrokeWidth(size * 0.13f);
-            Path band = new Path();
-            st.getFillPath(path, band);
-            band.op(path, Path.Op.INTERSECT);
-            c.save();
-            c.clipPath(band);
-            ColorMatrix cm2 = new ColorMatrix();
-            float k2 = dark ? 0.8f : 1.12f, t2 = dark ? 0 : 34;
-            cm2.set(new float[]{k2, 0, 0, 0, t2, 0, k2, 0, 0, t2, 0, 0, k2, 0, t2, 0, 0, 0, 1, 0});
-            fp.setColorFilter(new ColorMatrixColorFilter(cm2));
-            c.drawBitmap(bg, null, scaleAbout(bgRect, b.centerX(), b.centerY(), 1.2f), fp);
-            c.restore();
+            c.drawBitmap(bg, null, bgRect, fp);
         }
-        // isi lut sinar (lebih ringan jika ada biasan)
-        int tr = tint == 0 ? 255 : Color.red(tint), tg = tint == 0 ? 255 : Color.green(tint), tb = tint == 0 ? 255 : Color.blue(tint);
+        // 3) badan kaca: putih lut sinar (atau warna pilihan), lebih terang di atas
         Paint body = new Paint(Paint.ANTI_ALIAS_FLAG);
-        if (dark) {
-            body.setShader(new LinearGradient(0, b.top, 0, b.bottom,
-                    Color.argb(bg != null ? 70 : 140, tr / 6, tg / 6, tb / 6 + 4), Color.argb(bg != null ? 50 : 100, tr / 6, tg / 6, tb / 6 + 4),
-                    Shader.TileMode.CLAMP));
-        } else {
-            int a0 = tint != 0 ? 140 : (bg != null ? 42 : 60), a1 = tint != 0 ? 90 : (bg != null ? 14 : 22);
-            body.setShader(new LinearGradient(0, b.top, 0, b.bottom,
-                    Color.argb(a0, tr, tg, tb), Color.argb(a1, tr, tg, tb), Shader.TileMode.CLAMP));
-        }
+        int a0 = tinted ? 170 : (bg != null ? 95 : 150), a1 = tinted ? 120 : (bg != null ? 45 : 90);
+        body.setShader(new LinearGradient(0, b.top, 0, b.bottom, Color.argb(a0, tr, tg, tb), Color.argb(a1, tr, tg, tb),
+                Shader.TileMode.CLAMP));
         c.drawRect(b, body);
-        // kilauan atas
+        // 4) kilauan spekular separuh atas
         Paint gloss = new Paint(Paint.ANTI_ALIAS_FLAG);
-        gloss.setShader(new LinearGradient(0, b.top, 0, b.top + b.height() * 0.42f,
-                Color.argb(dark ? 50 : 95, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP));
+        gloss.setShader(new LinearGradient(0, b.top, 0, b.top + b.height() * 0.5f,
+                Color.argb(90, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP));
         c.drawRect(b, gloss);
-        // cahaya dalam bawah
-        Paint low = new Paint(Paint.ANTI_ALIAS_FLAG);
-        low.setShader(new LinearGradient(0, b.bottom - b.height() * 0.22f, 0, b.bottom,
-                Color.argb(0, 255, 255, 255), Color.argb(dark ? 30 : 70, 255, 255, 255), Shader.TileMode.CLAMP));
-        c.drawRect(b, low);
-        // cahaya dalam tepi
+        // 5) garis cahaya dalam yang tajam (hanya separuh dalam strok kelihatan kerana klip)
         Paint in = new Paint(Paint.ANTI_ALIAS_FLAG);
         in.setStyle(Paint.Style.STROKE);
-        in.setStrokeWidth(Math.max(2f, size * 0.05f));
-        in.setMaskFilter(new BlurMaskFilter(Math.max(1f, size * 0.018f), BlurMaskFilter.Blur.NORMAL));
-        in.setShader(new LinearGradient(b.left, b.top, b.right, b.bottom,
-                new int[]{Color.argb(dark ? 120 : 210, 255, 255, 255), Color.argb(0, 255, 255, 255),
-                        Color.argb(0, 255, 255, 255), Color.argb(dark ? 60 : 130, 255, 255, 255)},
-                new float[]{0f, 0.4f, 0.6f, 1f}, Shader.TileMode.CLAMP));
+        in.setStrokeJoin(Paint.Join.ROUND);
+        in.setStrokeWidth(Math.max(2f, size * 0.03f));
+        in.setShader(new LinearGradient(b.left, b.top, b.left, b.bottom,
+                new int[]{Color.argb(235, 255, 255, 255), Color.argb(70, 255, 255, 255), Color.argb(150, 255, 255, 255)},
+                new float[]{0f, 0.55f, 1f}, Shader.TileMode.CLAMP));
         c.drawPath(path, in);
         c.restore();
 
-        // bingkai bercahaya nipis
+        // 6) bingkai luar halus supaya bentuk digit jelas di atas latar cerah
         Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
         rim.setStyle(Paint.Style.STROKE);
-        rim.setStrokeWidth(Math.max(1f, size * 0.009f));
-        rim.setShader(new LinearGradient(b.left, b.top, b.right, b.bottom,
-                new int[]{Color.argb(dark ? 160 : 245, 255, 255, 255), Color.argb(dark ? 30 : 70, 255, 255, 255),
-                        Color.argb(dark ? 20 : 45, 255, 255, 255), Color.argb(dark ? 110 : 190, 255, 255, 255)},
-                new float[]{0f, 0.35f, 0.65f, 1f}, Shader.TileMode.CLAMP));
+        rim.setStrokeJoin(Paint.Join.ROUND);
+        rim.setStrokeWidth(Math.max(1f, size * 0.006f));
+        rim.setColor(Color.argb(60, 0, 0, 0));
+        c.save();
+        c.clipOutPath(path);
         c.drawPath(path, rim);
+        c.restore();
     }
 
     private static RectF scaleAbout(RectF r, float cx, float cy, float s) {
