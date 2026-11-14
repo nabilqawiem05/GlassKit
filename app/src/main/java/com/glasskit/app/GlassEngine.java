@@ -109,7 +109,28 @@ final class GlassEngine {
      * Lukis permukaan kaca kristal: bayang lembut, badan lut sinar, biasan warna halus,
      * kilauan spekular, cahaya dalam dan bingkai perak bercahaya.
      */
-    static void card(Canvas c, RectF r, Theme t, float d) {
+    static void card(Canvas c, RectF r, Theme t, float d) { card(c, r, t, d, true); }
+
+    /** Drawable kaca bersih (tanpa kabur / kanta) untuk paparan biasa seperti kad notifikasi lock screen. */
+    static android.graphics.drawable.Drawable drawable(Context ctx, float radiusDp, boolean dark, int alpha) {
+        final Theme t = theme(ctx);
+        t.dark = dark;
+        t.alpha = alpha;
+        t.radiusDp = radiusDp;
+        final float d = ctx.getResources().getDisplayMetrics().density;
+        return new android.graphics.drawable.Drawable() {
+            @Override
+            public void draw(Canvas c) {
+                card(c, new RectF(getBounds()), t, d, false);
+            }
+
+            @Override public void setAlpha(int a) { }
+            @Override public void setColorFilter(android.graphics.ColorFilter cf) { }
+            @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+        };
+    }
+
+    static void card(Canvas c, RectF r, Theme t, float d, boolean shadow) {
         float rad = Math.min(t.radiusDp * d, Math.min(r.width(), r.height()) / 2f);
         Path shape = new Path();
         shape.addRoundRect(r, rad, rad, Path.Direction.CW);
@@ -117,6 +138,7 @@ final class GlassEngine {
         float op = t.alpha / 100f;
 
         // 1) bayang terapung (dua lapis: lembut jauh + rapat)
+        if (shadow) {
         Paint sh = new Paint(Paint.ANTI_ALIAS_FLAG);
         sh.setColor(Color.argb(t.dark ? 110 : 45, 0, 0, 0));
         sh.setMaskFilter(new BlurMaskFilter(6 * d, BlurMaskFilter.Blur.NORMAL));
@@ -130,6 +152,7 @@ final class GlassEngine {
         c.translate(0, 0.8f * d);
         c.drawPath(shape, sh);
         c.restore();
+        }
 
         c.save();
         c.clipPath(shape);
