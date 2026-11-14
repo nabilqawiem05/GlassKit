@@ -3,11 +3,12 @@ package com.glasskit.app;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Canvas;
+import android.graphics.RectF;
 
 public class AnalogWidget extends GlassWidget {
     @Override
-    void render(Context c, Canvas cv, int w, int h, float d) { Cards.analog(c, cv, w, h); }
+    void render(Context c, Canvas cv, RectF r, GlassEngine.Theme t, float d, int size) { Cards.analog(c, cv, r, t, d, size); }
 
     @Override
-    Intent clickIntent(Context c) { return new Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS); }
+    Intent clickIntent(Context c) { return alarms(); }
 }

@@ -27,12 +27,26 @@ import java.util.Locale;
  */
 public abstract class GlassWidget extends AppWidgetProvider {
 
-    abstract void render(Context c, Canvas cv, int w, int h, float density);
+    /** Lukis kandungan dalam kawasan r (di dalam kad kaca). */
+    abstract void render(Context c, Canvas cv, RectF r, GlassEngine.Theme t, float d, int size);
 
     Intent clickIntent(Context c) { return null; }
 
+    /** Ubah tema untuk widget ini (contoh: warna biasan ikut cuaca). */
+    void tune(Context c, GlassEngine.Theme t) {}
+
     /** Id widget yang sedang dilukis. */
     int currentId;
+
+    static Intent alarms() {
+        return new Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS);
+    }
+
+    static Intent calendar() {
+        android.net.Uri u = android.provider.CalendarContract.CONTENT_URI.buildUpon().appendPath("time")
+                .appendPath(String.valueOf(System.currentTimeMillis())).build();
+        return new Intent(Intent.ACTION_VIEW).setData(u);
+    }
 
     @Override
     public void onDeleted(Context c, int[] ids) {
@@ -65,17 +79,8 @@ public abstract class GlassWidget extends AppWidgetProvider {
             float maxSide = 900f;
             if (Math.max(wdp, hdp) * scale > maxSide) scale = maxSide / Math.max(wdp, hdp);
             int w = Math.max(40, Math.round(wdp * scale)), h = Math.max(40, Math.round(hdp * scale));
-            Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            Canvas cv = new Canvas(bmp);
-            Draw3D.useWidgetTheme(c);
-            Draw3D.backdrop = null;
-            Draw3D.backdropRect = null;
             currentId = id;
-            float pad = Math.min(w, h) * 0.03f;
-            cv.save();
-            cv.translate(pad, pad);
-            render(c, cv, Math.round(w - 2 * pad), Math.round(h - 2 * pad), scale);
-            cv.restore();
+            Bitmap bmp = draw(c, w, h, scale);
 
             RemoteViews v = new RemoteViews(c.getPackageName(), R.layout.widget_image);
             v.setImageViewBitmap(R.id.w_img, bmp);
@@ -90,6 +95,33 @@ public abstract class GlassWidget extends AppWidgetProvider {
         } catch (Throwable ignored) {
         }
     }
+
+    /** Lukis widget lengkap (kad kaca + kandungan) pada saiz piksel tertentu. */
+    Bitmap draw(Context c, int w, int h, float d) {
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas cv = new Canvas(bmp);
+        GlassEngine.Theme t = GlassEngine.theme(c);
+        tune(c, t);
+        GlassEngine.cur = t;
+        float m = GlassEngine.shadowPad(d);
+        RectF card = new RectF(m, m * 0.7f, w - m, h - m * 1.3f);
+        GlassEngine.card(cv, card, t, d);
+        float pad = Math.min(15 * d, Math.min(card.width(), card.height()) * 0.12f);
+        RectF in = new RectF(card.left + pad, card.top + pad, card.right - pad, card.bottom - pad);
+        int size = GlassEngine.size(card.width(), card.height(), d);
+        try {
+            cv.save();
+            if (fullBleed()) render(c, cv, card, t, d, size);
+            else render(c, cv, in, t, d, size);
+            cv.restore();
+        } catch (Throwable e) {
+            CrashLog.write(c, e);
+        }
+        return bmp;
+    }
+
+    /** Kandungan memenuhi seluruh kad (contoh: gambar). */
+    boolean fullBleed() { return false; }
 
     static void updateAll(Context c, Class<? extends GlassWidget> cls) {
         try {
@@ -107,10 +139,11 @@ public abstract class GlassWidget extends AppWidgetProvider {
         updateAll(c, ClockWidget.class);
         updateAll(c, AnalogWidget.class);
         updateAll(c, ClockCalWidget.class);
+        updateAll(c, WorldWidget.class);
         Calendar now = Calendar.getInstance();
         int m = now.get(Calendar.MINUTE);
+        updateAll(c, UpNextWidget.class); // kira detik
         if (m % 15 == 0) {
-            updateAll(c, UpNextWidget.class);
             updateAll(c, StepsWidget.class);
         }
         if (m == 0) {
@@ -127,6 +160,7 @@ public abstract class GlassWidget extends AppWidgetProvider {
         updateAll(c, StepsWidget.class);
         updateAll(c, WeatherWidget.class);
         updateAll(c, BatteryWidget.class);
+        updateAll(c, WorldWidget.class);
         MusicWidget.push(c);
     }
 

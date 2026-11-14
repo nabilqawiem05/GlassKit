@@ -76,6 +76,87 @@ final class Data {
         return out;
     }
 
+    /** Hari dalam bulan semasa yang ada acara. */
+    static java.util.Set<Integer> eventDaysThisMonth(Context c) {
+        java.util.Set<Integer> out = new java.util.HashSet<>();
+        if (!has(c, Manifest.permission.READ_CALENDAR)) return out;
+        java.util.Calendar a = java.util.Calendar.getInstance();
+        a.set(java.util.Calendar.DAY_OF_MONTH, 1);
+        a.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        a.set(java.util.Calendar.MINUTE, 0);
+        long from = a.getTimeInMillis();
+        a.add(java.util.Calendar.MONTH, 1);
+        long to = a.getTimeInMillis();
+        Uri.Builder b = CalendarContract.Instances.CONTENT_URI.buildUpon();
+        ContentUris.appendId(b, from);
+        ContentUris.appendId(b, to);
+        try (Cursor cur = c.getContentResolver().query(b.build(), new String[]{CalendarContract.Instances.START_DAY,
+                        CalendarContract.Instances.END_DAY}, CalendarContract.Instances.VISIBLE + "=1", null, null)) {
+            java.util.Calendar z = java.util.Calendar.getInstance();
+            int month = z.get(java.util.Calendar.MONTH);
+            while (cur != null && cur.moveToNext()) {
+                for (int jd = cur.getInt(0); jd <= cur.getInt(1); jd++) {
+                    android.text.format.Time t = new android.text.format.Time();
+                    t.setJulianDay(jd);
+                    if (t.month == month) out.add(t.monthDay);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    /** Penggera seterusnya (format jam), atau null. */
+    static String nextAlarm(Context c) {
+        try {
+            android.app.AlarmManager am = c.getSystemService(android.app.AlarmManager.class);
+            android.app.AlarmManager.AlarmClockInfo i = am.getNextAlarmClock();
+            if (i == null) return null;
+            long t = i.getTriggerTime();
+            if (t - System.currentTimeMillis() > 7 * 86_400_000L) return null;
+            boolean is24 = android.text.format.DateFormat.is24HourFormat(c);
+            String day = new SimpleDateFormat("EEE", Locale.getDefault()).format(new Date(t));
+            String tm = new SimpleDateFormat(is24 ? "HH:mm" : "h:mm a", Locale.getDefault()).format(new Date(t));
+            return t - System.currentTimeMillis() < 86_400_000L ? tm : day + " " + tm;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static final class Device {
+        String name;
+        int level;
+        boolean headset;
+    }
+
+    /** Bateri peranti Bluetooth yang bersambung (jika sistem melaporkannya). */
+    static List<Device> btBatteries(Context c) {
+        List<Device> out = new ArrayList<>();
+        if (!has(c, "android.permission.BLUETOOTH_CONNECT")) return out;
+        try {
+            android.bluetooth.BluetoothManager bm = c.getSystemService(android.bluetooth.BluetoothManager.class);
+            android.bluetooth.BluetoothAdapter ad = bm == null ? null : bm.getAdapter();
+            if (ad == null || !ad.isEnabled()) return out;
+            for (android.bluetooth.BluetoothDevice d : ad.getBondedDevices()) {
+                try {
+                    boolean conn = (boolean) d.getClass().getMethod("isConnected").invoke(d);
+                    if (!conn) continue;
+                    int lvl = (int) d.getClass().getMethod("getBatteryLevel").invoke(d);
+                    if (lvl < 0 || lvl > 100) continue;
+                    Device x = new Device();
+                    x.name = d.getAlias() != null ? d.getAlias() : d.getName();
+                    x.level = lvl;
+                    android.bluetooth.BluetoothClass bc = d.getBluetoothClass();
+                    x.headset = bc != null && bc.getMajorDeviceClass() == android.bluetooth.BluetoothClass.Device.Major.AUDIO_VIDEO;
+                    out.add(x);
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return out;
+    }
+
     static String eventTime(Context c, Event e) {
         if (e.allDay) return c.getString(R.string.all_day);
         boolean is24 = android.text.format.DateFormat.is24HourFormat(c);
@@ -104,7 +185,16 @@ final class Data {
         int[] dCode = new int[0];
         float[] dHi = new float[0], dLo = new float[0];
         String[] dName = new String[0];
+        int[] dRain = new int[0];
         long time;
+        // butiran tambahan (mungkin tiada jika data lama)
+        int humidity = -1, uv = -1, rainNow = -1;
+        float wind = -1;
+        String sunrise, sunset;
+        int[] hCode = new int[0], hRain = new int[0];
+        float[] hTemp = new float[0];
+        String[] hName = new String[0];
+        boolean[] hDay = new boolean[0];
     }
 
     static Weather weather(Context c) {
@@ -135,6 +225,50 @@ final class Data {
                 w.dHi[i] = (float) hi.getDouble(i);
                 w.dLo[i] = (float) lo.getDouble(i);
                 try { w.dName[i] = outF.format(in.parse(time.getString(i))); } catch (Exception e) { w.dName[i] = ""; }
+            }
+            // tambahan: kelembapan, angin, UV, matahari, ramalan setiap jam
+            w.humidity = cur.optInt("relative_humidity_2m", -1);
+            w.wind = (float) cur.optDouble("wind_speed_10m", -1);
+            JSONArray uvA = d.optJSONArray("uv_index_max"), pA = d.optJSONArray("precipitation_probability_max");
+            JSONArray srA = d.optJSONArray("sunrise"), ssA = d.optJSONArray("sunset");
+            if (uvA != null && uvA.length() > 0) w.uv = (int) Math.round(uvA.optDouble(0, -1));
+            w.dRain = new int[n];
+            for (int i = 0; i < n; i++) w.dRain[i] = pA != null ? pA.optInt(i, -1) : -1;
+            boolean is24 = android.text.format.DateFormat.is24HourFormat(c);
+            SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US);
+            SimpleDateFormat hm = new SimpleDateFormat(is24 ? "HH:mm" : "h:mm a", Locale.getDefault());
+            try {
+                if (srA != null) w.sunrise = hm.format(iso.parse(srA.getString(0)));
+                if (ssA != null) w.sunset = hm.format(iso.parse(ssA.getString(0)));
+            } catch (Exception ignored) {
+            }
+            JSONObject hr = o.optJSONObject("hourly");
+            if (hr != null) {
+                JSONArray ht = hr.getJSONArray("time"), hc = hr.getJSONArray("weather_code"),
+                        htp = hr.getJSONArray("temperature_2m");
+                JSONArray hp = hr.optJSONArray("precipitation_probability"), hd = hr.optJSONArray("is_day");
+                String nowKey = iso.format(new Date()).substring(0, 13);
+                int start = 0;
+                for (int i = 0; i < ht.length(); i++) {
+                    if (ht.getString(i).substring(0, 13).compareTo(nowKey) >= 0) { start = i; break; }
+                }
+                int m = Math.max(0, Math.min(12, ht.length() - start));
+                w.hCode = new int[m];
+                w.hRain = new int[m];
+                w.hTemp = new float[m];
+                w.hName = new String[m];
+                w.hDay = new boolean[m];
+                SimpleDateFormat hf = new SimpleDateFormat(is24 ? "HH" : "h a", Locale.getDefault());
+                for (int i = 0; i < m; i++) {
+                    int k = start + i;
+                    w.hCode[i] = hc.getInt(k);
+                    w.hTemp[i] = (float) htp.getDouble(k);
+                    w.hRain[i] = hp != null ? hp.optInt(k, -1) : -1;
+                    w.hDay[i] = hd == null || hd.optInt(k, 1) == 1;
+                    try { w.hName[i] = i == 0 ? c.getString(R.string.now) : hf.format(iso.parse(ht.getString(k))); }
+                    catch (Exception e) { w.hName[i] = ""; }
+                }
+                if (m > 0) w.rainNow = w.hRain[0];
             }
             if (n > 0) {
                 w.hi = w.dHi[0];
@@ -191,8 +325,10 @@ final class Data {
             if (loc == null) return false;
             String url = String.format(Locale.US,
                     "https://api.open-meteo.com/v1/forecast?latitude=%.3f&longitude=%.3f"
-                            + "&current=temperature_2m,weather_code,is_day"
-                            + "&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=6&timezone=auto",
+                            + "&current=temperature_2m,weather_code,is_day,relative_humidity_2m,wind_speed_10m"
+                            + "&hourly=temperature_2m,weather_code,precipitation_probability,is_day&forecast_hours=14"
+                            + "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,"
+                            + "precipitation_probability_max&forecast_days=6&timezone=auto",
                     loc.getLatitude(), loc.getLongitude());
             HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
             con.setConnectTimeout(12000);

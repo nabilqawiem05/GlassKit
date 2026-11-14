@@ -18,6 +18,12 @@ public final class Prefs {
     public static final String PILL_NOTI = "pillNoti";
     public static final String PANELS_ON = "panelsOn";
     public static final String GLASS_DARK = "glassDark";
+    public static final String W_APPEAR = "wAppear";   // widget: 0 cerah, 1 gelap, 2 auto
+    public static final String W_ALPHA = "wAlpha";     // 0..100
+    public static final String W_REFLECT = "wReflect"; // 0..100
+    public static final String W_RADIUS = "wRadius";   // dp
+    public static final String W_ACCENT = "wAccent";   // 0 wallpaper, 1 biru, 2 ungu, 3 sian
+    public static final String W_ZONES = "wZones";     // senarai zon masa, dipisah koma
     public static final String GLASS_MODE = "glassMode";   // 0 cerah, 1 gelap tinted, 2 auto (ikut mod gelap)   // panel & widget: false jernih, true gelap
     public static final String CLOCK_W = "clockW";         // % skala lebar
     public static final String CLOCK_H = "clockH";         // % skala tinggi

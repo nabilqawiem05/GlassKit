@@ -138,6 +138,29 @@ final class Ui {
         return g;
     }
 
+    /** Warna dominan (tepu) daripada bitmap, contoh kulit album. */
+    static int dominant(android.graphics.Bitmap b, int fallback) {
+        try {
+            android.graphics.Bitmap s = android.graphics.Bitmap.createScaledBitmap(b, 8, 8, true);
+            float[] best = null;
+            float bestScore = -1;
+            for (int x = 0; x < 8; x++) {
+                for (int y = 0; y < 8; y++) {
+                    float[] hsv = new float[3];
+                    Color.colorToHSV(s.getPixel(x, y), hsv);
+                    float score = hsv[1] * (0.3f + hsv[2]);
+                    if (score > bestScore) { bestScore = score; best = hsv; }
+                }
+            }
+            if (best == null || best[1] < 0.15f) return fallback;
+            best[1] = Math.max(best[1], 0.55f);
+            best[2] = Math.max(best[2], 0.75f);
+            return Color.HSVToColor(best);
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
     static Typeface font(int weight) {
         return Typeface.create(Typeface.SANS_SERIF, weight, false);
     }

@@ -428,12 +428,30 @@ public class MainActivity extends Activity {
         note(clk, getString(R.string.clock_tip));
 
         LinearLayout wg = card(pWidgets, R.string.sec_widgets, Icon.NOTE, Ui.PURPLE);
-        label(wg, R.string.widget_theme);
-        segmented(wg, new int[]{R.string.wtheme_glass, R.string.wtheme_dark, R.string.wtheme_none},
-                prefs.getInt(Prefs.WIDGET_THEME, 0), i -> {
-                    prefs.edit().putInt(Prefs.WIDGET_THEME, i).apply();
-                    GlassWidget.refreshAll(this);
-                });
+        // pratonton langsung
+        wPrev = new ImageView(this);
+        wPrev.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        wPrev.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(22)); }
+        });
+        wPrev.setClipToOutline(true);
+        LinearLayout.LayoutParams wpl = new LinearLayout.LayoutParams(-1, dp(300));
+        wpl.bottomMargin = dp(12);
+        wg.addView(wPrev, wpl);
+        label(wg, R.string.w_appearance);
+        segmented(wg, new int[]{R.string.w_light, R.string.w_dark, R.string.glass_auto},
+                prefs.getInt(Prefs.W_APPEAR, 2), i -> { prefs.edit().putInt(Prefs.W_APPEAR, i).apply(); widgetsChanged(); });
+        label(wg, R.string.w_accent);
+        segmented(wg, new int[]{R.string.w_acc_wall, R.string.w_acc_blue, R.string.w_acc_purple, R.string.w_acc_cyan},
+                prefs.getInt(Prefs.W_ACCENT, 0), i -> { prefs.edit().putInt(Prefs.W_ACCENT, i).apply(); widgetsChanged(); });
+        label(wg, R.string.w_opacity);
+        slider(wg, 0, 100, prefs.getInt(Prefs.W_ALPHA, 55), v -> { prefs.edit().putInt(Prefs.W_ALPHA, v).apply(); widgetsChanged(); });
+        label(wg, R.string.w_reflect);
+        slider(wg, 0, 100, prefs.getInt(Prefs.W_REFLECT, 60), v -> { prefs.edit().putInt(Prefs.W_REFLECT, v).apply(); widgetsChanged(); });
+        label(wg, R.string.w_radius);
+        slider(wg, 8, 36, prefs.getInt(Prefs.W_RADIUS, 24), v -> { prefs.edit().putInt(Prefs.W_RADIUS, v).apply(); widgetsChanged(); });
+        button(wg, getString(R.string.w_pick_zones), false, v -> pickZones());
         note(wg, getString(R.string.widgets_hint));
         button(wg, getString(R.string.btn_refresh_widgets), false, v -> GlassWidget.refreshAll(this));
 
@@ -528,6 +546,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        renderWidgetPreview();
         refreshStatus();
     }
 
@@ -689,6 +708,73 @@ public class MainActivity extends Activity {
         } else if (say) {
             status.setText(R.string.st_need_subject);
         }
+    }
+
+    private ImageView wPrev;
+    private final android.os.Handler wh = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable wApply = () -> GlassWidget.refreshAll(this);
+    private int wGen;
+
+    /** Tetapan widget berubah: kemas kini pratonton serta-merta, widget sebenar selepas seketika. */
+    private void widgetsChanged() {
+        renderWidgetPreview();
+        wh.removeCallbacks(wApply);
+        wh.postDelayed(wApply, 600);
+    }
+
+    private void renderWidgetPreview() {
+        if (wPrev == null) return;
+        final int g = ++wGen;
+        final android.content.Context app = getApplicationContext();
+        final float d = getResources().getDisplayMetrics().density;
+        new Thread(() -> {
+            try {
+                int W = Math.round(340 * d), H = Math.round(330 * d);
+                Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+                Canvas c = new Canvas(out);
+                Bitmap bg = DepthRenderer.load(DepthRenderer.bgFile(app));
+                if (bg != null) {
+                    android.graphics.RectF dst = DepthRenderer.centerCrop(bg, W, H);
+                    c.drawBitmap(bg, null, dst, new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
+                } else {
+                    android.graphics.Paint p = new android.graphics.Paint();
+                    p.setShader(new android.graphics.LinearGradient(0, 0, W, H, new int[]{0xFF2B5876, 0xFF4E4376, 0xFFE0A386},
+                            null, android.graphics.Shader.TileMode.CLAMP));
+                    c.drawRect(0, 0, W, H, p);
+                }
+                int s = Math.round(170 * d), m = Math.round(160 * d);
+                c.drawBitmap(new ClockWidget().draw(app, s, s, d), 0, 0, null);
+                c.drawBitmap(new BatteryWidget().draw(app, s, s, d), W - s, 0, null);
+                c.drawBitmap(new WeatherWidget().draw(app, W, m, d), 0, s - Math.round(4 * d), null);
+                wh.post(() -> { if (g == wGen) wPrev.setImageBitmap(out); });
+            } catch (Throwable t) {
+                CrashLog.write(app, t);
+            }
+        }, "gk-wprev").start();
+    }
+
+    private void pickZones() {
+        final String[] ids = {"Asia/Makkah", "Asia/Dubai", "Europe/London", "Europe/Paris", "Europe/Istanbul",
+                "America/New_York", "America/Los_Angeles", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore",
+                "Asia/Jakarta", "Asia/Bangkok", "Asia/Kolkata", "Australia/Sydney", "Asia/Kuala_Lumpur"};
+        String[] names = new String[ids.length];
+        boolean[] on = new boolean[ids.length];
+        java.util.List<String> cur = Cards.zones(this);
+        for (int i = 0; i < ids.length; i++) {
+            names[i] = Cards.city(ids[i]);
+            on[i] = cur.contains(ids[i]);
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.w_pick_zones)
+                .setMultiChoiceItems(names, on, (dlg, w, checked) -> on[w] = checked)
+                .setPositiveButton(android.R.string.ok, (dlg, w) -> {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < ids.length; i++) if (on[i]) sb.append(sb.length() > 0 ? "," : "").append(ids[i]);
+                    prefs.edit().putString(Prefs.W_ZONES, sb.toString()).apply();
+                    widgetsChanged();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void toast(String s) {

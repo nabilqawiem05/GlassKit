@@ -94,7 +94,7 @@ final class Shell {
                 + "appops set " + pkg + " WRITE_SETTINGS allow; "
                 + "appops set " + pkg + " SYSTEM_ALERT_WINDOW allow; "
                 + "appops set " + pkg + " PROJECT_MEDIA allow; "
-                + "for p in READ_CALENDAR ACCESS_COARSE_LOCATION ACCESS_FINE_LOCATION ACCESS_BACKGROUND_LOCATION ACTIVITY_RECOGNITION RECORD_AUDIO POST_NOTIFICATIONS; do "
+                + "for p in READ_CALENDAR ACCESS_COARSE_LOCATION ACCESS_FINE_LOCATION ACCESS_BACKGROUND_LOCATION ACTIVITY_RECOGNITION RECORD_AUDIO POST_NOTIFICATIONS BLUETOOTH_CONNECT; do "
                 + "pm grant " + pkg + " android.permission.$p 2>/dev/null; done; "
                 + "s=$(settings get secure enabled_accessibility_services); "
                 + "case \"$s\" in *" + acc + "*) ;; null|'') settings put secure enabled_accessibility_services " + acc + ";; "

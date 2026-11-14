@@ -3,11 +3,9 @@ package com.glasskit.app;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Canvas;
+import android.graphics.RectF;
 
 public class StepsWidget extends GlassWidget {
     @Override
-    void render(Context c, Canvas cv, int w, int h, float d) { Cards.steps(c, cv, w, h); }
-
-    @Override
-    Intent clickIntent(Context c) { return c.getPackageManager().getLaunchIntentForPackage("com.google.android.apps.fitness"); }
+    void render(Context c, Canvas cv, RectF r, GlassEngine.Theme t, float d, int size) { Cards.steps(c, cv, r, t, d, size); }
 }

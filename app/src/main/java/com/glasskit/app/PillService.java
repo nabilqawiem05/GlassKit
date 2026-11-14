@@ -359,7 +359,7 @@ public class PillService extends AccessibilityService
         int night = newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK;
         if (night != lastNight) {
             lastNight = night;
-            if (prefs != null && Ui.glassMode(this) == 2) GlassWidget.refreshAll(this);
+            if (prefs != null) GlassWidget.refreshAll(this); // tema Auto: kaca cerah/gelap ikut sistem
         }
         hideStatusBar();
         updateStatusBar();
