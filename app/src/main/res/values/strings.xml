@@ -400,4 +400,5 @@
     <string name="panel_classic">Classic</string>
     <string name="panel_liquid">Liquid island</string>
     <string name="panel_style_note">Liquid island: the panel grows out of the Dynamic Island and melts down, tiles drip into place, and the glass shine follows how you tilt the phone. Open it by swiping down from the top right, or pull down on an expanded island.</string>
+    <string name="tap_to_resume">Tap play to resume your music</string>
 </resources>

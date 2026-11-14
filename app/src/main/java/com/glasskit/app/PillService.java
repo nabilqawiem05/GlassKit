@@ -2036,7 +2036,19 @@ public class PillService extends AccessibilityService
     }
 
     void togglePlay() {
-        if (mc == null) return;
+        if (mc == null) {
+            // tiada sesi aktif: sambung pemain muzik terakhir
+            try {
+                android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+                long t = SystemClock.uptimeMillis();
+                am.dispatchMediaKeyEvent(new android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_DOWN,
+                        android.view.KeyEvent.KEYCODE_MEDIA_PLAY, 0));
+                am.dispatchMediaKeyEvent(new android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_UP,
+                        android.view.KeyEvent.KEYCODE_MEDIA_PLAY, 0));
+            } catch (Exception ignored) {
+            }
+            return;
+        }
         if (playing) mc.getTransportControls().pause();
         else mc.getTransportControls().play();
     }

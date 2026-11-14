@@ -953,15 +953,6 @@ final class Panels {
         View hd = header();
         b.addView(hd, new LinearLayout.LayoutParams(-1, -2));
 
-        // muzik
-        View media = mediaCard();
-        if (media != null) {
-            LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-1, dp(150));
-            ml.topMargin = dp(14);
-            b.addView(media, ml);
-            sheet.drops.add(media);
-        }
-
         // tile bulat berwarna + dua bar tegak
         tWifi = new Tile(Icon.WIFI, s.getString(R.string.tg_wifi), 0xFF0A84FF, v -> toggleWifi(), act(Settings.Panel.ACTION_WIFI));
         tBt = new Tile(Icon.BT, s.getString(R.string.tg_bt), 0xFF0A84FF, v -> toggleBt(), act(Settings.ACTION_BLUETOOTH_SETTINGS));
@@ -999,18 +990,20 @@ final class Panels {
         Tile[] all = {tWifi, tBt, tData, tDnd, tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc, shot, rec, cam, lock, set};
 
         LinearLayout mid = new LinearLayout(s);
+        mid.setClipChildren(false);
         LinearLayout grid = new LinearLayout(s);
         grid.setOrientation(LinearLayout.VERTICAL);
+        grid.setClipChildren(false);
         int cols = 3;
         for (int i = 0; i < 9; i += cols) {
             LinearLayout row = new LinearLayout(s);
+            row.setClipChildren(false);
             for (int j = 0; j < cols; j++) {
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-                row.addView(all[i + j].v, lp);
+                row.addView(all[i + j].v, new LinearLayout.LayoutParams(0, -2, 1f));
                 sheet.drops.add(all[i + j].v);
             }
             LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
-            rl.topMargin = dp(10);
+            rl.topMargin = dp(14);
             grid.addView(row, rl);
         }
         mid.addView(grid, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -1020,27 +1013,41 @@ final class Panels {
             int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC);
             am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Math.round(v * max), 0);
         });
-        LinearLayout.LayoutParams vl = new LinearLayout.LayoutParams(dp(62), -1);
+        int sliderH = 3 * (dp(58) + dp(22) + dp(14)) - dp(14);
+        LinearLayout.LayoutParams vl = new LinearLayout.LayoutParams(dp(60), sliderH);
         vl.leftMargin = dp(8);
-        vl.topMargin = dp(10);
+        vl.topMargin = dp(14);
         mid.addView(vBright, vl);
-        LinearLayout.LayoutParams vl2 = new LinearLayout.LayoutParams(dp(62), -1);
+        LinearLayout.LayoutParams vl2 = new LinearLayout.LayoutParams(dp(60), sliderH);
         vl2.leftMargin = dp(10);
-        vl2.topMargin = dp(10);
+        vl2.topMargin = dp(14);
         mid.addView(vVolume, vl2);
         sheet.drops.add(vBright);
         sheet.drops.add(vVolume);
-        LinearLayout.LayoutParams midl = new LinearLayout.LayoutParams(-1, -2);
-        midl.topMargin = dp(4);
-        b.addView(mid, midl);
+        b.addView(mid, new LinearLayout.LayoutParams(-1, -2));
 
+        // muzik: sentiasa ada (cantik untuk screenshot); tiada lagu = tekan main untuk sambung
+        View media = mediaCard(true);
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(-1, dp(150));
+        mlp.topMargin = dp(18);
+        b.addView(media, mlp);
+        sheet.drops.add(media);
+
+        // tile lain: barisan ikon kecil tanpa label (tekan lama untuk nama / tetapan)
         LinearLayout row2 = new LinearLayout(s);
+        row2.setGravity(Gravity.CENTER_VERTICAL);
         for (int i = 9; i < all.length; i++) {
-            row2.addView(all[i].v, new LinearLayout.LayoutParams(0, -2, 1f));
-            sheet.drops.add(all[i].v);
+            Tile t = all[i];
+            if (t.label != null) t.label.setVisibility(View.GONE);
+            ViewGroup.LayoutParams dl = t.disc.getLayoutParams();
+            dl.width = dp(46);
+            dl.height = dp(46);
+            t.disc.setLayoutParams(dl);
+            row2.addView(t.v, new LinearLayout.LayoutParams(0, -2, 1f));
+            sheet.drops.add(t.v);
         }
         LinearLayout.LayoutParams r2 = new LinearLayout.LayoutParams(-1, -2);
-        r2.topMargin = dp(12);
+        r2.topMargin = dp(18);
         b.addView(row2, r2);
 
         LinearLayout foot = new LinearLayout(s);
@@ -1097,8 +1104,10 @@ final class Panels {
 
     // ===================== Kad media gaya Pixel =====================
 
-    private View mediaCard() {
-        if (s.mc == null || (s.title == null && !s.playing)) {
+    private View mediaCard() { return mediaCard(false); }
+
+    private View mediaCard(boolean always) {
+        if (!always && (s.mc == null || (s.title == null && !s.playing))) {
             mediaCard = null;
             return null;
         }
@@ -1170,9 +1179,16 @@ final class Panels {
 
     private void updateMedia() {
         if (mTitle == null) return;
-        mTitle.setText(s.title != null ? s.title : s.getString(R.string.no_title));
-        mArtist.setText(s.artist != null ? s.artist : "");
-        mArt.setImageBitmap(s.art);
+        boolean none = s.mc == null || (s.title == null && !s.playing);
+        mTitle.setText(none ? s.getString(R.string.not_playing) : s.title != null ? s.title : s.getString(R.string.no_title));
+        mArtist.setText(none ? s.getString(R.string.tap_to_resume) : s.artist != null ? s.artist : "");
+        if (s.art != null) {
+            mArt.setImageBitmap(s.art);
+        } else {
+            // tiada kulit album: kecerunan warna lembut supaya kad tetap cantik
+            mArt.setImageDrawable(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{0xFF5E5CE6, 0xFFBF5AF2, 0xFFFF375F}));
+        }
         mPlay.setKind(s.playing ? Icon.PAUSE : Icon.PLAY);
         long d = s.duration();
         mBar.setValue(d > 0 ? (float) s.position() / d : 0);

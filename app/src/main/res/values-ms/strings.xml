@@ -393,4 +393,5 @@
     <string name="panel_classic">Klasik</string>
     <string name="panel_liquid">Island cecair</string>
     <string name="panel_style_note">Island cecair: panel tumbuh dari Dynamic Island dan mencair ke bawah, tile menitis ke tempatnya, dan kilauan kaca ikut condongan telefon. Buka dengan leret ke bawah dari atas kanan, atau tarik ke bawah island yang sedang besar.</string>
+    <string name="tap_to_resume">Tekan main untuk sambung muzik</string>
 </resources>
