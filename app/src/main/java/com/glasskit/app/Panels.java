@@ -246,6 +246,7 @@ final class Panels {
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
         plp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        plp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         plp.setTitle("GlassKitPanel");
 
         final int token = ++showToken;
@@ -1573,7 +1574,8 @@ final class Panels {
                     openGroups.remove(pkg);
                     fillNotifications();
                 });
-                hdr.addView(less, new LinearLayout.LayoutParams(-2, dp(32)));
+                less.setPadding(dp(16), 0, dp(16), 0);
+                hdr.addView(less, new LinearLayout.LayoutParams(-2, dp(34)));
                 ncList.addView(hdr, new LinearLayout.LayoutParams(-1, -2));
                 for (StatusBarNotification x : g) {
                     View card = card(x, true, true);
@@ -1593,6 +1595,8 @@ final class Panels {
     }
 
     private final java.util.Set<String> openGroups = new java.util.HashSet<>();
+    private final java.util.Set<String> openCards = new java.util.HashSet<>();
+    private String replyKey;
 
     /** Tindanan kad kaca untuk satu app: kad terbaru di depan, dua lapisan di belakang. */
     private View stack(final String pkg, final List<StatusBarNotification> g) {
@@ -1744,10 +1748,15 @@ final class Panels {
             t.setPadding(0, dp(4), 0, 0);
             tc.addView(t);
         }
+        final boolean isOpen = openCards.contains(sbn.getKey());
+        if (isOpen) {
+            CharSequence full = NotifUtil.fullText(n);
+            if (!TextUtils.isEmpty(full)) text = full;
+        }
         if (!TextUtils.isEmpty(text)) {
             TextView t = Ui.text(s, 14, 400, Color.argb(220, 255, 255, 255));
             t.setText(text);
-            t.setMaxLines(4);
+            t.setMaxLines(isOpen ? 30 : 3);
             t.setEllipsize(TextUtils.TruncateAt.END);
             t.setLineSpacing(0, 1.12f);
             t.setPadding(0, dp(3), 0, 0);
@@ -1774,15 +1783,205 @@ final class Panels {
             }
         }
 
-        c.setOnClickListener(v -> {
-            s.sendIntent(n.contentIntent);
-            if ((n.flags & Notification.FLAG_AUTO_CANCEL) != 0 && NotifListener.inst != null) {
-                try { NotifListener.inst.cancelNotification(sbn.getKey()); } catch (Exception ignored) {}
+        // kad dibuka: gambar, balas, butang tindakan
+        View result = c;
+        if (isOpen) {
+            LinearLayout wrap = new LinearLayout(s);
+            wrap.setOrientation(LinearLayout.VERTICAL);
+            wrap.setBackground(c.getBackground());
+            wrap.setOutlineProvider(c.getOutlineProvider());
+            wrap.setElevation(c.getElevation());
+            c.setBackground(null);
+            c.setElevation(0);
+            c.setPadding(dp(14), dp(14), dp(16), dp(6));
+            wrap.addView(c, new LinearLayout.LayoutParams(-1, -2));
+            LinearLayout ex = new LinearLayout(s);
+            ex.setOrientation(LinearLayout.VERTICAL);
+            ex.setPadding(dp(62), 0, dp(16), dp(14));
+            wrap.addView(ex, new LinearLayout.LayoutParams(-1, -2));
+            addPictures(ex, n);
+            addActions(ex, sbn, n);
+            wrap.setOnClickListener(v -> {
+                openCards.remove(sbn.getKey());
+                if (sbn.getKey().equals(replyKey)) replyKey = null;
+                fillNotifications();
+            });
+            c.setOnClickListener(v -> wrap.performClick());
+            swipeToDismiss(wrap, sbn);
+            result = wrap;
+        } else {
+            // tekan: buka kad (teks penuh, gambar, balas); tekan lama: terus buka app
+            c.setOnClickListener(v -> {
+                openCards.add(sbn.getKey());
+                fillNotifications();
+            });
+            c.setOnLongClickListener(v -> {
+                openApp(sbn, n);
+                return true;
+            });
+            swipeToDismiss(c, sbn);
+        }
+        return result;
+    }
+
+    private void openApp(StatusBarNotification sbn, Notification n) {
+        s.sendIntent(n.contentIntent);
+        if ((n.flags & Notification.FLAG_AUTO_CANCEL) != 0 && NotifListener.inst != null) {
+            try { NotifListener.inst.cancelNotification(sbn.getKey()); } catch (Exception ignored) {}
+        }
+        close();
+    }
+
+    private void addPictures(LinearLayout ex, Notification n) {
+        List<NotifUtil.Pic> pics = NotifUtil.pictures(s, n, dp(260));
+        if (pics.isEmpty()) return;
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(s);
+        hs.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(s);
+        for (NotifUtil.Pic p : pics) {
+            ImageView iv = new ImageView(s);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            iv.setImageBitmap(p.bmp);
+            iv.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(16)); }
+            });
+            iv.setClipToOutline(true);
+            int h = dp(180);
+            int w = pics.size() == 1 ? Math.min(dp(260), Math.round(h * (float) p.bmp.getWidth() / Math.max(1, p.bmp.getHeight())))
+                    : dp(150);
+            iv.setOnClickListener(v -> showPicture(p));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Math.max(dp(90), w), h);
+            lp.rightMargin = dp(8);
+            row.addView(iv, lp);
+        }
+        hs.addView(row);
+        LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, -2);
+        hl.topMargin = dp(8);
+        ex.addView(hs, hl);
+    }
+
+    /** Lihat gambar penuh di atas panel; tekan untuk tutup. */
+    private void showPicture(NotifUtil.Pic p) {
+        if (root == null) return;
+        FrameLayout f = new FrameLayout(s);
+        f.setBackgroundColor(Color.argb(235, 0, 0, 0));
+        ImageView iv = new ImageView(s);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        Bitmap big = p.uri != null ? null : p.bmp;
+        if (p.uri != null) {
+            try {
+                android.graphics.ImageDecoder.Source src = android.graphics.ImageDecoder.createSource(s.getContentResolver(), p.uri);
+                big = android.graphics.ImageDecoder.decodeBitmap(src, (d, info, so) -> {
+                    int m = Math.max(info.getSize().getWidth(), info.getSize().getHeight());
+                    if (m > 2400) {
+                        float sc = 2400f / m;
+                        d.setTargetSize(Math.round(info.getSize().getWidth() * sc), Math.round(info.getSize().getHeight() * sc));
+                    }
+                });
+            } catch (Exception e) {
+                big = p.bmp;
             }
-            close();
-        });
-        swipeToDismiss(c, sbn);
-        return c;
+        }
+        iv.setImageBitmap(big);
+        f.addView(iv, new FrameLayout.LayoutParams(-1, -1));
+        f.setOnClickListener(v -> v.animate().alpha(0f).setDuration(180).withEndAction(() -> {
+            if (root != null) root.removeView(f);
+        }).start());
+        f.setAlpha(0f);
+        root.addView(f, new FrameLayout.LayoutParams(-1, -1));
+        iv.setScaleX(0.85f);
+        iv.setScaleY(0.85f);
+        f.animate().alpha(1f).setDuration(200).start();
+        iv.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(450).start();
+    }
+
+    private void addActions(LinearLayout ex, StatusBarNotification sbn, Notification n) {
+        final Notification.Action reply = NotifUtil.replyAction(n);
+        final String key = sbn.getKey();
+        if (reply != null && key.equals(replyKey)) {
+            LinearLayout rr = new LinearLayout(s);
+            rr.setGravity(Gravity.CENTER_VERTICAL);
+            final android.widget.EditText et = new android.widget.EditText(s);
+            et.setHint(R.string.reply_hint);
+            et.setTextColor(Color.WHITE);
+            et.setHintTextColor(Color.argb(150, 255, 255, 255));
+            et.setTextSize(15);
+            et.setBackground(Ui.round(Color.argb(40, 255, 255, 255), dp(20)));
+            et.setPadding(dp(14), dp(10), dp(14), dp(10));
+            et.setMaxLines(4);
+            rr.addView(et, new LinearLayout.LayoutParams(0, -2, 1f));
+            TextView send = Ui.line(s, 14, 650, 0xFF0B0B10);
+            send.setText(R.string.notif_send);
+            send.setGravity(Gravity.CENTER);
+            send.setPadding(dp(16), 0, dp(16), 0);
+            send.setBackground(Ui.round(Color.WHITE, dp(20)));
+            send.setOnClickListener(v -> {
+                if (NotifUtil.reply(s, reply, et.getText().toString())) {
+                    Toast.makeText(s, R.string.notif_sent, Toast.LENGTH_SHORT).show();
+                    replyKey = null;
+                    hideKeyboard(et);
+                    s.h.postDelayed(this::fillNotifications, 500);
+                }
+            });
+            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, dp(40));
+            sp.leftMargin = dp(8);
+            rr.addView(send, sp);
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+            rl.topMargin = dp(10);
+            ex.addView(rr, rl);
+            et.requestFocus();
+            s.h.postDelayed(() -> {
+                android.view.inputmethod.InputMethodManager imm = s.getSystemService(android.view.inputmethod.InputMethodManager.class);
+                if (imm != null) imm.showSoftInput(et, 0);
+            }, 150);
+            return;
+        }
+        LinearLayout acts = new LinearLayout(s);
+        acts.addView(actChip(s.getString(R.string.notif_open), true, v -> openApp(sbn, n)));
+        if (reply != null) {
+            acts.addView(actChip(s.getString(R.string.notif_reply), false, v -> {
+                replyKey = key;
+                fillNotifications();
+            }));
+        }
+        if (n.actions != null) {
+            int extra = 0;
+            for (final Notification.Action a : n.actions) {
+                if (a == reply || a.actionIntent == null || TextUtils.isEmpty(a.title) || extra >= 2) continue;
+                if (a.getRemoteInputs() != null && a.getRemoteInputs().length > 0) continue;
+                acts.addView(actChip(a.title.toString(), false, v -> {
+                    try { NotifUtil.send(s, a.actionIntent, null); } catch (Exception ignored) {}
+                    s.h.postDelayed(this::fillNotifications, 400);
+                }));
+                extra++;
+            }
+        }
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(s);
+        hs.setHorizontalScrollBarEnabled(false);
+        hs.addView(acts);
+        LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, -2);
+        hl.topMargin = dp(10);
+        ex.addView(hs, hl);
+    }
+
+    private TextView actChip(String label, boolean primary, View.OnClickListener l) {
+        TextView t = Ui.line(s, 13, 650, primary ? 0xFF0B0B10 : Color.WHITE);
+        t.setText(label);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(dp(16), 0, dp(16), 0);
+        t.setBackground(primary ? Ui.round(Color.WHITE, dp(18)) : Ui.round(Color.argb(46, 255, 255, 255), dp(18)));
+        t.setOnClickListener(l);
+        Ui.press(t);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, dp(36));
+        p.rightMargin = dp(8);
+        t.setLayoutParams(p);
+        return t;
+    }
+
+    private void hideKeyboard(View v) {
+        android.view.inputmethod.InputMethodManager imm = s.getSystemService(android.view.inputmethod.InputMethodManager.class);
+        if (imm != null) imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
     }
 
     private void swipeToDismiss(final View v, final StatusBarNotification sbn) {
