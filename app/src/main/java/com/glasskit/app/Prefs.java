@@ -25,6 +25,9 @@ public final class Prefs {
     public static final String HIDE_H = "hideH";           // dp
     public static final String PATCH_DIM = "patchDim";     // % kegelapan tampalan
     public static final String LOCK_ON = "lockOn";
+    public static final String WIDGET_THEME = "widgetTheme"; // 0 kaca, 1 gelap, 2 tanpa bingkai
+    public static final String SOUND_CHARGE = "soundCharge";
+    public static final String SOUND_UNLOCK = "soundUnlock";
     public static final String SBAR_ON = "sbarOn";
     public static final String SBAR_STYLE = "sbarStyle";
     public static final String SBAR_PCT = "sbarPct";

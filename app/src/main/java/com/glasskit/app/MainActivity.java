@@ -44,6 +44,7 @@ import rikka.shizuku.Shizuku;
 
 public class MainActivity extends Activity {
 
+    static final String EXTRA_PICK_PHOTOS = "pickPhotos";
     private static final int REQ_BG = 1, REQ_FG = 2, REQ_PHOTOS = 3, REQ_PERMS = 77;
     private static final int[] COLORS = {
             Color.WHITE, 0xFF8AB4F8, 0xFFC8B6FF, 0xFFF5D06F, 0xFFFF8A80, 0xFF101418
@@ -56,6 +57,65 @@ public class MainActivity extends Activity {
     private TextView stShizuku, stAcc, stNotif;
     private Bitmap cacheBg, cacheFg;
     private StatusBar statusPreview;
+    private LinearLayout tabs;
+    private ScrollView[] pages;
+    private int curTab = -1;
+
+    private void selectTab(int i) {
+        if (i == curTab) return;
+        for (int k = 0; k < tabs.getChildCount(); k++) {
+            LinearLayout pill = (LinearLayout) tabs.getChildAt(k);
+            boolean on = k == i;
+            pill.setBackground(on ? Ui.round(Color.WHITE, dp(20)) : Ui.glass(this, 20, 26));
+            ((Icon) pill.getChildAt(0)).setColor(on ? 0xFF0B0B10 : Color.WHITE);
+            ((TextView) pill.getChildAt(1)).setTextColor(on ? 0xFF0B0B10 : Color.WHITE);
+        }
+        for (int k = 0; k < pages.length; k++) {
+            ScrollView p = pages[k];
+            if (k == i) {
+                p.setVisibility(View.VISIBLE);
+                p.setAlpha(0f);
+                p.setTranslationY(dp(18));
+                p.animate().alpha(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(480).start();
+            } else {
+                p.setVisibility(View.GONE);
+            }
+        }
+        curTab = i;
+    }
+
+    /** Latar belakang premium: cahaya warna yang bergerak perlahan. */
+    private static class Aurora extends View {
+        private final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final long start = android.os.SystemClock.uptimeMillis();
+        private final int[] cols;
+
+        Aurora(android.content.Context c) {
+            super(c);
+            cols = new int[]{Ui.accent(c, true), 0xFF5E5CE6, 0xFF0A84FF, 0xFFFF375F};
+        }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            int w = getWidth(), hh = getHeight();
+            c.drawColor(0xFF06070C);
+            double t = (android.os.SystemClock.uptimeMillis() - start) / 1000.0;
+            float[][] orb = {
+                    {0.2f + 0.15f * (float) Math.sin(t / 7), 0.12f + 0.06f * (float) Math.cos(t / 9), 0.75f},
+                    {0.85f + 0.1f * (float) Math.cos(t / 8), 0.35f + 0.08f * (float) Math.sin(t / 6), 0.6f},
+                    {0.3f + 0.12f * (float) Math.cos(t / 10), 0.8f + 0.06f * (float) Math.sin(t / 7), 0.7f},
+                    {0.8f + 0.08f * (float) Math.sin(t / 11), 0.95f, 0.5f}};
+            for (int i = 0; i < orb.length; i++) {
+                float cx = orb[i][0] * w, cy = orb[i][1] * hh, r = orb[i][2] * w;
+                int col = cols[i];
+                p.setShader(new android.graphics.RadialGradient(cx, cy, r,
+                        new int[]{(col & 0x00FFFFFF) | 0x5A000000, (col & 0x00FFFFFF) | 0x1E000000, col & 0x00FFFFFF},
+                        new float[]{0f, 0.5f, 1f}, android.graphics.Shader.TileMode.CLAMP));
+                c.drawCircle(cx, cy, r, p);
+            }
+            postInvalidateDelayed(50);
+        }
+    }
     private long cacheVer = Long.MIN_VALUE;
 
     private final Shizuku.OnRequestPermissionResultListener shizukuL = (code, result) -> {
@@ -74,28 +134,84 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(0xFF07080F);
         getWindow().setNavigationBarColor(0xFF0B1424);
 
-        ScrollView sv = new ScrollView(this);
-        sv.setFitsSystemWindows(true);
-        sv.setVerticalScrollBarEnabled(false);
-        sv.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{0xFF07080F, 0xFF15102A, 0xFF0B1424}));
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(18), dp(28), dp(18), dp(48));
-        sv.addView(box);
-        setContentView(sv);
+        FrameLayout rootF = new FrameLayout(this);
+        rootF.addView(new Aurora(this), new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setFitsSystemWindows(true);
+        rootF.addView(shell, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(rootF);
 
-        TextView h = Ui.text(this, 38, 800, Color.WHITE);
+        // ---- header ----
+        LinearLayout hdr = new LinearLayout(this);
+        hdr.setGravity(Gravity.CENTER_VERTICAL);
+        hdr.setPadding(dp(20), dp(18), dp(20), dp(6));
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.mipmap.ic_launcher);
+        hdr.addView(logo, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        LinearLayout ht = new LinearLayout(this);
+        ht.setOrientation(LinearLayout.VERTICAL);
+        ht.setPadding(dp(14), 0, 0, 0);
+        TextView h = Ui.text(this, 30, 800, Color.WHITE);
         h.setText(R.string.app_name);
         h.setLetterSpacing(-0.02f);
-        box.addView(h);
-        TextView tag = Ui.text(this, 15, 400, TEXT2);
-        tag.setText(R.string.app_tagline);
-        tag.setPadding(dp(2), dp(8), 0, dp(8));
-        box.addView(tag);
+        ht.addView(h);
+        TextView tag = Ui.text(this, 13, 500, TEXT2);
+        String ver = "";
+        try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) {}
+        tag.setText(getString(R.string.app_tagline) + "  ·  v" + ver);
+        tag.setPadding(0, dp(4), 0, 0);
+        ht.addView(tag);
+        hdr.addView(ht, new LinearLayout.LayoutParams(0, -2, 1f));
+        shell.addView(hdr);
+
+        // ---- tab ----
+        android.widget.HorizontalScrollView tabsSv = new android.widget.HorizontalScrollView(this);
+        tabsSv.setHorizontalScrollBarEnabled(false);
+        tabs = new LinearLayout(this);
+        tabs.setPadding(dp(16), dp(10), dp(16), dp(10));
+        tabsSv.addView(tabs);
+        shell.addView(tabsSv);
+
+        FrameLayout pagesF = new FrameLayout(this);
+        shell.addView(pagesF, new LinearLayout.LayoutParams(-1, 0, 1f));
+        int[] tabNames = {R.string.tab_home, R.string.tab_lock, R.string.tab_island, R.string.tab_panels, R.string.tab_widgets};
+        int[] tabIcons = {Icon.GEAR, Icon.LOCK, Icon.NOTE, Icon.DARK, Icon.SUN};
+        pages = new ScrollView[tabNames.length];
+        LinearLayout[] boxes = new LinearLayout[tabNames.length];
+        for (int i = 0; i < tabNames.length; i++) {
+            ScrollView sv = new ScrollView(this);
+            sv.setVerticalScrollBarEnabled(false);
+            sv.setClipToPadding(false);
+            LinearLayout bx = new LinearLayout(this);
+            bx.setOrientation(LinearLayout.VERTICAL);
+            bx.setPadding(dp(16), dp(2), dp(16), dp(48));
+            sv.addView(bx);
+            pagesF.addView(sv, new FrameLayout.LayoutParams(-1, -1));
+            sv.setVisibility(i == 0 ? View.VISIBLE : View.GONE);
+            pages[i] = sv;
+            boxes[i] = bx;
+            final int idx = i;
+            LinearLayout pill = new LinearLayout(this);
+            pill.setGravity(Gravity.CENTER_VERTICAL);
+            pill.setPadding(dp(14), 0, dp(16), 0);
+            Icon pi = new Icon(this, tabIcons[i], Color.WHITE);
+            pill.addView(pi, new LinearLayout.LayoutParams(dp(16), dp(16)));
+            TextView pt = Ui.text(this, 14, 650, Color.WHITE);
+            pt.setText(tabNames[i]);
+            pt.setPadding(dp(8), 0, 0, 0);
+            pill.addView(pt);
+            pill.setOnClickListener(v -> selectTab(idx));
+            Ui.press(pill);
+            LinearLayout.LayoutParams pl2 = new LinearLayout.LayoutParams(-2, dp(40));
+            pl2.rightMargin = dp(8);
+            tabs.addView(pill, pl2);
+        }
+        LinearLayout pHome = boxes[0], pLock = boxes[1], pIsland = boxes[2], pPanels = boxes[3], pWidgets = boxes[4];
+        selectTab(0);
 
         // ---------- Kebenaran ----------
-        LinearLayout perm = card(box, R.string.sec_perm, Icon.LOCK, 0xFF34C759);
+        LinearLayout perm = card(pHome, R.string.sec_perm, Icon.LOCK, 0xFF34C759);
         stShizuku = statusRow(perm, getString(R.string.perm_shizuku));
         stAcc = statusRow(perm, getString(R.string.perm_acc));
         stNotif = statusRow(perm, getString(R.string.perm_notif));
@@ -110,8 +226,16 @@ public class MainActivity extends Activity {
             toast(getString(R.string.copied));
         });
 
+        LinearLayout snd = card(pHome, R.string.sec_sound, Icon.SPEAKER, 0xFFFF375F);
+        toggle(snd, R.string.sound_charge, Prefs.SOUND_CHARGE, true);
+        toggle(snd, R.string.sound_unlock, Prefs.SOUND_UNLOCK, true);
+        button(snd, getString(R.string.btn_test_sound), false, v -> {
+            Sounds.play(this, Sounds.CHARGE);
+            stAcc.postDelayed(() -> Sounds.play(this, Sounds.UNLOCK), 1100);
+        });
+
         // ---------- Island ----------
-        LinearLayout isl = card(box, R.string.sec_island, Icon.NOTE, 0xFFFF375F);
+        LinearLayout isl = card(pIsland, R.string.sec_island, Icon.NOTE, 0xFFFF375F);
         toggle(isl, R.string.island_on, Prefs.PILL_ON, true);
         toggle(isl, R.string.island_music, Prefs.PILL_MUSIC, true);
         toggle(isl, R.string.island_noti, Prefs.PILL_NOTI, true);
@@ -121,13 +245,13 @@ public class MainActivity extends Activity {
         });
 
         // ---------- Lock screen ----------
-        LinearLayout lk = card(box, R.string.sec_lock, Icon.LOCK, 0xFFFF9F0A);
+        LinearLayout lk = card(pLock, R.string.sec_lock, Icon.LOCK, 0xFFFF9F0A);
         toggle(lk, R.string.lock_on, Prefs.LOCK_ON, false);
         note(lk, getString(R.string.lock_note));
         button(lk, getString(R.string.btn_preview_lock), false, v -> startActivity(new Intent(this, LockActivity.class)));
 
         // ---------- Status bar ----------
-        LinearLayout sb = card(box, R.string.sec_sbar, Icon.BATTERY, 0xFF30D158);
+        LinearLayout sb = card(pIsland, R.string.sec_sbar, Icon.BATTERY, 0xFF30D158);
         FrameLayout sbPrev = new FrameLayout(this);
         sbPrev.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
                 new int[]{0xFF3A6EA5, 0xFF7A5C8E, 0xFFC98A5A}));
@@ -162,7 +286,7 @@ public class MainActivity extends Activity {
         note(sb, getString(R.string.sbar_note));
 
         // ---------- Panel ----------
-        LinearLayout pan = card(box, R.string.sec_panels, Icon.GEAR, Ui.BLUE);
+        LinearLayout pan = card(pPanels, R.string.sec_panels, Icon.GEAR, Ui.BLUE);
         toggle(pan, R.string.panels_on, Prefs.PANELS_ON, true);
         label(pan, R.string.glass_style);
         segmented(pan, new int[]{R.string.glass_clear, R.string.glass_dark},
@@ -190,7 +314,7 @@ public class MainActivity extends Activity {
         pr.addView(b2, l2);
 
         // ---------- Jam depth ----------
-        LinearLayout clk = card(box, R.string.sec_clock, Icon.SUN, Ui.ORANGE);
+        LinearLayout clk = card(pLock, R.string.sec_clock, Icon.SUN, Ui.ORANGE);
         preview = new ImageView(this);
         preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
         preview.setBackgroundColor(0xFF1C2230);
@@ -268,13 +392,19 @@ public class MainActivity extends Activity {
         button(clk, getString(R.string.btn_set_wp), true, v -> setWallpaper());
         note(clk, getString(R.string.clock_tip));
 
-        LinearLayout wg = card(box, R.string.sec_widgets, Icon.NOTE, Ui.PURPLE);
+        LinearLayout wg = card(pWidgets, R.string.sec_widgets, Icon.NOTE, Ui.PURPLE);
+        label(wg, R.string.widget_theme);
+        segmented(wg, new int[]{R.string.wtheme_glass, R.string.wtheme_dark, R.string.wtheme_none},
+                prefs.getInt(Prefs.WIDGET_THEME, 0), i -> {
+                    prefs.edit().putInt(Prefs.WIDGET_THEME, i).apply();
+                    GlassWidget.refreshAll(this);
+                });
         note(wg, getString(R.string.widgets_hint));
         button(wg, getString(R.string.btn_refresh_widgets), false, v -> GlassWidget.refreshAll(this));
         note(wg, getString(R.string.themed_hint));
         button(wg, getString(R.string.btn_open_icons), true, v -> startActivity(new Intent(this, IconsActivity.class)));
 
-        LinearLayout dc = card(box, R.string.sec_data, Icon.PIN, 0xFF34C759);
+        LinearLayout dc = card(pWidgets, R.string.sec_data, Icon.PIN, 0xFF34C759);
         note(dc, getString(R.string.data_hint));
         button(dc, getString(R.string.btn_allow_data), true, v -> requestPermissions(new String[]{
                 android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -302,6 +432,25 @@ public class MainActivity extends Activity {
         prefs.registerOnSharedPreferenceChangeListener(prefL);
         try { Shizuku.addRequestPermissionResultListener(shizukuL); } catch (Throwable ignored) {}
         renderPreview();
+        handlePick(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handlePick(intent);
+    }
+
+    private void handlePick(Intent i) {
+        if (i != null && i.getBooleanExtra(EXTRA_PICK_PHOTOS, false)) {
+            i.removeExtra(EXTRA_PICK_PHOTOS);
+            selectTab(4);
+            Intent p = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            p.addCategory(Intent.CATEGORY_OPENABLE);
+            p.setType("image/*");
+            p.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            startActivityForResult(p, REQ_PHOTOS);
+        }
     }
 
     private final SharedPreferences.OnSharedPreferenceChangeListener prefL = (sp, k) -> {
@@ -333,7 +482,8 @@ public class MainActivity extends Activity {
     private LinearLayout card(LinearLayout parent, int title, int icon, int color) {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(Ui.glass(this, 28, 20));
+        c.setBackground(Ui.glass(this, 30, 24));
+        c.setElevation(dp(2));
         c.setPadding(dp(18), dp(18), dp(18), dp(20));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.topMargin = dp(16);

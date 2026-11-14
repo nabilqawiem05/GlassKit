@@ -13,7 +13,7 @@ class Icon extends View {
     static final int PLAY = 1, PAUSE = 2, NEXT = 3, PREV = 4, WIFI = 5, BT = 6, CELL = 7, PLANE = 8,
             TORCH = 9, MOON = 10, SUN = 11, SPEAKER = 12, DARK = 13, ROTATE = 14, BATTERY = 15,
             SHOT = 16, LOCK = 17, CAMERA = 18, BELL = 19, CLOSE = 20, NOTE = 21, GEAR = 22,
-            PIN = 23, NFC = 24, BOLT = 25;
+            PIN = 23, NFC = 24, BOLT = 25, UNLOCK = 26;
 
     private int kind;
     private final Paint f = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -187,6 +187,13 @@ class Icon extends View {
                     c.drawLine((float) (12 + 7 * Math.cos(an)), (float) (12 + 7 * Math.sin(an)),
                             (float) (12 + 9.5 * Math.cos(an)), (float) (12 + 9.5 * Math.sin(an)), s);
                 }
+                break;
+            case UNLOCK:
+                c.drawRoundRect(5.5f, 10.5f, 18.5f, 21, 2.5f, 2.5f, f);
+                p.moveTo(16, 11); p.lineTo(16, 7.5f);
+                p.arcTo(new RectF(16, 2.5f, 24, 10.5f), 180, 180, false);
+                p.lineTo(24, 8);
+                c.drawPath(p, s);
                 break;
             case PIN:
                 p.moveTo(12, 21.5f);

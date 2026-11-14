@@ -31,6 +31,9 @@ public abstract class GlassWidget extends AppWidgetProvider {
 
     Intent clickIntent(Context c) { return null; }
 
+    /** Lukis kepingan kaca di belakang kandungan (kecuali tema tanpa bingkai). */
+    boolean slab() { return true; }
+
     @Override
     public void onUpdate(Context c, AppWidgetManager m, int[] ids) {
         for (int id : ids) update(c, m, id);
@@ -53,7 +56,20 @@ public abstract class GlassWidget extends AppWidgetProvider {
             if (Math.max(wdp, hdp) * scale > maxSide) scale = maxSide / Math.max(wdp, hdp);
             int w = Math.max(40, Math.round(wdp * scale)), h = Math.max(40, Math.round(hdp * scale));
             Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            render(c, new Canvas(bmp), w, h, scale);
+            Canvas cv = new Canvas(bmp);
+            int theme = Prefs.get(c).getInt(Prefs.WIDGET_THEME, 0);
+            if (theme < 2 && slab()) {
+                float pad = Math.min(w, h) * 0.035f + 2 * scale;
+                android.graphics.RectF r = new android.graphics.RectF(pad, pad, w - pad, h - pad * 1.8f);
+                GlassSlab.draw(c, cv, r, theme == 1);
+                float in = Math.min(r.width(), r.height()) * 0.06f;
+                cv.save();
+                cv.translate(r.left + in, r.top + in);
+                render(c, cv, Math.round(r.width() - 2 * in), Math.round(r.height() - 2 * in), scale);
+                cv.restore();
+            } else {
+                render(c, cv, w, h, scale);
+            }
 
             RemoteViews v = new RemoteViews(c.getPackageName(), R.layout.widget_image);
             v.setImageViewBitmap(R.id.w_img, bmp);

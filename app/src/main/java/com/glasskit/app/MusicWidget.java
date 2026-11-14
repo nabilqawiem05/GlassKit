@@ -47,6 +47,9 @@ public class MusicWidget extends AppWidgetProvider {
             if (ids == null || ids.length == 0) return;
             PillService s = PillService.inst;
             RemoteViews v = new RemoteViews(c.getPackageName(), R.layout.widget_music);
+            int theme = Prefs.get(c).getInt(Prefs.WIDGET_THEME, 0);
+            v.setInt(R.id.w_root, "setBackgroundResource", theme == 0 ? R.drawable.widget_glass_clear
+                    : theme == 1 ? R.drawable.widget_glass_dark : android.R.color.transparent);
             boolean has = s != null && s.mc != null && (s.title != null || s.playing);
             v.setTextViewText(R.id.w_title, has && s.title != null ? s.title : c.getString(R.string.not_playing));
             v.setTextViewText(R.id.w_artist, has && s.artist != null ? s.artist : "");

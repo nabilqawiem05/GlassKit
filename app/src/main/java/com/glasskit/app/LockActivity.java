@@ -5,11 +5,14 @@ import android.app.ActivityOptions;
 import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.PendingIntent;
+import android.app.RemoteInput;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -23,24 +26,33 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Parcelable;
 import android.provider.MediaStore;
 import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Lock screen GlassKit: dipaparkan di atas kunci sistem (showWhenLocked).
@@ -58,16 +70,20 @@ public class LockActivity extends Activity {
     private FrameLayout ui;
     private GaugeRow gauges;
     private LinearLayout bottom, notifList, musicBox;
-    private Icon lockIcon;
-    private TextView hint;
+    private MaxScroll notifScroll;
+    private UnlockAnim lockAnim;
+    private TextView hint, clearAll;
     private Bitmap frame, bg, fg;
     private long imgVer = Long.MIN_VALUE;
+    private final Set<String> expanded = new HashSet<>();
+    private String replyKey;
 
     private String torchId;
     private boolean torchOn;
     private CameraManager.TorchCallback torchCb;
     private Runnable afterUnlock;
-    private boolean leaving;
+    private boolean leaving, soundPlayed;
+    private long lastSensorTouch;
 
     private final BroadcastReceiver rx = new BroadcastReceiver() {
         @Override
@@ -81,13 +97,37 @@ public class LockActivity extends Activity {
         @Override
         public void run() {
             boolean locked = km.isDeviceLocked();
-            lockIcon.setColor(locked ? Color.WHITE : 0xFF30D158);
+            if (!locked && lockAnim.state() == UnlockAnim.LOCKED && !leaving) {
+                // dibuka tanpa bouncer: cap jari (jika baru sentuh kawasan sensor) atau wajah
+                boolean finger = System.currentTimeMillis() - lastSensorTouch < 2500;
+                lockAnim.play(finger ? UnlockAnim.FINGER : UnlockAnim.FACE, () -> {
+                    if (!soundPlayed) {
+                        soundPlayed = true;
+                        Sounds.play(LockActivity.this, Sounds.UNLOCK);
+                    }
+                });
+            } else if (locked && lockAnim.state() != UnlockAnim.LOCKED && !leaving) {
+                lockAnim.setLocked();
+                soundPlayed = false;
+            }
             hint.setText(locked ? R.string.swipe_open : R.string.unlocked_swipe);
-            h.postDelayed(this, 600);
+            h.postDelayed(this, 300);
         }
     };
 
     private int dp(float v) { return Ui.dp(this, v); }
+
+    /** ScrollView dengan ketinggian maksimum. */
+    private static class MaxScroll extends ScrollView {
+        int max;
+
+        MaxScroll(Context c) { super(c); }
+
+        @Override
+        protected void onMeasure(int w, int hs) {
+            super.onMeasure(w, MeasureSpec.makeMeasureSpec(max, MeasureSpec.AT_MOST));
+        }
+    }
 
     // ======================= Kitaran hidup =======================
 
@@ -102,6 +142,7 @@ public class LockActivity extends Activity {
         getWindow().getAttributes().layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         getWindow().setDecorFitsSystemWindows(false);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
 
         Rect bounds = getSystemService(WindowManager.class).getCurrentWindowMetrics().getBounds();
         W = bounds.width();
@@ -119,10 +160,10 @@ public class LockActivity extends Activity {
         ui = new FrameLayout(this);
         root.addView(ui, new FrameLayout.LayoutParams(-1, -1));
 
-        lockIcon = new Icon(this, Icon.LOCK, Color.WHITE);
-        FrameLayout.LayoutParams ll = new FrameLayout.LayoutParams(dp(20), dp(20), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        ll.topMargin = statusH + dp(14);
-        ui.addView(lockIcon, ll);
+        lockAnim = new UnlockAnim(this);
+        FrameLayout.LayoutParams ll = new FrameLayout.LayoutParams(dp(56), dp(56), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        ll.topMargin = statusH + dp(2);
+        ui.addView(lockAnim, ll);
 
         gauges = new GaugeRow(this);
         ui.addView(gauges, new FrameLayout.LayoutParams(-1, dp(130)));
@@ -133,9 +174,34 @@ public class LockActivity extends Activity {
         musicBox = new LinearLayout(this);
         musicBox.setOrientation(LinearLayout.VERTICAL);
         bottom.addView(musicBox, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout nh = new LinearLayout(this);
+        nh.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        clearAll = Ui.text(this, 13, 650, Color.WHITE);
+        clearAll.setText(R.string.clear_all);
+        clearAll.setPadding(dp(14), dp(7), dp(14), dp(7));
+        clearAll.setBackground(Ui.glassStyled(this, 16, true));
+        clearAll.setOnClickListener(v -> {
+            NotifListener l = NotifListener.inst;
+            if (l != null) {
+                try { l.cancelAllNotifications(); } catch (Exception ignored) {}
+            }
+            h.postDelayed(this::refreshNotifs, 300);
+        });
+        Ui.press(clearAll);
+        nh.addView(clearAll);
+        LinearLayout.LayoutParams nhl = new LinearLayout.LayoutParams(-1, -2);
+        nhl.topMargin = dp(8);
+        bottom.addView(nh, nhl);
+
+        notifScroll = new MaxScroll(this);
+        notifScroll.max = Math.round(H * 0.38f);
+        notifScroll.setVerticalScrollBarEnabled(false);
+        notifScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         notifList = new LinearLayout(this);
         notifList.setOrientation(LinearLayout.VERTICAL);
-        bottom.addView(notifList, new LinearLayout.LayoutParams(-1, -2));
+        notifScroll.addView(notifList, new ScrollView.LayoutParams(-1, -2));
+        bottom.addView(notifScroll, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
@@ -150,7 +216,7 @@ public class LockActivity extends Activity {
             try { startActivity(i); } catch (Exception ignored) {}
         }), new LinearLayout.LayoutParams(dp(54), dp(54)));
         LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
-        bl.topMargin = dp(16);
+        bl.topMargin = dp(14);
         bottom.addView(bar, bl);
         ui.addView(bottom, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
@@ -176,6 +242,7 @@ public class LockActivity extends Activity {
         super.onResume();
         hideBars();
         resetUi();
+        h.removeCallbacks(lockPoll);
         h.post(lockPoll);
     }
 
@@ -198,7 +265,10 @@ public class LockActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        // sengaja tiada tindakan: lock screen tidak boleh ditutup dengan butang kembali
+        if (replyKey != null) {
+            replyKey = null;
+            refreshNotifs();
+        }
     }
 
     private void hideBars() {
@@ -212,11 +282,18 @@ public class LockActivity extends Activity {
     private void resetUi() {
         leaving = false;
         afterUnlock = null;
+        replyKey = null;
+        expanded.clear();
         ui.setTranslationY(0);
         ui.setAlpha(1f);
+        wall.setAlpha(1f);
         wall.setTranslationY(0);
         wall.setScaleX(1f);
         wall.setScaleY(1f);
+        if (km.isDeviceLocked()) {
+            lockAnim.setLocked();
+            soundPlayed = false;
+        }
         render();
         refreshNotifs();
         refreshMusic();
@@ -238,7 +315,6 @@ public class LockActivity extends Activity {
             wall.invalidate();
         } catch (Throwable ignored) {
         }
-        // letak tolok di bawah jam
         Path p = DepthRenderer.clockPath(this, prefs, W, H);
         RectF r = new RectF();
         p.computeBounds(r, true);
@@ -249,7 +325,6 @@ public class LockActivity extends Activity {
         gauges.invalidate();
     }
 
-    /** Barisan tolok kaca bulat. */
     private class GaugeRow extends View {
         GaugeRow(Context c) {
             super(c);
@@ -310,76 +385,291 @@ public class LockActivity extends Activity {
         return f;
     }
 
-    // ======================= Notifikasi & muzik =======================
+    // ======================= Notifikasi =======================
 
     void refreshNotifs() {
         if (notifList == null) return;
         notifList.removeAllViews();
         NotifListener l = NotifListener.inst;
-        if (l == null) return;
         List<StatusBarNotification> list = new ArrayList<>();
-        try {
-            StatusBarNotification[] arr = l.getActiveNotifications();
-            if (arr != null) list.addAll(Arrays.asList(arr));
-        } catch (Exception ignored) {
+        if (l != null) {
+            try {
+                StatusBarNotification[] arr = l.getActiveNotifications();
+                if (arr != null) list.addAll(Arrays.asList(arr));
+            } catch (Exception ignored) {
+            }
         }
         list.removeIf(x -> x.isOngoing()
                 || (x.getNotification().flags & Notification.FLAG_GROUP_SUMMARY) != 0
                 || x.getPackageName().equals(getPackageName()));
         list.sort((a, b) -> Long.compare(b.getPostTime(), a.getPostTime()));
-        int shown = 0;
+        clearAll.setVisibility(list.isEmpty() ? View.GONE : View.VISIBLE);
         for (StatusBarNotification sbn : list) {
-            if (shown >= 3) break;
             View card = card(sbn);
             if (card == null) continue;
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
             p.topMargin = dp(8);
             notifList.addView(card, p);
-            shown++;
-        }
-        if (list.size() > shown && shown > 0) {
-            TextView more = Ui.text(this, 13, 600, Color.WHITE);
-            more.setText(getString(R.string.more_notifs, list.size() - shown));
-            more.setGravity(Gravity.CENTER);
-            more.setPadding(0, dp(8), 0, 0);
-            more.setShadowLayer(dp(3), 0, dp(1), Color.argb(130, 0, 0, 0));
-            notifList.addView(more, new LinearLayout.LayoutParams(-1, -2));
         }
     }
 
-    private View card(StatusBarNotification sbn) {
+    private String appName(String pkg) {
+        try {
+            PackageManager pm = getPackageManager();
+            ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+            return pm.getApplicationLabel(ai).toString();
+        } catch (Exception e) {
+            return pkg;
+        }
+    }
+
+    /** Teks penuh: mesej chat (MessagingStyle) atau teks besar. */
+    private CharSequence fullText(Notification n) {
+        Parcelable[] msgs = n.extras.getParcelableArray(Notification.EXTRA_MESSAGES);
+        if (msgs != null && msgs.length > 0) {
+            StringBuilder sb = new StringBuilder();
+            int from = Math.max(0, msgs.length - 8);
+            for (int i = from; i < msgs.length; i++) {
+                if (!(msgs[i] instanceof Bundle)) continue;
+                Bundle m = (Bundle) msgs[i];
+                CharSequence sender = m.getCharSequence("sender");
+                CharSequence text = m.getCharSequence("text");
+                if (text == null) continue;
+                if (sb.length() > 0) sb.append("\n");
+                if (!TextUtils.isEmpty(sender)) sb.append(sender).append(": ");
+                sb.append(text);
+            }
+            if (sb.length() > 0) return sb;
+        }
+        CharSequence big = n.extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
+        if (!TextUtils.isEmpty(big)) return big;
+        CharSequence[] lines = n.extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+        if (lines != null && lines.length > 0) return TextUtils.join("\n", lines);
+        return n.extras.getCharSequence(Notification.EXTRA_TEXT);
+    }
+
+    private Notification.Action replyAction(Notification n) {
+        if (n.actions == null) return null;
+        for (Notification.Action a : n.actions) {
+            RemoteInput[] ri = a.getRemoteInputs();
+            if (ri != null && ri.length > 0 && a.actionIntent != null) return a;
+        }
+        return null;
+    }
+
+    private View card(final StatusBarNotification sbn) {
         final Notification n = sbn.getNotification();
+        final String key = sbn.getKey();
         CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
         CharSequence text = n.extras.getCharSequence(Notification.EXTRA_TEXT);
         if (TextUtils.isEmpty(title) && TextUtils.isEmpty(text)) return null;
+        boolean open = expanded.contains(key);
+
         LinearLayout c = new LinearLayout(this);
-        c.setGravity(Gravity.CENTER_VERTICAL);
+        c.setOrientation(LinearLayout.VERTICAL);
         c.setBackground(Ui.glassStyled(this, 24, prefs.getBoolean(Prefs.GLASS_DARK, false)));
-        c.setPadding(dp(14), dp(12), dp(16), dp(12));
+        c.setPadding(dp(14), dp(12), dp(14), dp(12));
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
         ImageView ic = new ImageView(this);
         try { ic.setImageDrawable(getPackageManager().getApplicationIcon(sbn.getPackageName())); } catch (Exception ignored) {}
-        c.addView(ic, new LinearLayout.LayoutParams(dp(34), dp(34)));
+        top.addView(ic, new LinearLayout.LayoutParams(dp(36), dp(36)));
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(dp(12), 0, 0, 0);
+        TextView app = Ui.line(this, 12, 600, Color.argb(200, 255, 255, 255));
+        long age = System.currentTimeMillis() - sbn.getPostTime();
+        app.setText(appName(sbn.getPackageName()) + " • " + (age < 60_000 ? getString(R.string.now)
+                : DateUtils.getRelativeTimeSpanString(sbn.getPostTime(), System.currentTimeMillis(),
+                DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE)));
+        col.addView(app);
         if (!TextUtils.isEmpty(title)) {
-            TextView t = Ui.line(this, 15, 600, Color.WHITE);
+            TextView t = Ui.line(this, 15, 650, Color.WHITE);
             t.setText(title);
-            col.addView(t);
-        }
-        if (!TextUtils.isEmpty(text)) {
-            TextView t = Ui.text(this, 14, 400, Color.argb(225, 255, 255, 255));
-            t.setText(text);
-            t.setMaxLines(2);
-            t.setEllipsize(TextUtils.TruncateAt.END);
             t.setPadding(0, dp(2), 0, 0);
             col.addView(t);
         }
-        c.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
-        c.setOnClickListener(v -> unlock(() -> send(n.contentIntent)));
-        Ui.press(c);
+        TextView body = Ui.text(this, 14, 400, Color.argb(230, 255, 255, 255));
+        body.setText(open ? fullText(n) : text);
+        body.setMaxLines(open ? 14 : 2);
+        body.setEllipsize(TextUtils.TruncateAt.END);
+        body.setLineSpacing(0, 1.12f);
+        body.setPadding(0, dp(2), 0, 0);
+        col.addView(body);
+        top.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
+        Icon chev = new Icon(this, open ? Icon.CLOSE : Icon.NEXT, Color.argb(170, 255, 255, 255));
+        top.addView(chev, new LinearLayout.LayoutParams(dp(14), dp(14)));
+        c.addView(top);
+
+        if (open) {
+            final Notification.Action reply = replyAction(n);
+            if (key.equals(replyKey) && reply != null) {
+                LinearLayout rr = new LinearLayout(this);
+                rr.setGravity(Gravity.CENTER_VERTICAL);
+                rr.setPadding(0, dp(10), 0, 0);
+                final EditText et = new EditText(this);
+                et.setHint(R.string.reply_hint);
+                et.setTextColor(Color.WHITE);
+                et.setHintTextColor(Color.argb(150, 255, 255, 255));
+                et.setTextSize(15);
+                et.setBackground(Ui.glassStyled(this, 20, true));
+                et.setPadding(dp(14), dp(10), dp(14), dp(10));
+                et.setImeOptions(EditorInfo.IME_ACTION_SEND);
+                et.setSingleLine(false);
+                et.setMaxLines(4);
+                rr.addView(et, new LinearLayout.LayoutParams(0, -2, 1f));
+                TextView send = pill(getString(R.string.notif_send), true);
+                send.setOnClickListener(v -> sendReply(reply, et.getText().toString()));
+                LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, dp(40));
+                sp.leftMargin = dp(8);
+                rr.addView(send, sp);
+                c.addView(rr);
+                et.requestFocus();
+                h.postDelayed(() -> {
+                    android.view.inputmethod.InputMethodManager imm = getSystemService(android.view.inputmethod.InputMethodManager.class);
+                    if (imm != null) imm.showSoftInput(et, 0);
+                }, 150);
+            } else {
+                LinearLayout acts = new LinearLayout(this);
+                acts.setPadding(0, dp(10), 0, 0);
+                TextView o = pill(getString(R.string.notif_open), true);
+                o.setOnClickListener(v -> openNotif(sbn));
+                acts.addView(o, new LinearLayout.LayoutParams(-2, dp(36)));
+                if (reply != null) {
+                    TextView r = pill(getString(R.string.notif_reply), false);
+                    r.setOnClickListener(v -> {
+                        replyKey = key;
+                        refreshNotifs();
+                    });
+                    LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, dp(36));
+                    rp.leftMargin = dp(8);
+                    acts.addView(r, rp);
+                }
+                if (n.actions != null) {
+                    int extra = 0;
+                    for (final Notification.Action a : n.actions) {
+                        if (a == reply || a.actionIntent == null || TextUtils.isEmpty(a.title) || extra >= 2) continue;
+                        if (a.getRemoteInputs() != null && a.getRemoteInputs().length > 0) continue;
+                        TextView b = pill(a.title.toString(), false);
+                        b.setOnClickListener(v -> {
+                            send(a.actionIntent, null);
+                            h.postDelayed(this::refreshNotifs, 400);
+                        });
+                        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-2, dp(36));
+                        ap.leftMargin = dp(8);
+                        acts.addView(b, ap);
+                        extra++;
+                    }
+                }
+                android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);
+                hs.setHorizontalScrollBarEnabled(false);
+                hs.addView(acts);
+                c.addView(hs);
+            }
+        }
+
+        c.setOnClickListener(v -> {
+            if (expanded.contains(key)) expanded.remove(key);
+            else expanded.add(key);
+            if (!expanded.contains(key) && key.equals(replyKey)) replyKey = null;
+            refreshNotifs();
+        });
+        swipe(c, key);
         return c;
     }
+
+    private TextView pill(String s, boolean primary) {
+        TextView t = Ui.line(this, 13, 650, primary ? 0xFF0B0B10 : Color.WHITE);
+        t.setText(s);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(dp(16), 0, dp(16), 0);
+        t.setBackground(primary ? Ui.round(Color.WHITE, dp(18)) : Ui.glassStyled(this, 18, true));
+        Ui.press(t);
+        return t;
+    }
+
+    private void openNotif(StatusBarNotification sbn) {
+        final Notification n = sbn.getNotification();
+        final String key = sbn.getKey();
+        unlock(() -> {
+            send(n.contentIntent, null);
+            if ((n.flags & Notification.FLAG_AUTO_CANCEL) != 0 && NotifListener.inst != null) {
+                try { NotifListener.inst.cancelNotification(key); } catch (Exception ignored) {}
+            }
+        });
+    }
+
+    private void sendReply(Notification.Action a, String text) {
+        if (TextUtils.isEmpty(text.trim())) return;
+        try {
+            Intent i = new Intent();
+            Bundle res = new Bundle();
+            for (RemoteInput r : a.getRemoteInputs()) res.putCharSequence(r.getResultKey(), text);
+            RemoteInput.addResultsToIntent(a.getRemoteInputs(), i, res);
+            send(a.actionIntent, i);
+            Toast.makeText(this, R.string.notif_sent, Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_SHORT).show();
+        }
+        replyKey = null;
+        android.view.inputmethod.InputMethodManager imm = getSystemService(android.view.inputmethod.InputMethodManager.class);
+        if (imm != null && getCurrentFocus() != null) imm.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(), 0);
+        h.postDelayed(this::refreshNotifs, 500);
+    }
+
+    private void swipe(final View v, final String key) {
+        final float[] st = new float[2];
+        final boolean[] drag = new boolean[1];
+        v.setOnTouchListener((view, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    st[0] = e.getRawX();
+                    st[1] = e.getRawY();
+                    drag[0] = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = e.getRawX() - st[0], dy = e.getRawY() - st[1];
+                    if (!drag[0] && Math.abs(dx) > dp(12) && Math.abs(dx) > Math.abs(dy)) {
+                        drag[0] = true;
+                        ViewGroup p = (ViewGroup) view.getParent();
+                        if (p != null) p.requestDisallowInterceptTouchEvent(true);
+                    }
+                    if (drag[0]) {
+                        view.setTranslationX(dx);
+                        view.setAlpha(1f - Math.min(1f, Math.abs(dx) / view.getWidth()));
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP: {
+                    float dx = e.getRawX() - st[0], dy = e.getRawY() - st[1];
+                    if (drag[0]) {
+                        if (Math.abs(dx) > view.getWidth() * 0.33f) {
+                            view.animate().translationX(Math.signum(dx) * view.getWidth()).alpha(0f).setDuration(180)
+                                    .withEndAction(() -> {
+                                        if (NotifListener.inst != null) {
+                                            try { NotifListener.inst.cancelNotification(key); } catch (Exception ignored) {}
+                                        }
+                                        ViewGroup p = (ViewGroup) view.getParent();
+                                        if (p != null) p.removeView(view);
+                                    }).start();
+                        } else {
+                            view.animate().translationX(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(420).start();
+                        }
+                    } else if (Math.abs(dx) < dp(10) && Math.abs(dy) < dp(10)) {
+                        view.performClick();
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_CANCEL:
+                    view.animate().translationX(0).alpha(1f).setDuration(200).start();
+                    return true;
+            }
+            return false;
+        });
+    }
+
+    // ======================= Muzik =======================
 
     void refreshMusic() {
         if (musicBox == null) return;
@@ -435,14 +725,14 @@ public class LockActivity extends Activity {
         return f;
     }
 
-    private void send(PendingIntent pi) {
+    private void send(PendingIntent pi, Intent fill) {
         if (pi == null) return;
         try {
             ActivityOptions o = ActivityOptions.makeBasic();
             if (Build.VERSION.SDK_INT >= 34) {
                 o.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
             }
-            pi.send(this, 0, null, null, null, null, o.toBundle());
+            pi.send(this, 0, fill, null, null, null, o.toBundle());
         } catch (Exception ignored) {
         }
     }
@@ -502,12 +792,25 @@ public class LockActivity extends Activity {
         leaving = true;
         final Runnable r = afterUnlock;
         afterUnlock = null;
-        ui.animate().translationY(-H * 0.12f).alpha(0f).setDuration(240).start();
-        wall.animate().scaleX(1.08f).scaleY(1.08f).alpha(0f).setDuration(260).withEndAction(() -> {
-            if (r != null) r.run();
-            finish();
-            overridePendingTransition(0, 0);
-        }).start();
+        Runnable exit = () -> {
+            if (!soundPlayed) {
+                soundPlayed = true;
+                Sounds.play(this, Sounds.UNLOCK);
+            }
+            ui.animate().translationY(-H * 0.12f).alpha(0f).setDuration(240).start();
+            wall.animate().scaleX(1.08f).scaleY(1.08f).alpha(0f).setDuration(260).withEndAction(() -> {
+                if (r != null) r.run();
+                finish();
+                overridePendingTransition(0, 0);
+            }).start();
+        };
+        if (lockAnim.state() == UnlockAnim.LOCKED) {
+            // dibuka melalui bouncer (cap jari / PIN): main animasi cap jari dulu
+            ui.animate().translationY(0).alpha(1f).setDuration(150).start();
+            lockAnim.play(UnlockAnim.FINGER, () -> h.postDelayed(exit, 250));
+        } else {
+            exit.run();
+        }
     }
 
     private void springBack() {
@@ -516,10 +819,17 @@ public class LockActivity extends Activity {
         wall.animate().translationY(0).setDuration(300).start();
     }
 
+    private boolean inside(View v, MotionEvent e) {
+        int[] loc = new int[2];
+        v.getLocationOnScreen(loc);
+        return e.getRawX() >= loc[0] && e.getRawX() <= loc[0] + v.getWidth()
+                && e.getRawY() >= loc[1] && e.getRawY() <= loc[1] + v.getHeight();
+    }
+
     /** Akar yang mengesan leretan ke atas di mana-mana. */
     private class Root extends FrameLayout {
         private float y0, x0;
-        private boolean dragging;
+        private boolean dragging, fromList;
 
         Root(Context c) { super(c); }
 
@@ -530,10 +840,14 @@ public class LockActivity extends Activity {
                     y0 = e.getRawY();
                     x0 = e.getRawX();
                     dragging = false;
+                    fromList = inside(notifScroll, e) && notifScroll.canScrollVertically(1);
+                    if (e.getRawY() > H * 0.76f && Math.abs(e.getRawX() - W / 2f) < W * 0.14f) {
+                        lastSensorTouch = System.currentTimeMillis();
+                    }
                     break;
                 case MotionEvent.ACTION_MOVE:
                     float dy = e.getRawY() - y0;
-                    if (dy < -dp(18) && Math.abs(dy) > Math.abs(e.getRawX() - x0)) {
+                    if (!fromList && replyKey == null && dy < -dp(18) && Math.abs(dy) > Math.abs(e.getRawX() - x0)) {
                         dragging = true;
                         return true;
                     }
@@ -547,6 +861,9 @@ public class LockActivity extends Activity {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     y0 = e.getRawY();
+                    if (e.getRawY() > H * 0.76f && Math.abs(e.getRawX() - W / 2f) < W * 0.14f) {
+                        lastSensorTouch = System.currentTimeMillis();
+                    }
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dy = Math.min(0, e.getRawY() - y0);

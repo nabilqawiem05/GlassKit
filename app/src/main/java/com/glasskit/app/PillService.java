@@ -162,6 +162,7 @@ public class PillService extends AccessibilityService
                     break;
                 case Intent.ACTION_USER_PRESENT:
                     if (patch != null) patch.hide(true);
+                    if (!prefs.getBoolean(Prefs.LOCK_ON, false)) Sounds.play(PillService.this, Sounds.UNLOCK);
                     break;
                 case Intent.ACTION_TIME_TICK:
                     if (patch != null) patch.tick();
@@ -184,6 +185,7 @@ public class PillService extends AccessibilityService
                     if (sbar != null && sbarShown) sbar.refresh();
                     break;
                 case Intent.ACTION_POWER_CONNECTED:
+                    Sounds.play(PillService.this, Sounds.CHARGE);
                     h.postDelayed(PillService.this::showCharging, 600);
                     break;
             }

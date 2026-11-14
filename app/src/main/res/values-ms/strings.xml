@@ -179,4 +179,22 @@
     <string name="btn_clear_photos">Buang gambar</string>
     <string name="photos_added">%1$d gambar ditambah</string>
     <string name="lbl_step_goal">Sasaran langkah harian</string>
+    <string name="notif_open">Buka</string>
+    <string name="notif_reply">Balas</string>
+    <string name="notif_send">Hantar</string>
+    <string name="notif_sent">Dihantar</string>
+    <string name="reply_hint">Mesej</string>
+    <string name="sec_sound">Bunyi</string>
+    <string name="sound_charge">Bunyi mengecas</string>
+    <string name="sound_unlock">Bunyi buka kunci</string>
+    <string name="btn_test_sound">Uji bunyi</string>
+    <string name="widget_theme">Tema widget</string>
+    <string name="wtheme_glass">Liquid glass</string>
+    <string name="wtheme_dark">Gelap</string>
+    <string name="wtheme_none">Tanpa bingkai</string>
+    <string name="tab_home">Utama</string>
+    <string name="tab_lock">Lock screen</string>
+    <string name="tab_island">Island</string>
+    <string name="tab_panels">Panel</string>
+    <string name="tab_widgets">Widget</string>
 </resources>

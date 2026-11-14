@@ -186,4 +186,22 @@
     <string name="btn_clear_photos">Remove photos</string>
     <string name="photos_added">%1$d photos added</string>
     <string name="lbl_step_goal">Daily step goal</string>
+    <string name="notif_open">Open</string>
+    <string name="notif_reply">Reply</string>
+    <string name="notif_send">Send</string>
+    <string name="notif_sent">Sent</string>
+    <string name="reply_hint">Message</string>
+    <string name="sec_sound">Sounds</string>
+    <string name="sound_charge">Charging sound</string>
+    <string name="sound_unlock">Unlock sound</string>
+    <string name="btn_test_sound">Test sounds</string>
+    <string name="widget_theme">Widget theme</string>
+    <string name="wtheme_glass">Liquid glass</string>
+    <string name="wtheme_dark">Dark</string>
+    <string name="wtheme_none">No frame</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_lock">Lock screen</string>
+    <string name="tab_island">Island</string>
+    <string name="tab_panels">Panels</string>
+    <string name="tab_widgets">Widgets</string>
 </resources>

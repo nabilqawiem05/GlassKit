@@ -9,5 +9,11 @@ public class PhotoWidget extends GlassWidget {
     void render(Context c, Canvas cv, int w, int h, float d) { Cards.photo(c, cv, w, h); }
 
     @Override
-    Intent clickIntent(Context c) { return new Intent(c, MainActivity.class); }
+    Intent clickIntent(Context c) {
+        return new Intent(c, MainActivity.class).putExtra(MainActivity.EXTRA_PICK_PHOTOS, true)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    }
+
+    @Override
+    boolean slab() { return false; }
 }
