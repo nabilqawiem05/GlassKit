@@ -683,7 +683,7 @@ public class PillService extends AccessibilityService
             return false;
         });
         root.setOnTouchListener((v, e) -> {
-            if (e.getAction() == MotionEvent.ACTION_OUTSIDE && expanded) {
+            if (e.getAction() == MotionEvent.ACTION_OUTSIDE && expanded && !(mode == CALL && callRinging)) {
                 expanded = false;
                 if (mode == NOTI) notiActive = false;
                 refresh();
@@ -861,7 +861,7 @@ public class PillService extends AccessibilityService
 
     /** Panggilan masuk / sedang berlangsung dipaparkan dalam island. */
     void islandCall(String key, CharSequence name, String label, Drawable photo, PendingIntent answer,
-                    PendingIntent decline, PendingIntent hang, PendingIntent open, boolean ringing, long when) {
+                    PendingIntent decline, PendingIntent hang, PendingIntent open, boolean ringing, long when, boolean quiet) {
         if (pill == null) return;
         boolean isNew = !key.equals(callKey);
         boolean wasRinging = callRinging;
@@ -879,7 +879,7 @@ public class PillService extends AccessibilityService
         kName.setText(name);
         if (ringing) {
             kLabel.setText(label);
-            expanded = true;
+            expanded = !quiet; // gaya kad: island kekal kecil di belakang kad
             pulse(kAccept);
         } else {
             if (isNew || wasRinging || callStart == 0) callStart = when > 0 && when < System.currentTimeMillis() ? when : System.currentTimeMillis();
@@ -901,6 +901,13 @@ public class PillService extends AccessibilityService
     }
 
     boolean islandCallActive() { return callKey != null; }
+
+    /** Dari kad panggilan: besarkan island (jawab / tolak di island). */
+    void expandCallIsland() {
+        if (callKey == null) return;
+        expanded = true;
+        refresh();
+    }
 
     private void pulse(View v) {
         v.animate().cancel();
@@ -1095,6 +1102,7 @@ public class PillService extends AccessibilityService
             cText.setVisibility(View.VISIBLE);
             cText.setTextColor(0xFF30D158);
             if (!callRinging) cText.setText(Ui.mmss(System.currentTimeMillis() - callStart));
+            else cText.setText(R.string.call_ringing_short);
             cWave.setVisibility(View.GONE);
             cWave.setRunning(false);
             mWave.setRunning(false);

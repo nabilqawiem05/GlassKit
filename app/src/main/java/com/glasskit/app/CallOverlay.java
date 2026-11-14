@@ -91,8 +91,39 @@ final class CallOverlay {
     void onCallNotification(StatusBarNotification sbn) {
         if (!s.prefs.getBoolean(Prefs.CALL_ON, true)) return;
         Notification n = sbn.getNotification();
-        if (s.prefs.getInt(Prefs.CALL_STYLE, 0) == 0) {
-            islandRoute(sbn, n);
+        int style = s.prefs.getInt(Prefs.CALL_STYLE, 0);
+        if (style == 0) {
+            islandRoute(sbn, n, false);
+            return;
+        }
+        if (style == 2) {
+            // kad kaca: kad terapung semasa berdering, island untuk panggilan berlangsung
+            boolean ringing = resolve(n);
+            islandRoute(sbn, n, ringing);
+            if (!ringing) {
+                if (sbn.getKey().equals(key)) hide(true);
+                return;
+            }
+            if (root != null && sbn.getKey().equals(key)) return;
+            hide(false);
+            key = sbn.getKey();
+            Bundle ex = n.extras;
+            CharSequence name = null;
+            Drawable photo = null;
+            try {
+                Object po = ex.getParcelable(Notification.EXTRA_CALL_PERSON);
+                if (po instanceof Person) {
+                    name = ((Person) po).getName();
+                    if (((Person) po).getIcon() != null) photo = ((Person) po).getIcon().loadDrawable(s);
+                }
+            } catch (Exception ignored) {
+            }
+            if (TextUtils.isEmpty(name)) name = ex.getCharSequence(Notification.EXTRA_TITLE);
+            if (photo == null && n.getLargeIcon() != null) {
+                try { photo = n.getLargeIcon().loadDrawable(s); } catch (Exception ignored) {}
+            }
+            CharSequence sub = ex.getCharSequence(Notification.EXTRA_TEXT);
+            buildCard(name, TextUtils.isEmpty(sub) ? s.getString(R.string.incoming_call) : sub.toString(), photo, sbn.getPackageName());
             return;
         }
         if (!resolve(n)) {
@@ -137,7 +168,7 @@ final class CallOverlay {
 
     /** Hantar panggilan ke Dynamic Island (masuk: jawab/tolak, berlangsung: pemasa + tamatkan). */
     @SuppressWarnings("deprecation")
-    private void islandRoute(StatusBarNotification sbn, Notification n) {
+    private void islandRoute(StatusBarNotification sbn, Notification n, boolean quiet) {
         Bundle ex = n.extras;
         boolean ringing = resolve(n);
         PendingIntent hang = pi(ex, Notification.EXTRA_HANG_UP_INTENT);
@@ -177,7 +208,7 @@ final class CallOverlay {
         }
         long when = n.when;
         s.islandCall(sbn.getKey(), name, label, photo, answer, decline != null ? decline : hang, hang,
-                n.contentIntent, ringing, ringing ? 0 : when);
+                n.contentIntent, ringing, ringing ? 0 : when, quiet);
     }
 
     private String appName(String pkg) {
@@ -350,6 +381,228 @@ final class CallOverlay {
         col.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(700).start();
     }
 
+    // ======================= Kad kaca terapung =======================
+
+    private View card;
+
+    private void buildCard(CharSequence name, String subtitle, Drawable photo, String pkg) {
+        final boolean dark = Ui.darkGlass(s);
+        final int ink = dark ? Color.WHITE : 0xFF14161A, ink2 = dark ? Color.argb(190, 235, 235, 245) : 0xFF4B5059;
+        root = new FrameLayout(s);
+        Bitmap ph = toBitmap(photo, dp(160));
+        Bitmap wall = DepthRenderer.load(DepthRenderer.bgFile(s));
+        if (wall != null) bd.set(wall, s.screenW, s.screenH);
+
+        LinearLayout c = new LinearLayout(s);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setGravity(Gravity.CENTER_HORIZONTAL);
+        c.setPadding(dp(20), dp(16), dp(20), dp(20));
+        c.setBackground(new LiquidGlass.Surface(s, dp(34), dark, bd, 0));
+        c.setElevation(dp(10));
+        c.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(34)); }
+        });
+        card = c;
+
+        // baris app
+        LinearLayout top = new LinearLayout(s);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView ai = new ImageView(s);
+        try { ai.setImageDrawable(s.getPackageManager().getApplicationIcon(pkg)); } catch (Exception ignored) {}
+        top.addView(ai, new LinearLayout.LayoutParams(dp(18), dp(18)));
+        TextView at = Ui.line(s, 13, 600, ink2);
+        at.setText(appName(pkg) + " · " + s.getString(R.string.incoming_call));
+        at.setPadding(dp(7), 0, 0, 0);
+        top.addView(at);
+        c.addView(top);
+
+        // avatar dengan cincin
+        FrameLayout av = new FrameLayout(s);
+        int as = dp(84);
+        for (int i = 0; i < 2; i++) {
+            View ring = new View(s);
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setStroke(dp(1.5f), dark ? Color.argb(150, 255, 255, 255) : Color.argb(120, 20, 22, 26));
+            ring.setBackground(g);
+            av.addView(ring, new FrameLayout.LayoutParams(as, as, Gravity.CENTER));
+            ObjectAnimator a = ObjectAnimator.ofPropertyValuesHolder(ring,
+                    PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.45f),
+                    PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.45f),
+                    PropertyValuesHolder.ofFloat(View.ALPHA, 0.8f, 0f));
+            a.setDuration(2000);
+            a.setStartDelay(i * 1000L);
+            a.setRepeatCount(ValueAnimator.INFINITE);
+            a.start();
+        }
+        ImageView avatar = new ImageView(s);
+        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        if (ph != null) avatar.setImageBitmap(ph);
+        else avatar.setImageDrawable(Ui.iconDrawable(s, Icon.PHONE, Color.WHITE, 0xFF636366, dp(84)));
+        avatar.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) { o.setOval(0, 0, view.getWidth(), view.getHeight()); }
+        });
+        avatar.setClipToOutline(true);
+        av.addView(avatar, new FrameLayout.LayoutParams(as, as, Gravity.CENTER));
+        LinearLayout.LayoutParams avl = new LinearLayout.LayoutParams(dp(124), dp(124));
+        avl.topMargin = dp(4);
+        c.addView(av, avl);
+
+        nameV = Ui.text(s, 24, 700, ink);
+        nameV.setText(name);
+        nameV.setGravity(Gravity.CENTER);
+        nameV.setMaxLines(1);
+        nameV.setEllipsize(TextUtils.TruncateAt.END);
+        c.addView(nameV, new LinearLayout.LayoutParams(-1, -2));
+        subV = Ui.text(s, 14, 500, ink2);
+        subV.setText(subtitle);
+        subV.setGravity(Gravity.CENTER);
+        subV.setMaxLines(1);
+        subV.setPadding(0, dp(3), 0, 0);
+        c.addView(subV, new LinearLayout.LayoutParams(-1, -2));
+
+        // butang
+        LinearLayout btns = new LinearLayout(s);
+        btns.setGravity(Gravity.CENTER);
+        btns.addView(cardBtn(0xFFFF3B30, true, R.string.call_decline, ink2, v -> act(false)));
+        View gap = new View(s);
+        btns.addView(gap, new LinearLayout.LayoutParams(dp(64), 1));
+        LinearLayout acc = cardBtn(0xFF30D158, false, R.string.call_accept, ink2, v -> act(true));
+        btns.addView(acc);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
+        bl.topMargin = dp(18);
+        c.addView(btns, bl);
+        pulse(acc.getChildAt(0));
+
+        TextView hint = Ui.text(s, 11, 500, ink2);
+        hint.setText(R.string.call_card_hint);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(0, dp(12), 0, 0);
+        c.addView(hint, new LinearLayout.LayoutParams(-1, -2));
+
+        // leret ke atas: kecilkan ke island
+        c.setOnTouchListener(new View.OnTouchListener() {
+            float y0;
+            @Override
+            public boolean onTouch(View v, MotionEvent e) {
+                switch (e.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN: y0 = e.getRawY(); return true;
+                    case MotionEvent.ACTION_MOVE:
+                        v.setTranslationY(Math.min(0, e.getRawY() - y0));
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        if (e.getRawY() - y0 < -dp(60)) minimize();
+                        else v.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(400).start();
+                        return true;
+                }
+                return false;
+            }
+        });
+
+        int w = Math.min(s.screenW - dp(28), dp(420));
+        root.addView(c, new FrameLayout.LayoutParams(w, -2, Gravity.CENTER_HORIZONTAL));
+        root.setPadding(0, dp(12), 0, dp(24));
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.TOP;
+        lp.y = s.statusH + dp(8);
+        lp.setTitle("GlassKitCallCard");
+        try {
+            s.wm.addView(root, lp);
+        } catch (Exception e) {
+            root = null;
+            key = null;
+            card = null;
+            return;
+        }
+        c.setAlpha(0f);
+        c.setScaleX(0.85f);
+        c.setScaleY(0.85f);
+        c.setTranslationY(-dp(50));
+        c.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(600).start();
+        refractFromScreen();
+    }
+
+    private LinearLayout cardBtn(int color, boolean hang, int label, int ink, View.OnClickListener l) {
+        LinearLayout col = new LinearLayout(s);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER_HORIZONTAL);
+        FrameLayout b = new FrameLayout(s);
+        b.setBackground(Ui.circle(color));
+        Icon ic = new Icon(s, Icon.PHONE, Color.WHITE);
+        if (hang) ic.setRotation(135);
+        b.addView(ic, new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER));
+        b.setElevation(dp(4));
+        b.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) { o.setOval(0, 0, view.getWidth(), view.getHeight()); }
+        });
+        b.setOnClickListener(l);
+        Ui.press(b);
+        col.addView(b, new LinearLayout.LayoutParams(dp(64), dp(64)));
+        TextView t = Ui.text(s, 12, 600, ink);
+        t.setText(label);
+        t.setPadding(0, dp(6), 0, 0);
+        col.addView(t);
+        return col;
+    }
+
+    private void pulse(View v) {
+        if (v == null || root == null) return;
+        v.animate().scaleX(1.1f).scaleY(1.1f).setDuration(520).withEndAction(() ->
+                v.animate().scaleX(1f).scaleY(1f).setDuration(520).withEndAction(() -> pulse(v)).start()).start();
+    }
+
+    /** Biasan sebenar: tangkap skrin di belakang kad (jika boleh). */
+    private void refractFromScreen() {
+        try {
+            s.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, s.getMainExecutor(),
+                    new android.accessibilityservice.AccessibilityService.TakeScreenshotCallback() {
+                        @Override
+                        public void onSuccess(android.accessibilityservice.AccessibilityService.ScreenshotResult r) {
+                            new Thread(() -> {
+                                Bitmap sw = null;
+                                try {
+                                    Bitmap hw = Bitmap.wrapHardwareBuffer(r.getHardwareBuffer(), r.getColorSpace());
+                                    if (hw != null) sw = hw.copy(Bitmap.Config.ARGB_8888, false);
+                                } catch (Throwable ignored) {
+                                } finally {
+                                    try { r.getHardwareBuffer().close(); } catch (Throwable ignored) {}
+                                }
+                                if (sw == null) return;
+                                LiquidGlass.Backdrop nb = new LiquidGlass.Backdrop();
+                                nb.set(sw, s.screenW, s.screenH);
+                                s.h.post(() -> {
+                                    bd.sharp = nb.sharp;
+                                    bd.soft = nb.soft;
+                                    bd.screenW = nb.screenW;
+                                    bd.screenH = nb.screenH;
+                                    bd.luminance = nb.luminance;
+                                    if (card != null) card.invalidate();
+                                });
+                            }, "gk-callshot").start();
+                        }
+
+                        @Override
+                        public void onFailure(int code) { }
+                    });
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Kecilkan kad ke Dynamic Island (panggilan masih berdering di island). */
+    private void minimize() {
+        s.expandCallIsland();
+        hide(true);
+    }
+
     /** Trek kaca "leret untuk jawab" dengan tombol hijau dan teks berkilau. */
     private View slider() {
         final FrameLayout track = new FrameLayout(s);
@@ -435,8 +688,14 @@ final class CallOverlay {
         final FrameLayout r = root;
         root = null;
         key = null;
+        final View cd = card;
+        card = null;
         if (r == null) return;
-        if (fade) {
+        if (fade && cd != null) {
+            cd.animate().alpha(0f).scaleX(0.4f).scaleY(0.25f).translationY(-dp(120)).setDuration(320).withEndAction(() -> {
+                try { s.wm.removeViewImmediate(r); } catch (Exception ignored) {}
+            }).start();
+        } else if (fade) {
             r.animate().alpha(0f).setDuration(220).withEndAction(() -> {
                 try { s.wm.removeViewImmediate(r); } catch (Exception ignored) {}
             }).start();

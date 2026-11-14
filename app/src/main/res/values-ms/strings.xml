@@ -321,4 +321,8 @@
     <string name="wall_mood">Wallpaper ikut waktu &amp; cuaca</string>
     <string name="wall_mood_note">Cahaya keemasan waktu matahari terbit dan terbenam, biru gelap waktu malam, dan titisan hujan pada kaca bila hujan. Guna wallpaper depth dan lock screen GlassKit.</string>
     <string name="btn_open_notes">Buka Nota &amp; Peringatan</string>
+    <string name="call_style_card">Kad kaca</string>
+    <string name="call_card_hint">Leret ke atas untuk pindah ke island</string>
+    <string name="call_ringing_short">Panggilan</string>
+    <string name="call_accept">Jawab</string>
 </resources>

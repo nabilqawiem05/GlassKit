@@ -328,4 +328,8 @@
     <string name="wall_mood">Wallpaper follows time &amp; weather</string>
     <string name="wall_mood_note">Golden light at sunrise and sunset, deep blue at night, and raindrops on the glass when it rains. Uses your GlassKit depth wallpaper and lock screen.</string>
     <string name="btn_open_notes">Open Notes &amp; Reminders</string>
+    <string name="call_style_card">Glass card</string>
+    <string name="call_card_hint">Swipe up to move to the island</string>
+    <string name="call_ringing_short">Calling</string>
+    <string name="call_accept">Accept</string>
 </resources>
