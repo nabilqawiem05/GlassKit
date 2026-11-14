@@ -61,6 +61,10 @@ import java.util.Set;
 public class LockActivity extends Activity {
     static LockActivity inst;
     static boolean visible;
+    /** Jangan dipaksa semula sehingga masa ini (bouncer PIN / kamera sedang dibuka). */
+    static volatile long holdUntil;
+    private static final java.util.concurrent.ExecutorService DATA =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> new Thread(r, "gk-lock-data"));
     /** Bingkai terakhir dikongsi antara instance: lock screen muncul serta-merta, tiada skrin hitam. */
     private static Bitmap lastFrame;
     private static String lastKey;
@@ -256,6 +260,7 @@ public class LockActivity extends Activity {
         bar.addView(circle(Icon.CAMERA, v -> {
             Intent i = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            holdUntil = System.currentTimeMillis() + 10 * 60_000L;
             try { startActivity(i); } catch (Exception ignored) {}
         }), new LinearLayout.LayoutParams(dp(54), dp(54)));
         LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
@@ -285,6 +290,7 @@ public class LockActivity extends Activity {
     protected void onResume() {
         super.onResume();
         visible = true;
+        holdUntil = 0;
         hideBars();
         try {
             resetUi();
@@ -300,6 +306,7 @@ public class LockActivity extends Activity {
     protected void onPause() {
         super.onPause();
         visible = false;
+        if (leaving) holdUntil = System.currentTimeMillis() + 5000;
         if (PillService.inst != null) PillService.inst.hideBanner(false);
         h.removeCallbacks(lockPoll);
         if (PillService.inst != null) PillService.inst.updateStatusBar();
@@ -440,7 +447,7 @@ public class LockActivity extends Activity {
     /** Kira data tolok (kalendar, cuaca, langkah, bateri) di latar. */
     void refreshGauges() {
         final android.content.Context ctx = getApplicationContext();
-        RENDER.execute(() -> {
+        DATA.execute(() -> {
             try {
                 List<Data.Event> ev = Data.events(ctx, 2, 1);
                 String line;
@@ -953,15 +960,16 @@ public class LockActivity extends Activity {
             done();
             return;
         }
+        holdUntil = System.currentTimeMillis() + 90_000L; // bouncer PIN mungkin dipaparkan
         km.requestDismissKeyguard(this, new KeyguardManager.KeyguardDismissCallback() {
             @Override
             public void onDismissSucceeded() { done(); }
 
             @Override
-            public void onDismissCancelled() { springBack(); }
+            public void onDismissCancelled() { holdUntil = 0; springBack(); }
 
             @Override
-            public void onDismissError() { springBack(); }
+            public void onDismissError() { holdUntil = 0; springBack(); }
         });
     }
 

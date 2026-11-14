@@ -168,7 +168,9 @@ public class PillService extends AccessibilityService
                     if (patch != null) patch.screenOn();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
                         // cuba serta-merta, kemudian ulang jika sistem lambat (elak lock screen stock terpapar)
-                        for (int d : new int[]{0, 220, 600, 1300}) h.postDelayed(ensureLock, d);
+                        h.post(ensureLock);
+                        lockMiss = 0;
+                        h.postDelayed(lockWatch, 250);
                     }
                     updateStatusBar();
                     break;
@@ -177,11 +179,14 @@ public class PillService extends AccessibilityService
                     if (panels != null) panels.close();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
                         h.removeCallbacks(ensureLock);
+                        h.removeCallbacks(lockWatch);
+                        LockActivity.holdUntil = 0;
                         h.post(PillService.this::showLock);
                         h.postDelayed(ensureLock, 450);
                     }
                     break;
                 case Intent.ACTION_USER_PRESENT:
+                    h.removeCallbacks(lockWatch);
                     if (patch != null) patch.hide(true);
                     hideBanner(false);
                     h.postDelayed(PillService.this::updateStatusBar, 300);
@@ -967,9 +972,50 @@ public class PillService extends AccessibilityService
     }
 
     private final Runnable ensureLock = () -> {
-        KeyguardManager km = getSystemService(KeyguardManager.class);
-        if (km != null && km.isKeyguardLocked() && !LockActivity.visible) showLock();
+        if (lockNeeded()) showLock();
     };
+    private int lockMiss;
+    /** Pengawas: selagi skrin hidup & berkunci, pastikan lock screen GlassKit di depan (bukan stock). */
+    private final Runnable lockWatch = new Runnable() {
+        @Override
+        public void run() {
+            h.removeCallbacks(this);
+            if (prefs == null || !prefs.getBoolean(Prefs.LOCK_ON, false)) return;
+            PowerManager pm = getSystemService(PowerManager.class);
+            KeyguardManager km = getSystemService(KeyguardManager.class);
+            if (pm == null || !pm.isInteractive() || km == null || !km.isKeyguardLocked()) {
+                lockMiss = 0;
+                return; // skrin padam atau sudah dibuka: berhenti
+            }
+            if (lockNeeded()) {
+                lockMiss++;
+                if (lockMiss == 1 || lockMiss == 3) showLock();
+                else if (lockMiss >= 2 && Shell.granted()) {
+                    // sistem sekat pelancaran dari latar: lancar melalui Shizuku (shell dibenarkan)
+                    Shell.run("am start -n " + getPackageName() + "/.LockActivity -f 0x10030000");
+                }
+                if (lockMiss > 8) lockMiss = 0;
+            } else {
+                lockMiss = 0;
+            }
+            h.postDelayed(this, lockMiss > 0 ? 450 : 800);
+        }
+    };
+
+    private boolean lockNeeded() {
+        if (prefs == null || !prefs.getBoolean(Prefs.LOCK_ON, false) || LockActivity.visible) return false;
+        if (System.currentTimeMillis() < LockActivity.holdUntil) return false;
+        KeyguardManager km = getSystemService(KeyguardManager.class);
+        if (km == null || !km.isKeyguardLocked()) return false;
+        if (call != null && call.showing()) return false;
+        android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+        if (am != null) {
+            int m = am.getMode();
+            if (m == android.media.AudioManager.MODE_RINGTONE || m == android.media.AudioManager.MODE_IN_CALL
+                    || m == android.media.AudioManager.MODE_IN_COMMUNICATION) return false;
+        }
+        return true;
+    }
 
     void showLock() {
         try {

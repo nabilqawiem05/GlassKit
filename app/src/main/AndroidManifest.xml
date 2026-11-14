@@ -41,7 +41,8 @@
         <activity
             android:name=".LockActivity"
             android:excludeFromRecents="true"
-            android:exported="false"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
             android:launchMode="singleInstance"
             android:resizeableActivity="false"
             android:screenOrientation="portrait"
