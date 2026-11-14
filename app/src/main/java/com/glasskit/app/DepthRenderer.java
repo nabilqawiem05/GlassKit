@@ -66,7 +66,7 @@ public final class DepthRenderer {
             Date now = new Date();
             boolean is24 = DateFormat.is24HourFormat(ctx);
             String time = new SimpleDateFormat(is24 ? "HH:mm" : "h:mm", Locale.getDefault()).format(now);
-            String date = new SimpleDateFormat("EEEE, d MMMM", new Locale("ms", "MY")).format(now);
+            String date = new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(now);
 
             Paint dp = new Paint(Paint.ANTI_ALIAS_FLAG);
             dp.setColor(color);

@@ -8,13 +8,10 @@ import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Outline;
-import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
@@ -39,19 +36,17 @@ import android.view.ViewOutlineProvider;
 import android.view.WindowManager;
 import android.view.WindowMetrics;
 import android.view.accessibility.AccessibilityEvent;
-import android.view.animation.OvershootInterpolator;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/** Pil gaya Dynamic Island di sekeliling kamera depan. */
+/** Dynamic Island + hos untuk panel kaca. */
 public class PillService extends AccessibilityService
         implements SharedPreferences.OnSharedPreferenceChangeListener {
 
@@ -59,31 +54,37 @@ public class PillService extends AccessibilityService
 
     private static final int IDLE = 0, MUSIC = 1, NOTI = 2;
 
-    private final Handler h = new Handler(Looper.getMainLooper());
-    private WindowManager wm;
-    private WindowManager.LayoutParams lp;
-    private SharedPreferences prefs;
+    final Handler h = new Handler(Looper.getMainLooper());
+    WindowManager wm;
+    SharedPreferences prefs;
+    Panels panels;
 
+    private WindowManager.LayoutParams lp;
     private FrameLayout root, pill;
     private GradientDrawable pillBg;
-    private LinearLayout compact, expMusic, expNoti;
-    private ImageView cIcon, mArt, nIcon;
-    private TextView cText, mTitle, mArtist, nTitle, nText;
-    private EqView cEq;
-    private ProgressBar mProg;
-    private ImageButton bPlay;
+    private FrameLayout compact;
+    private LinearLayout expMusic, expNoti;
+    private ImageView cArt, cAppIcon, mArt, nIcon;
+    private TextView cText, mTitle, mArtist, mElapsed, mRemain, nTitle, nText;
+    private Widgets.Wave cWave, mWave;
+    private Widgets.Bar mBar;
+    private com.glasskit.app.Icon mPlay;
 
     private boolean attached, expanded;
     private int mode = IDLE;
-    private int curW, curH, compactW, compactH, topY, xOff, screenW;
+    private int curW, curH, compactW, compactH, topY, xOff;
+    int screenW, screenH, statusH;
     private ValueAnimator anim;
 
+    // ---- media (dikongsi dengan Pusat Kawalan) ----
     private MediaSessionManager msm;
-    private MediaController mc;
+    MediaController mc;
     private final MediaCb mcb = new MediaCb();
-    private boolean playing;
+    boolean playing;
+    String title, artist;
+    Bitmap art;
+    int artColor = Color.WHITE;
     private long holdMusicUntil, duration;
-    private Bitmap art;
 
     private PendingIntent notiIntent;
     private boolean notiActive;
@@ -109,7 +110,7 @@ public class PillService extends AccessibilityService
     };
     private final Runnable refreshR = this::refresh;
 
-    // ---------------- Kitaran hidup ----------------
+    // ================= Kitaran hidup =================
 
     @Override
     protected void onServiceConnected() {
@@ -120,6 +121,8 @@ public class PillService extends AccessibilityService
         wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         computeGeometry();
         buildViews();
+        panels = new Panels(this);
+        panels.updateEdges();
         initMedia();
         refresh();
     }
@@ -139,6 +142,7 @@ public class PillService extends AccessibilityService
         if (msm != null) {
             try { msm.removeOnActiveSessionsChangedListener(sessL); } catch (Exception ignored) {}
         }
+        if (panels != null) panels.destroy();
         detach();
         super.onDestroy();
     }
@@ -153,37 +157,40 @@ public class PillService extends AccessibilityService
             lp.y = topY;
             try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
         }
+        if (panels != null) panels.updateEdges();
         refresh();
     }
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sp, String key) {
+        if (panels != null) panels.updateEdges();
         refresh();
     }
 
-    // ---------------- Geometri & paparan ----------------
+    // ================= Geometri =================
 
-    private int dp(float v) {
-        return Math.round(v * getResources().getDisplayMetrics().density);
-    }
+    int dp(float v) { return Ui.dp(this, v); }
 
     private void computeGeometry() {
         WindowMetrics m = wm.getCurrentWindowMetrics();
         Rect b = m.getBounds();
         screenW = b.width();
+        screenH = b.height();
+        statusH = m.getWindowInsets().getInsets(android.view.WindowInsets.Type.statusBars()).top;
+        if (statusH <= 0) statusH = dp(32);
         Rect r = null;
         DisplayCutout dc = m.getWindowInsets().getDisplayCutout();
         if (dc != null) r = dc.getBoundingRectTop();
         if (r != null && !r.isEmpty()) {
-            compactH = Math.max(r.height() + dp(10), dp(32));
-            topY = Math.max(0, r.centerY() - compactH / 2);
+            compactH = Math.max(dp(30), Math.min(dp(36), r.height() + dp(4)));
+            topY = Math.max(dp(4), r.centerY() - compactH / 2);
             xOff = r.centerX() - screenW / 2;
         } else {
-            compactH = dp(32);
-            topY = dp(8);
+            compactH = dp(34);
+            topY = dp(10);
             xOff = 0;
         }
-        compactW = dp(200);
+        compactW = dp(176);
     }
 
     private static void roundClip(View v, final float radius) {
@@ -196,30 +203,20 @@ public class PillService extends AccessibilityService
         v.setClipToOutline(true);
     }
 
-    private TextView text(float sp, boolean bold, int color) {
-        TextView t = new TextView(this);
-        t.setTextSize(sp);
-        t.setTextColor(color);
-        t.setSingleLine(true);
-        t.setEllipsize(TextUtils.TruncateAt.END);
-        if (bold) t.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, 600, false));
-        return t;
-    }
-
-    private ImageButton ctrl(int res, View.OnClickListener l) {
-        ImageButton b = new ImageButton(this);
-        b.setImageResource(res);
-        b.setImageTintList(ColorStateList.valueOf(Color.WHITE));
-        b.setBackground(null);
-        b.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        b.setPadding(dp(10), dp(10), dp(10), dp(10));
-        b.setOnClickListener(v -> {
+    private FrameLayout iconBtn(int kind, int sizeDp, View.OnClickListener l) {
+        FrameLayout f = new FrameLayout(this);
+        com.glasskit.app.Icon ic = new com.glasskit.app.Icon(this, kind, Color.WHITE);
+        f.addView(ic, new FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), Gravity.CENTER));
+        f.setOnClickListener(v -> {
             l.onClick(v);
             h.removeCallbacks(autoCollapse);
-            h.postDelayed(autoCollapse, 6000);
+            h.postDelayed(autoCollapse, 7000);
         });
-        return b;
+        Ui.press(f);
+        return f;
     }
+
+    // ================= Bina paparan island =================
 
     private void buildViews() {
         root = new FrameLayout(this);
@@ -232,87 +229,128 @@ public class PillService extends AccessibilityService
         pill.setClipToOutline(true);
         root.addView(pill, new FrameLayout.LayoutParams(compactW, compactH, Gravity.CENTER_HORIZONTAL));
 
-        // --- padat ---
-        compact = new LinearLayout(this);
-        compact.setOrientation(LinearLayout.HORIZONTAL);
-        compact.setGravity(Gravity.CENTER_VERTICAL);
-        compact.setPadding(dp(8), 0, dp(12), 0);
-        int ic = Math.max(compactH - dp(12), dp(18));
-        cIcon = new ImageView(this);
-        cIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        roundClip(cIcon, dp(6));
-        compact.addView(cIcon, new LinearLayout.LayoutParams(ic, ic));
-        compact.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
-        cText = text(12, true, Color.WHITE);
-        cText.setMaxWidth(dp(70));
-        compact.addView(cText, new LinearLayout.LayoutParams(-2, -2));
-        cEq = new EqView(this);
-        compact.addView(cEq, new LinearLayout.LayoutParams(dp(20), dp(16)));
+        // ---- padat ----
+        compact = new FrameLayout(this);
+        int ic = compactH - dp(10);
+        cArt = new ImageView(this);
+        cArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        roundClip(cArt, dp(7));
+        FrameLayout.LayoutParams al = new FrameLayout.LayoutParams(ic, ic, Gravity.START | Gravity.CENTER_VERTICAL);
+        al.leftMargin = dp(6);
+        compact.addView(cArt, al);
+        cAppIcon = new ImageView(this);
+        cAppIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        roundClip(cAppIcon, ic / 2f);
+        FrameLayout.LayoutParams il = new FrameLayout.LayoutParams(ic, ic, Gravity.START | Gravity.CENTER_VERTICAL);
+        il.leftMargin = dp(6);
+        compact.addView(cAppIcon, il);
+        cWave = new Widgets.Wave(this);
+        FrameLayout.LayoutParams wl = new FrameLayout.LayoutParams(dp(22), dp(13), Gravity.END | Gravity.CENTER_VERTICAL);
+        wl.rightMargin = dp(13);
+        compact.addView(cWave, wl);
+        cText = Ui.line(this, 12, 600, Color.WHITE);
+        cText.setMaxWidth(dp(64));
+        FrameLayout.LayoutParams tl = new FrameLayout.LayoutParams(-2, -2, Gravity.END | Gravity.CENTER_VERTICAL);
+        tl.rightMargin = dp(13);
+        compact.addView(cText, tl);
         pill.addView(compact, new FrameLayout.LayoutParams(-1, -1));
 
-        // --- muzik besar ---
+        // ---- muzik besar ----
         expMusic = new LinearLayout(this);
         expMusic.setOrientation(LinearLayout.VERTICAL);
-        expMusic.setPadding(dp(18), dp(16), dp(18), dp(8));
+        expMusic.setPadding(dp(20), dp(18), dp(20), dp(10));
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         mArt = new ImageView(this);
         mArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        mArt.setBackgroundColor(Color.rgb(50, 50, 50));
-        roundClip(mArt, dp(12));
+        mArt.setBackgroundColor(Color.rgb(44, 44, 46));
+        roundClip(mArt, dp(14));
         row.addView(mArt, new LinearLayout.LayoutParams(dp(56), dp(56)));
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(12), 0, 0, 0);
-        mTitle = text(15, true, Color.WHITE);
-        mArtist = text(13, false, Color.rgb(170, 170, 170));
+        col.setPadding(dp(14), 0, dp(8), 0);
+        mTitle = Ui.line(this, 16, 600, Color.WHITE);
+        mArtist = Ui.line(this, 14, 400, Color.argb(150, 235, 235, 245));
+        mArtist.setPadding(0, dp(4), 0, 0);
         col.addView(mTitle);
         col.addView(mArtist);
         row.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
+        mWave = new Widgets.Wave(this);
+        row.addView(mWave, new LinearLayout.LayoutParams(dp(30), dp(20)));
         expMusic.addView(row);
-        mProg = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        mProg.setMax(1000);
-        mProg.setProgressTintList(ColorStateList.valueOf(Color.WHITE));
-        mProg.setProgressBackgroundTintList(ColorStateList.valueOf(Color.rgb(80, 80, 80)));
-        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, dp(6));
-        pl.topMargin = dp(14);
-        expMusic.addView(mProg, pl);
+
+        LinearLayout prog = new LinearLayout(this);
+        prog.setGravity(Gravity.CENTER_VERTICAL);
+        mElapsed = Ui.text(this, 11, 500, Color.argb(150, 235, 235, 245));
+        mRemain = Ui.text(this, 11, 500, Color.argb(150, 235, 235, 245));
+        mBar = new Widgets.Bar(this);
+        prog.addView(mElapsed);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(0, dp(5), 1f);
+        bl.leftMargin = dp(10);
+        bl.rightMargin = dp(10);
+        prog.addView(mBar, bl);
+        prog.addView(mRemain);
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, -2);
+        pl.topMargin = dp(16);
+        expMusic.addView(prog, pl);
+
         LinearLayout ctr = new LinearLayout(this);
         ctr.setGravity(Gravity.CENTER);
-        ctr.addView(ctrl(android.R.drawable.ic_media_previous, v -> {
+        ctr.addView(iconBtn(com.glasskit.app.Icon.PREV, 28, v -> {
             if (mc != null) mc.getTransportControls().skipToPrevious();
-        }), new LinearLayout.LayoutParams(dp(56), dp(52)));
-        bPlay = ctrl(android.R.drawable.ic_media_pause, v -> {
+        }), new LinearLayout.LayoutParams(dp(64), dp(54)));
+        FrameLayout playBtn = iconBtn(com.glasskit.app.Icon.PAUSE, 34, v -> {
             if (mc == null) return;
             if (playing) mc.getTransportControls().pause();
             else mc.getTransportControls().play();
         });
-        ctr.addView(bPlay, new LinearLayout.LayoutParams(dp(64), dp(52)));
-        ctr.addView(ctrl(android.R.drawable.ic_media_next, v -> {
+        mPlay = (com.glasskit.app.Icon) playBtn.getChildAt(0);
+        LinearLayout.LayoutParams ppl = new LinearLayout.LayoutParams(dp(72), dp(54));
+        ppl.leftMargin = dp(18);
+        ppl.rightMargin = dp(18);
+        ctr.addView(playBtn, ppl);
+        ctr.addView(iconBtn(com.glasskit.app.Icon.NEXT, 28, v -> {
             if (mc != null) mc.getTransportControls().skipToNext();
-        }), new LinearLayout.LayoutParams(dp(56), dp(52)));
-        expMusic.addView(ctr, new LinearLayout.LayoutParams(-1, -2));
+        }), new LinearLayout.LayoutParams(dp(64), dp(54)));
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
+        cl.topMargin = dp(4);
+        expMusic.addView(ctr, cl);
+        expMusic.setOnClickListener(v -> openMusicApp());
         pill.addView(expMusic, new FrameLayout.LayoutParams(-1, -1));
 
-        // --- notifikasi besar ---
+        // ---- notifikasi besar ----
         expNoti = new LinearLayout(this);
         expNoti.setGravity(Gravity.CENTER_VERTICAL);
-        expNoti.setPadding(dp(16), dp(10), dp(18), dp(10));
+        expNoti.setPadding(dp(16), dp(12), dp(20), dp(12));
         nIcon = new ImageView(this);
         nIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        roundClip(nIcon, dp(20));
-        expNoti.addView(nIcon, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        roundClip(nIcon, dp(21));
+        expNoti.addView(nIcon, new LinearLayout.LayoutParams(dp(42), dp(42)));
         LinearLayout ncol = new LinearLayout(this);
         ncol.setOrientation(LinearLayout.VERTICAL);
-        ncol.setPadding(dp(12), 0, 0, 0);
-        nTitle = text(14, true, Color.WHITE);
-        nText = text(13, false, Color.rgb(200, 200, 200));
+        ncol.setPadding(dp(12), 0, dp(8), 0);
+        nTitle = Ui.line(this, 15, 600, Color.WHITE);
+        nText = Ui.text(this, 14, 400, Color.argb(170, 235, 235, 245));
+        nText.setMaxLines(2);
+        nText.setEllipsize(TextUtils.TruncateAt.END);
+        nText.setPadding(0, dp(3), 0, 0);
         ncol.addView(nTitle);
         ncol.addView(nText);
         expNoti.addView(ncol, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView now = Ui.text(this, 12, 500, Color.argb(130, 235, 235, 245));
+        now.setText(R.string.now);
+        expNoti.addView(now);
         pill.addView(expNoti, new FrameLayout.LayoutParams(-1, -1));
 
+        // ---- sentuhan ----
         pill.setOnClickListener(v -> onPillTap());
+        pill.setOnLongClickListener(v -> {
+            if (mode == MUSIC) {
+                openMusicApp();
+                return true;
+            }
+            return false;
+        });
         root.setOnTouchListener((v, e) -> {
             if (e.getAction() == MotionEvent.ACTION_OUTSIDE && expanded) {
                 expanded = false;
@@ -339,11 +377,11 @@ public class PillService extends AccessibilityService
         lp.x = xOff;
         lp.y = topY;
         lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-        lp.setTitle("GlassKitPill");
+        lp.setTitle("GlassKitIsland");
         try {
             wm.addView(root, lp);
             attached = true;
-            setSize(compactH, compactH); // mula kecil, kembang keluar
+            setSize(compactH, compactH); // mula sebesar lubang kamera, kemudian kembang
         } catch (Exception ignored) {
         }
     }
@@ -363,21 +401,28 @@ public class PillService extends AccessibilityService
         p.width = curW;
         p.height = curH;
         pill.setLayoutParams(p);
-        pillBg.setCornerRadius(Math.min(curH / 2f, dp(30)));
+        pillBg.setCornerRadius(Math.min(curH / 2f, dp(44)));
     }
 
-    private void animateTo(final int tw, final int th) {
+    private void animateTo(final int tw, final int th, boolean grow) {
         if (anim != null) anim.cancel();
         final int sw = curW, sh = curH;
         if (sw == tw && sh == th) return;
         anim = ValueAnimator.ofFloat(0f, 1f);
-        anim.setDuration(380);
-        anim.setInterpolator(new OvershootInterpolator(0.9f));
+        anim.setDuration(grow ? 560 : 380);
+        anim.setInterpolator(grow ? Ui.SPRING : new DecelerateInterpolator(2.2f));
         anim.addUpdateListener(a -> {
             float f = (float) a.getAnimatedValue();
             setSize(Math.round(sw + (tw - sw) * f), Math.round(sh + (th - sh) * f));
         });
         anim.start();
+    }
+
+    private void fadeIn(View v) {
+        v.setAlpha(0f);
+        v.setScaleX(0.96f);
+        v.setScaleY(0.96f);
+        v.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(110).setDuration(260).start();
     }
 
     private void refresh() {
@@ -388,38 +433,53 @@ public class PillService extends AccessibilityService
                 && (playing || SystemClock.uptimeMillis() < holdMusicUntil);
 
         int newMode = IDLE;
-        if (on && !land) {
+        if (on && !land && (panels == null || !panels.isOpen())) {
             if (notiActive) newMode = NOTI;
             else if (musicOn) newMode = MUSIC;
         }
+        boolean wasExpanded = compact.getVisibility() == View.GONE && attached;
         mode = newMode;
         if (mode == IDLE) {
             expanded = false;
-            cEq.setRunning(false);
+            cWave.setRunning(false);
+            mWave.setRunning(false);
             detach();
             return;
         }
         attach();
 
         compact.setVisibility(expanded ? View.GONE : View.VISIBLE);
-        expMusic.setVisibility(expanded && mode == MUSIC ? View.VISIBLE : View.GONE);
-        expNoti.setVisibility(expanded && mode == NOTI ? View.VISIBLE : View.GONE);
+        boolean showMusic = expanded && mode == MUSIC;
+        boolean showNoti = expanded && mode == NOTI;
+        if (showMusic && expMusic.getVisibility() != View.VISIBLE) fadeIn(expMusic);
+        if (showNoti && expNoti.getVisibility() != View.VISIBLE) fadeIn(expNoti);
+        if (!expanded && wasExpanded) fadeIn(compact);
+        expMusic.setVisibility(showMusic ? View.VISIBLE : View.GONE);
+        expNoti.setVisibility(showNoti ? View.VISIBLE : View.GONE);
 
         if (mode == MUSIC) {
-            if (art != null) cIcon.setImageBitmap(art);
-            else cIcon.setImageResource(android.R.drawable.ic_media_play);
+            cArt.setVisibility(View.VISIBLE);
+            cAppIcon.setVisibility(View.GONE);
+            if (art != null) cArt.setImageBitmap(art);
+            else cArt.setImageDrawable(Ui.round(Color.rgb(44, 44, 46), dp(7)));
             cText.setVisibility(View.GONE);
-            cEq.setVisibility(View.VISIBLE);
-            cEq.setRunning(playing);
+            cWave.setVisibility(View.VISIBLE);
+            cWave.setColor(artColor);
+            cWave.setRunning(playing);
+            mWave.setColor(artColor);
+            mWave.setRunning(playing && expanded);
         } else {
+            cArt.setVisibility(View.GONE);
+            cAppIcon.setVisibility(View.VISIBLE);
             cText.setVisibility(View.VISIBLE);
-            cEq.setVisibility(View.GONE);
-            cEq.setRunning(false);
+            cWave.setVisibility(View.GONE);
+            cWave.setRunning(false);
+            mWave.setRunning(false);
         }
 
-        int tw = expanded ? screenW - dp(20) : compactW;
-        int th = expanded ? (mode == MUSIC ? dp(180) : dp(84)) : compactH;
-        animateTo(tw, th);
+        int tw = expanded ? screenW - dp(16) : compactW;
+        int th = expanded ? (mode == MUSIC ? dp(176) : dp(82)) : compactH;
+        animateTo(tw, th, tw >= curW);
 
         h.removeCallbacks(progTick);
         if (expanded && mode == MUSIC) h.post(progTick);
@@ -427,73 +487,89 @@ public class PillService extends AccessibilityService
 
     private void onPillTap() {
         if (mode == NOTI) {
-            if (notiIntent != null) {
-                try {
-                    ActivityOptions o = ActivityOptions.makeBasic();
-                    if (Build.VERSION.SDK_INT >= 34) {
-                        o.setPendingIntentBackgroundActivityStartMode(
-                                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
-                    }
-                    notiIntent.send(this, 0, null, null, null, null, o.toBundle());
-                } catch (Exception ignored) {
-                }
-            }
+            sendIntent(notiIntent);
             h.removeCallbacks(endNoti);
             endNoti.run();
         } else if (mode == MUSIC) {
-            expanded = !expanded;
+            if (expanded) {
+                openMusicApp();
+                return;
+            }
+            expanded = true;
             refresh();
             h.removeCallbacks(autoCollapse);
-            if (expanded) h.postDelayed(autoCollapse, 6000);
+            h.postDelayed(autoCollapse, 7000);
         }
     }
 
-    // ---------------- Notifikasi ----------------
+    void sendIntent(PendingIntent pi) {
+        if (pi == null) return;
+        try {
+            ActivityOptions o = ActivityOptions.makeBasic();
+            if (Build.VERSION.SDK_INT >= 34) {
+                o.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+            }
+            pi.send(this, 0, null, null, null, null, o.toBundle());
+        } catch (Exception ignored) {
+        }
+    }
+
+    void openMusicApp() {
+        if (mc != null) sendIntent(mc.getSessionActivity());
+        expanded = false;
+        refresh();
+    }
+
+    // ================= Notifikasi =================
 
     void onNotification(StatusBarNotification sbn) {
         if (prefs == null || !prefs.getBoolean(Prefs.PILL_ON, true)
                 || !prefs.getBoolean(Prefs.PILL_NOTI, true)) return;
+        if (panels != null && panels.isOpen()) return;
         Notification n = sbn.getNotification();
         if ((n.flags & Notification.FLAG_ONLY_ALERT_ONCE) != 0) {
             if (seenOnce.size() > 500) seenOnce.clear();
             if (!seenOnce.add(sbn.getKey())) return;
         }
         Bundle ex = n.extras;
-        CharSequence title = ex == null ? null : ex.getCharSequence(Notification.EXTRA_TITLE);
+        CharSequence t = ex == null ? null : ex.getCharSequence(Notification.EXTRA_TITLE);
         CharSequence body = ex == null ? null : ex.getCharSequence(Notification.EXTRA_TEXT);
-        if (TextUtils.isEmpty(title) && TextUtils.isEmpty(body)) return;
+        if (TextUtils.isEmpty(t) && TextUtils.isEmpty(body)) return;
 
-        Drawable appIcon = null;
-        try { appIcon = getPackageManager().getApplicationIcon(sbn.getPackageName()); } catch (Exception ignored) {}
+        Drawable appIcon = appIcon(sbn.getPackageName());
         Drawable big = null;
         Icon li = n.getLargeIcon();
         if (li != null) {
             try { big = li.loadDrawable(this); } catch (Exception ignored) {}
         }
-        show(appIcon, big != null ? big : appIcon, title, body, n.contentIntent);
+        show(appIcon, big != null ? big : appIcon, t, body, n.contentIntent);
     }
 
-    private void show(Drawable small, Drawable big, CharSequence title, CharSequence body, PendingIntent pi) {
+    Drawable appIcon(String pkg) {
+        try { return getPackageManager().getApplicationIcon(pkg); } catch (Exception e) { return null; }
+    }
+
+    private void show(Drawable small, Drawable big, CharSequence t, CharSequence body, PendingIntent pi) {
         if (pill == null) return;
-        cIcon.setImageDrawable(small);
-        cText.setText(title);
+        cAppIcon.setImageDrawable(small);
+        cText.setText(t);
         nIcon.setImageDrawable(big);
-        nTitle.setText(title);
+        nTitle.setText(t);
         nText.setText(body);
         notiIntent = pi;
         notiActive = true;
         expanded = true;
         refresh();
         h.removeCallbacks(endNoti);
-        h.postDelayed(endNoti, 4000);
+        h.postDelayed(endNoti, 4200);
     }
 
     void test() {
-        show(getDrawable(android.R.drawable.sym_action_chat), getDrawable(android.R.drawable.sym_action_chat),
-                "GlassKit", "Pil berfungsi! Tekan untuk tutup.", null);
+        Drawable d = getApplicationInfo().loadIcon(getPackageManager());
+        show(d, d, getString(R.string.test_title), getString(R.string.test_text), null);
     }
 
-    // ---------------- Media ----------------
+    // ================= Media =================
 
     private final MediaSessionManager.OnActiveSessionsChangedListener sessL = controllers -> pick(controllers);
 
@@ -506,7 +582,6 @@ public class PillService extends AccessibilityService
             msm = m;
             pick(m.getActiveSessions(cn));
         } catch (SecurityException ignored) {
-            // Notification access belum diberi
         }
     }
 
@@ -560,8 +635,10 @@ public class PillService extends AccessibilityService
 
     private void refreshMedia() {
         boolean was = playing;
+        Bitmap oldArt = art;
         playing = false;
-        String title = null, artist = null;
+        title = null;
+        artist = null;
         art = null;
         duration = 0;
         if (mc != null) {
@@ -577,60 +654,56 @@ public class PillService extends AccessibilityService
                 duration = md.getLong(MediaMetadata.METADATA_KEY_DURATION);
             }
         }
+        if (art != oldArt) artColor = Ui.artColor(art);
         if (was && !playing) {
             holdMusicUntil = SystemClock.uptimeMillis() + 5000;
             h.removeCallbacks(refreshR);
             h.postDelayed(refreshR, 5100);
         }
         if (mTitle != null) {
-            mTitle.setText(title != null ? title : "Tiada tajuk");
+            mTitle.setText(title != null ? title : getString(R.string.no_title));
             mArtist.setText(artist != null ? artist : "");
             if (art != null) mArt.setImageBitmap(art);
-            else mArt.setImageResource(android.R.drawable.ic_media_play);
-            bPlay.setImageResource(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+            else mArt.setImageDrawable(null);
+            mPlay.setKind(playing ? com.glasskit.app.Icon.PAUSE : com.glasskit.app.Icon.PLAY);
+            mBar.setColor(Color.WHITE);
         }
+        if (panels != null) panels.onMediaChanged();
         refresh();
     }
 
-    private void updateProgress() {
-        if (mc == null || mProg == null || duration <= 0) return;
+    long position() {
+        if (mc == null) return 0;
         PlaybackState s = mc.getPlaybackState();
-        if (s == null) return;
+        if (s == null) return 0;
         long pos = s.getPosition();
         if (s.getState() == PlaybackState.STATE_PLAYING) {
             pos += (long) ((SystemClock.elapsedRealtime() - s.getLastPositionUpdateTime()) * s.getPlaybackSpeed());
         }
-        mProg.setProgress((int) Math.max(0, Math.min(1000, 1000L * pos / duration)));
+        return Math.max(0, duration > 0 ? Math.min(pos, duration) : pos);
     }
 
-    // ---------------- Bar equalizer kecil ----------------
-
-    static class EqView extends View {
-        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private boolean running;
-
-        EqView(Context c) {
-            super(c);
-            p.setColor(Color.rgb(138, 180, 248));
+    private void updateProgress() {
+        if (mBar == null) return;
+        long pos = position();
+        if (duration > 0) {
+            mBar.setValue((float) pos / duration);
+            mElapsed.setText(Ui.mmss(pos));
+            mRemain.setText("-" + Ui.mmss(duration - pos));
+        } else {
+            mBar.setValue(0);
+            mElapsed.setText("");
+            mRemain.setText("");
         }
+    }
 
-        void setRunning(boolean r) {
-            running = r;
-            invalidate();
-        }
+    void onPanelChanged() {
+        refresh();
+    }
 
-        @Override
-        protected void onDraw(Canvas c) {
-            float w = getWidth(), hh = getHeight();
-            float bw = w / 5f;
-            long t = SystemClock.uptimeMillis();
-            for (int i = 0; i < 3; i++) {
-                float f = running ? (float) (0.35 + 0.65 * Math.abs(Math.sin(t / 180.0 + i * 1.3))) : 0.3f;
-                float bh = hh * f;
-                float x = bw * (i * 2);
-                c.drawRoundRect(x, (hh - bh) / 2f, x + bw, (hh + bh) / 2f, bw / 2f, bw / 2f, p);
-            }
-            if (running && isShown()) postInvalidateOnAnimation();
-        }
+    void togglePlay() {
+        if (mc == null) return;
+        if (playing) mc.getTransportControls().pause();
+        else mc.getTransportControls().play();
     }
 }

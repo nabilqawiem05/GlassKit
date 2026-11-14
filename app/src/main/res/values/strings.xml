@@ -1,5 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="wp_desc">Jam lock screen dengan depth effect (jam di belakang subjek).</string>
-    <string name="pill_desc">Tunjuk pil gaya Dynamic Island di sekeliling kamera depan untuk muzik dan notifikasi. GlassKit tidak membaca kandungan skrin.</string>
+    <string name="app_name">GlassKit</string>
+    <string name="app_tagline">Dynamic Island, glass panels and a depth clock. No root.</string>
+    <string name="wp_desc">Lock screen clock with depth effect (clock behind the subject).</string>
+    <string name="pill_desc">Shows a Dynamic Island around the front camera and glass Control and Notification Centers. GlassKit does not read your screen content.</string>
+
+    <string name="sec_perm">Permissions</string>
+    <string name="perm_shizuku">Shizuku</string>
+    <string name="perm_acc">Accessibility</string>
+    <string name="perm_notif">Notification access</string>
+    <string name="st_on">On</string>
+    <string name="st_off">Off</string>
+    <string name="st_not_running">Not running</string>
+    <string name="st_no_permission">Not allowed yet</string>
+    <string name="btn_grant_all">Grant all with Shizuku</string>
+    <string name="grant_done">Permissions granted</string>
+    <string name="grant_fail">Couldn\'t grant: %1$s</string>
+    <string name="shizuku_hint">Open Shizuku and start it first.</string>
+    <string name="copy_cmds">Copy aShell commands</string>
+    <string name="copied">Copied</string>
+
+    <string name="sec_island">Dynamic Island</string>
+    <string name="island_on">Enable island</string>
+    <string name="island_music">Show music</string>
+    <string name="island_noti">Show notifications</string>
+    <string name="btn_test">Test island</string>
+
+    <string name="sec_panels">Control and Notification Center</string>
+    <string name="panels_on">Swipe-down gestures</string>
+    <string name="panels_hint">Swipe down from the top-left for notifications and from the top-right for Control Center. The middle still opens the system panel.</string>
+    <string name="btn_open_cc">Open Control Center</string>
+    <string name="btn_open_nc">Open Notification Center</string>
+    <string name="need_acc">Turn on Accessibility first</string>
+
+    <string name="sec_clock">Depth clock</string>
+    <string name="btn_pick_wp">Choose wallpaper</string>
+    <string name="btn_auto_cut">Cut out subject</string>
+    <string name="btn_own_png">Use my own PNG</string>
+    <string name="btn_remove_subject">Remove subject</string>
+    <string name="lbl_size">Clock size</string>
+    <string name="lbl_pos">Vertical position</string>
+    <string name="lbl_color">Color</string>
+    <string name="lbl_font">Font</string>
+    <string name="font_bold">Bold</string>
+    <string name="font_thin">Thin</string>
+    <string name="font_serif">Serif</string>
+    <string name="font_mono">Mono</string>
+    <string name="lock_only">Clock on lock screen only</string>
+    <string name="btn_set_wp">Set as wallpaper</string>
+    <string name="clock_tip">Tip: in Wallpaper and style, pick the smallest stock clock so it doesn\'t overlap.</string>
+    <string name="st_start">Start by choosing a photo of a person, pet or clear object.</string>
+    <string name="st_wp_picked">Wallpaper chosen. Now tap Cut out subject.</string>
+    <string name="st_png_set">Subject PNG applied.</string>
+    <string name="st_open_fail">Couldn\'t open image: %1$s</string>
+    <string name="st_pick_first">Choose a wallpaper first</string>
+    <string name="st_cutting">Cutting out the subject… The first time can be slow while the model downloads.</string>
+    <string name="st_no_subject">No subject found. Try a clearer photo.</string>
+    <string name="st_cut_done">Done. Adjust the clock, then tap Set as wallpaper.</string>
+    <string name="st_save_fail">Couldn\'t save: %1$s</string>
+    <string name="st_cut_fail">Cut-out failed: %1$s. Wait a moment and try again, or use your own PNG.</string>
+    <string name="wp_picker_fail">Couldn\'t open the wallpaper picker</string>
+
+    <string name="not_playing">Not playing</string>
+    <string name="no_title">Unknown</string>
+    <string name="now">now</string>
+    <string name="no_notifications">No notifications</string>
+    <string name="clear_all">Clear all</string>
+    <string name="notification_center">Notifications</string>
+    <string name="system_panel">System panel</string>
+    <string name="cc_settings">GlassKit settings</string>
+    <string name="test_title">GlassKit</string>
+    <string name="test_text">The island is working.</string>
+    <string name="need_shizuku">This toggle needs Shizuku</string>
+
+    <string name="tg_wifi">Wi-Fi</string>
+    <string name="tg_bt">Bluetooth</string>
+    <string name="tg_data">Mobile data</string>
+    <string name="tg_plane">Airplane mode</string>
+    <string name="tg_torch">Flashlight</string>
+    <string name="tg_dnd">Do Not Disturb</string>
+    <string name="tg_dark">Dark mode</string>
+    <string name="tg_rotate">Rotation lock</string>
+    <string name="tg_saver">Battery saver</string>
+    <string name="tg_shot">Screenshot</string>
+    <string name="tg_lock">Lock</string>
+    <string name="tg_camera">Camera</string>
 </resources>

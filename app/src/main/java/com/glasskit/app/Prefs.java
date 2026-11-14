@@ -16,6 +16,7 @@ public final class Prefs {
     public static final String PILL_ON = "pillOn";
     public static final String PILL_MUSIC = "pillMusic";
     public static final String PILL_NOTI = "pillNoti";
+    public static final String PANELS_ON = "panelsOn";
 
     private Prefs() {}
 

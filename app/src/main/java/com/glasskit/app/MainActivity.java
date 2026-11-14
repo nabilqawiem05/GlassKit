@@ -8,10 +8,13 @@ import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ImageDecoder;
+import android.graphics.Outline;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
@@ -19,7 +22,8 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
+import android.view.ViewOutlineProvider;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -36,133 +40,187 @@ import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions;
 import java.io.File;
 import java.io.FileOutputStream;
 
+import rikka.shizuku.Shizuku;
+
 public class MainActivity extends Activity {
 
     private static final int REQ_BG = 1, REQ_FG = 2;
     private static final int[] COLORS = {
             Color.WHITE, 0xFF8AB4F8, 0xFFC8B6FF, 0xFFF5D06F, 0xFFFF8A80, 0xFF101418
     };
-    private static final String[] FONTS = {"Tebal", "Nipis", "Serif", "Mono"};
+    private static final int TEXT2 = Color.argb(165, 235, 235, 245);
 
     private SharedPreferences prefs;
     private ImageView preview;
-    private TextView status, pillStatus;
-    private LinearLayout box;
+    private TextView status;
+    private TextView stShizuku, stAcc, stNotif;
+    private LinearLayout fontSeg;
     private Bitmap cacheBg, cacheFg;
     private long cacheVer = Long.MIN_VALUE;
 
-    private int dp(float v) {
-        return Math.round(v * getResources().getDisplayMetrics().density);
-    }
+    private final Shizuku.OnRequestPermissionResultListener shizukuL = (code, result) -> {
+        if (code == Shell.REQ && result == PackageManager.PERMISSION_GRANTED) grantAll();
+        refreshStatus();
+    };
 
-    // ---------------- UI ----------------
+    private int dp(float v) { return Ui.dp(this, v); }
+
+    // ======================= Susun atur =======================
 
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = Prefs.get(this);
+        getWindow().setStatusBarColor(0xFF07080F);
+        getWindow().setNavigationBarColor(0xFF0B1424);
 
         ScrollView sv = new ScrollView(this);
         sv.setFitsSystemWindows(true);
-        box = new LinearLayout(this);
+        sv.setVerticalScrollBarEnabled(false);
+        sv.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xFF07080F, 0xFF15102A, 0xFF0B1424}));
+        LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(24), dp(20), dp(40));
+        box.setPadding(dp(18), dp(28), dp(18), dp(48));
         sv.addView(box);
         setContentView(sv);
 
-        heading("GlassKit", 28);
-        note("Jam depth effect + pil gaya Dynamic Island. Tanpa root.");
+        TextView h = Ui.text(this, 38, 800, Color.WHITE);
+        h.setText(R.string.app_name);
+        h.setLetterSpacing(-0.02f);
+        box.addView(h);
+        TextView tag = Ui.text(this, 15, 400, TEXT2);
+        tag.setText(R.string.app_tagline);
+        tag.setPadding(dp(2), dp(8), 0, dp(8));
+        box.addView(tag);
 
-        // ===== Jam depth effect =====
-        heading("Jam depth effect", 20);
-        preview = new ImageView(this);
-        preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, dp(420));
-        pl.topMargin = dp(8);
-        box.addView(preview, pl);
-
-        status = note("");
-        button("1. Pilih wallpaper", v -> pick(REQ_BG));
-        button("2. Potong subjek automatik", v -> autoCut());
-        button("2b. Guna PNG subjek sendiri", v -> pick(REQ_FG));
-        button("Buang subjek", v -> {
-            DepthRenderer.fgFile(this).delete();
-            bump();
+        // ---------- Kebenaran ----------
+        LinearLayout perm = card(box, R.string.sec_perm, Icon.LOCK, 0xFF34C759);
+        stShizuku = statusRow(perm, getString(R.string.perm_shizuku));
+        stAcc = statusRow(perm, getString(R.string.perm_acc));
+        stNotif = statusRow(perm, getString(R.string.perm_notif));
+        button(perm, getString(R.string.btn_grant_all), true, v -> {
+            if (!Shell.running()) toast(getString(R.string.shizuku_hint));
+            else if (!Shell.granted()) Shell.request();
+            else grantAll();
+        });
+        button(perm, getString(R.string.copy_cmds), false, v -> {
+            ClipboardManager cm = getSystemService(ClipboardManager.class);
+            cm.setPrimaryClip(ClipData.newPlainText("aShell", Shell.grantAll(getPackageName())));
+            toast(getString(R.string.copied));
         });
 
-        label("Saiz jam");
-        slider(10, 45, prefs.getInt(Prefs.CLOCK_SIZE, 30), val -> prefs.edit().putInt(Prefs.CLOCK_SIZE, val).apply());
-        label("Kedudukan menegak");
-        slider(12, 70, prefs.getInt(Prefs.CLOCK_Y, 28), val -> prefs.edit().putInt(Prefs.CLOCK_Y, val).apply());
+        // ---------- Island ----------
+        LinearLayout isl = card(box, R.string.sec_island, Icon.NOTE, 0xFFFF375F);
+        toggle(isl, R.string.island_on, Prefs.PILL_ON, true);
+        toggle(isl, R.string.island_music, Prefs.PILL_MUSIC, true);
+        toggle(isl, R.string.island_noti, Prefs.PILL_NOTI, true);
+        button(isl, getString(R.string.btn_test), false, v -> {
+            if (PillService.inst != null) PillService.inst.test();
+            else toast(getString(R.string.need_acc));
+        });
 
-        label("Warna jam");
-        LinearLayout cr = row();
+        // ---------- Panel ----------
+        LinearLayout pan = card(box, R.string.sec_panels, Icon.GEAR, Ui.BLUE);
+        toggle(pan, R.string.panels_on, Prefs.PANELS_ON, true);
+        note(pan, getString(R.string.panels_hint));
+        LinearLayout pr = new LinearLayout(this);
+        pan.addView(pr);
+        View b1 = button(null, getString(R.string.btn_open_cc), false, v -> {
+            if (PillService.inst != null && PillService.inst.panels != null) PillService.inst.panels.openControl();
+            else toast(getString(R.string.need_acc));
+        });
+        View b2 = button(null, getString(R.string.btn_open_nc), false, v -> {
+            if (PillService.inst != null && PillService.inst.panels != null) PillService.inst.panels.openNotifications();
+            else toast(getString(R.string.need_acc));
+        });
+        LinearLayout.LayoutParams l1 = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        l1.topMargin = dp(12);
+        LinearLayout.LayoutParams l2 = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        l2.topMargin = dp(12);
+        l2.leftMargin = dp(10);
+        pr.addView(b1, l1);
+        pr.addView(b2, l2);
+
+        // ---------- Jam depth ----------
+        LinearLayout clk = card(box, R.string.sec_clock, Icon.SUN, Ui.ORANGE);
+        preview = new ImageView(this);
+        preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        preview.setBackgroundColor(0xFF1C2230);
+        preview.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) {
+                o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(26));
+            }
+        });
+        preview.setClipToOutline(true);
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(230), dp(480));
+        pl.gravity = Gravity.CENTER_HORIZONTAL;
+        pl.topMargin = dp(14);
+        clk.addView(preview, pl);
+        status = note(clk, "");
+        status.setGravity(Gravity.CENTER);
+
+        LinearLayout ir1 = new LinearLayout(this);
+        clk.addView(ir1);
+        addPair(ir1, button(null, getString(R.string.btn_pick_wp), false, v -> pick(REQ_BG)),
+                button(null, getString(R.string.btn_auto_cut), false, v -> autoCut()));
+        LinearLayout ir2 = new LinearLayout(this);
+        clk.addView(ir2);
+        addPair(ir2, button(null, getString(R.string.btn_own_png), false, v -> pick(REQ_FG)),
+                button(null, getString(R.string.btn_remove_subject), false, v -> {
+                    DepthRenderer.fgFile(this).delete();
+                    bump();
+                }));
+
+        label(clk, R.string.lbl_size);
+        slider(clk, 10, 45, prefs.getInt(Prefs.CLOCK_SIZE, 30), val -> prefs.edit().putInt(Prefs.CLOCK_SIZE, val).apply());
+        label(clk, R.string.lbl_pos);
+        slider(clk, 12, 70, prefs.getInt(Prefs.CLOCK_Y, 28), val -> prefs.edit().putInt(Prefs.CLOCK_Y, val).apply());
+
+        label(clk, R.string.lbl_color);
+        LinearLayout cr = new LinearLayout(this);
+        cr.setGravity(Gravity.CENTER_VERTICAL);
+        clk.addView(cr);
         for (int c : COLORS) {
             View chip = new View(this);
-            GradientDrawable g = new GradientDrawable();
-            g.setShape(GradientDrawable.OVAL);
-            g.setColor(c);
-            g.setStroke(dp(1), Color.GRAY);
+            GradientDrawable g = Ui.circle(c);
+            g.setStroke(dp(1.5f), Color.argb(90, 255, 255, 255));
             chip.setBackground(g);
-            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(dp(40), dp(40));
-            l.rightMargin = dp(10);
+            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(dp(38), dp(38));
+            l.rightMargin = dp(12);
+            l.topMargin = dp(4);
             chip.setOnClickListener(v -> prefs.edit().putInt(Prefs.CLOCK_COLOR, c).apply());
+            Ui.press(chip);
             cr.addView(chip, l);
         }
 
-        label("Font jam");
-        LinearLayout fr = row();
-        for (int i = 0; i < FONTS.length; i++) {
+        label(clk, R.string.lbl_font);
+        fontSeg = new LinearLayout(this);
+        fontSeg.setBackground(Ui.glass(this, 22, 26));
+        fontSeg.setPadding(dp(4), dp(4), dp(4), dp(4));
+        int[] fonts = {R.string.font_bold, R.string.font_thin, R.string.font_serif, R.string.font_mono};
+        for (int i = 0; i < fonts.length; i++) {
             final int idx = i;
-            Button fb = new Button(this);
-            fb.setText(FONTS[i]);
-            fb.setAllCaps(false);
-            fb.setOnClickListener(v -> prefs.edit().putInt(Prefs.CLOCK_FONT, idx).apply());
-            fr.addView(fb, new LinearLayout.LayoutParams(0, -2, 1f));
+            TextView t = Ui.text(this, 14, 600, Color.WHITE);
+            t.setText(fonts[i]);
+            t.setGravity(Gravity.CENTER);
+            t.setOnClickListener(v -> {
+                prefs.edit().putInt(Prefs.CLOCK_FONT, idx).apply();
+                paintSeg();
+            });
+            fontSeg.addView(t, new LinearLayout.LayoutParams(0, dp(38), 1f));
         }
+        clk.addView(fontSeg, new LinearLayout.LayoutParams(-1, -2));
+        paintSeg();
 
-        toggle("Jam hanya di lock screen", Prefs.LOCK_ONLY, true);
-        button("3. Set sebagai wallpaper", v -> setWallpaper());
-        note("Tip: dalam Wallpaper & style, pilih jam stock yang paling kecil supaya tak bertindih dengan jam GlassKit.");
-
-        // ===== Pil =====
-        heading("Pil (Dynamic Island)", 20);
-        pillStatus = note("");
-        toggle("Hidupkan pil", Prefs.PILL_ON, true);
-        toggle("Tunjuk muzik", Prefs.PILL_MUSIC, true);
-        toggle("Tunjuk notifikasi", Prefs.PILL_NOTI, true);
-        button("Buka tetapan Accessibility", v ->
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        button("Buka Notification access", v ->
-                startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
-        button("Uji pil", v -> {
-            if (PillService.inst != null) PillService.inst.test();
-            else toast("Hidupkan Accessibility GlassKit Pill dulu");
-        });
-
-        label("Kalau Android sekat (\"Restricted setting\"), jalan ni dalam aShell:");
-        final String cmds = shellCmds();
-        TextView code = note(cmds);
-        code.setTypeface(android.graphics.Typeface.MONOSPACE);
-        code.setTextIsSelectable(true);
-        button("Salin arahan aShell", v -> {
-            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-            cm.setPrimaryClip(ClipData.newPlainText("aShell", cmds));
-            toast("Disalin");
-        });
+        toggle(clk, R.string.lock_only, Prefs.LOCK_ONLY, true);
+        button(clk, getString(R.string.btn_set_wp), true, v -> setWallpaper());
+        note(clk, getString(R.string.clock_tip));
 
         prefs.registerOnSharedPreferenceChangeListener(prefL);
+        try { Shizuku.addRequestPermissionResultListener(shizukuL); } catch (Throwable ignored) {}
         renderPreview();
-    }
-
-    private String shellCmds() {
-        String pkg = getPackageName();
-        return "appops set " + pkg + " ACCESS_RESTRICTED_SETTINGS allow; "
-                + "cmd notification allow_listener " + pkg + "/" + NotifListener.class.getName() + "; "
-                + "s=$(settings get secure enabled_accessibility_services); "
-                + "[ \"$s\" = null ] && s=''; "
-                + "settings put secure enabled_accessibility_services \"${s:+$s:}" + pkg + "/" + PillService.class.getName() + "\"; "
-                + "settings put secure accessibility_enabled 1";
     }
 
     private final SharedPreferences.OnSharedPreferenceChangeListener prefL = (sp, k) -> renderPreview();
@@ -170,91 +228,176 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         prefs.unregisterOnSharedPreferenceChangeListener(prefL);
+        try { Shizuku.removeRequestPermissionResultListener(shizukuL); } catch (Throwable ignored) {}
         super.onDestroy();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        String acc = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        boolean a = acc != null && acc.contains(getPackageName() + "/");
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        boolean n = nm.isNotificationListenerAccessGranted(new ComponentName(this, NotifListener.class));
-        pillStatus.setText("Accessibility: " + (a ? "ON" : "OFF") + "    Notification access: " + (n ? "ON" : "OFF")
-                + (n ? "" : "\n(Muzik & notifikasi perlukan Notification access)"));
+        refreshStatus();
     }
 
-    private TextView heading(String s, float sp) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextSize(sp);
-        t.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, 700, false));
-        t.setPadding(0, dp(18), 0, dp(4));
-        box.addView(t);
-        return t;
+    // ======================= Komponen =======================
+
+    private LinearLayout card(LinearLayout parent, int title, int icon, int color) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setBackground(Ui.glass(this, 28, 20));
+        c.setPadding(dp(18), dp(18), dp(18), dp(20));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = dp(16);
+        parent.addView(c, lp);
+
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        FrameLayout ib = new FrameLayout(this);
+        ib.setBackground(Ui.round(color, dp(9)));
+        ib.addView(new Icon(this, icon, Color.WHITE), new FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER));
+        head.addView(ib, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        TextView t = Ui.text(this, 19, 700, Color.WHITE);
+        t.setText(title);
+        t.setPadding(dp(12), 0, 0, 0);
+        head.addView(t);
+        c.addView(head);
+        return c;
     }
 
-    private TextView note(String s) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextSize(14);
-        t.setAlpha(0.8f);
-        t.setPadding(0, dp(4), 0, dp(4));
-        box.addView(t);
-        return t;
-    }
-
-    private void label(String s) {
-        TextView t = note(s);
-        t.setAlpha(1f);
-        t.setPadding(0, dp(12), 0, dp(2));
-    }
-
-    private LinearLayout row() {
+    private TextView statusRow(LinearLayout parent, String label) {
         LinearLayout r = new LinearLayout(this);
         r.setGravity(Gravity.CENTER_VERTICAL);
-        box.addView(r, new LinearLayout.LayoutParams(-1, -2));
-        return r;
+        r.setPadding(0, dp(14), 0, 0);
+        TextView l = Ui.text(this, 16, 500, Color.WHITE);
+        l.setText(label);
+        r.addView(l, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView st = Ui.text(this, 13, 600, Color.WHITE);
+        st.setPadding(dp(12), dp(6), dp(12), dp(6));
+        r.addView(st);
+        parent.addView(r);
+        return st;
     }
 
-    private void button(String s, View.OnClickListener l) {
-        Button bt = new Button(this);
-        bt.setText(s);
-        bt.setAllCaps(false);
+    private void setStatus(TextView t, String text, boolean ok) {
+        t.setText(text);
+        t.setTextColor(ok ? 0xFF30D158 : 0xFFFF9F0A);
+        t.setBackground(Ui.round(ok ? Color.argb(40, 48, 209, 88) : Color.argb(40, 255, 159, 10), dp(14)));
+    }
+
+    private View button(LinearLayout parent, String text, boolean primary, View.OnClickListener l) {
+        TextView bt = Ui.text(this, 15, 600, primary ? 0xFF0B0B10 : Color.WHITE);
+        bt.setText(text);
+        bt.setGravity(Gravity.CENTER);
+        bt.setMaxLines(2);
+        bt.setPadding(dp(12), 0, dp(12), 0);
+        bt.setBackground(primary ? Ui.round(Color.WHITE, dp(25)) : Ui.glass(this, 25, 34));
         bt.setOnClickListener(l);
-        box.addView(bt, new LinearLayout.LayoutParams(-1, -2));
+        Ui.press(bt);
+        if (parent != null) {
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(50));
+            lp.topMargin = dp(12);
+            parent.addView(bt, lp);
+        }
+        return bt;
     }
 
-    private void toggle(String s, String key, boolean def) {
+    private void addPair(LinearLayout row, View a, View b) {
+        LinearLayout.LayoutParams l1 = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        l1.topMargin = dp(12);
+        LinearLayout.LayoutParams l2 = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        l2.topMargin = dp(12);
+        l2.leftMargin = dp(10);
+        row.addView(a, l1);
+        row.addView(b, l2);
+    }
+
+    private TextView note(LinearLayout parent, String s) {
+        TextView t = Ui.text(this, 14, 400, TEXT2);
+        t.setText(s);
+        t.setLineSpacing(0, 1.2f);
+        t.setPadding(0, dp(10), 0, 0);
+        parent.addView(t);
+        return t;
+    }
+
+    private void label(LinearLayout parent, int res) {
+        TextView t = Ui.text(this, 13, 600, TEXT2);
+        t.setText(res);
+        t.setPadding(dp(2), dp(18), 0, dp(6));
+        parent.addView(t);
+    }
+
+    private void toggle(LinearLayout parent, int label, String key, boolean def) {
         Switch sw = new Switch(this);
-        sw.setText(s);
-        sw.setTextSize(15);
+        sw.setText(label);
+        sw.setTextSize(16);
+        sw.setTextColor(Color.WHITE);
+        sw.setTypeface(Ui.font(500));
         sw.setChecked(prefs.getBoolean(key, def));
-        sw.setPadding(0, dp(10), 0, dp(10));
+        int[][] st = {{android.R.attr.state_checked}, {}};
+        sw.setThumbTintList(new ColorStateList(st, new int[]{Color.WHITE, Color.rgb(200, 200, 210)}));
+        sw.setTrackTintList(new ColorStateList(st, new int[]{0xFF30D158, Color.argb(90, 255, 255, 255)}));
+        sw.setPadding(0, dp(12), 0, 0);
         sw.setOnCheckedChangeListener((v, on) -> prefs.edit().putBoolean(key, on).apply());
-        box.addView(sw, new LinearLayout.LayoutParams(-1, -2));
+        parent.addView(sw, new LinearLayout.LayoutParams(-1, -2));
     }
 
     interface IntCb { void on(int v); }
 
-    private void slider(int min, int max, int cur, IntCb cb) {
+    private void slider(LinearLayout parent, int min, int max, int cur, IntCb cb) {
         SeekBar s = new SeekBar(this);
         s.setMin(min);
         s.setMax(max);
         s.setProgress(cur);
+        s.setProgressTintList(ColorStateList.valueOf(Color.WHITE));
+        s.setThumbTintList(ColorStateList.valueOf(Color.WHITE));
+        s.setProgressBackgroundTintList(ColorStateList.valueOf(Color.argb(120, 255, 255, 255)));
         s.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int p, boolean fromUser) { if (fromUser) cb.on(p); }
             @Override public void onStartTrackingTouch(SeekBar sb) { }
             @Override public void onStopTrackingTouch(SeekBar sb) { }
         });
-        box.addView(s, new LinearLayout.LayoutParams(-1, dp(40)));
+        parent.addView(s, new LinearLayout.LayoutParams(-1, dp(36)));
+    }
+
+    private void paintSeg() {
+        int sel = prefs.getInt(Prefs.CLOCK_FONT, 0);
+        for (int i = 0; i < fontSeg.getChildCount(); i++) {
+            TextView t = (TextView) fontSeg.getChildAt(i);
+            boolean on = i == sel;
+            t.setBackground(on ? Ui.round(Color.WHITE, dp(19)) : null);
+            t.setTextColor(on ? 0xFF0B0B10 : Color.WHITE);
+        }
     }
 
     private void toast(String s) {
         Toast.makeText(this, s, Toast.LENGTH_SHORT).show();
     }
 
-    // ---------------- Gambar ----------------
+    // ======================= Kebenaran =======================
+
+    private void refreshStatus() {
+        if (!Shell.running()) setStatus(stShizuku, getString(R.string.st_not_running), false);
+        else if (!Shell.granted()) setStatus(stShizuku, getString(R.string.st_no_permission), false);
+        else setStatus(stShizuku, getString(R.string.st_on), true);
+
+        String acc = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        boolean a = acc != null && acc.contains(getPackageName() + "/");
+        setStatus(stAcc, getString(a ? R.string.st_on : R.string.st_off), a);
+
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        boolean n = nm.isNotificationListenerAccessGranted(new ComponentName(this, NotifListener.class));
+        setStatus(stNotif, getString(n ? R.string.st_on : R.string.st_off), n);
+    }
+
+    private void grantAll() {
+        Shell.run(Shell.grantAll(getPackageName()), (ok, out) -> {
+            if (ok) toast(getString(R.string.grant_done));
+            else toast(getString(R.string.grant_fail, out.trim()));
+            stAcc.postDelayed(this::refreshStatus, 900);
+        });
+    }
+
+    // ======================= Gambar =======================
 
     private void pick(int req) {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -273,14 +416,14 @@ public class MainActivity extends Activity {
             if (req == REQ_BG) {
                 save(bmp, DepthRenderer.bgFile(this), false);
                 DepthRenderer.fgFile(this).delete();
-                status.setText("Wallpaper dipilih. Sekarang tekan \"Potong subjek automatik\".");
+                status.setText(R.string.st_wp_picked);
             } else {
                 save(bmp, DepthRenderer.fgFile(this), true);
-                status.setText("PNG subjek dipasang.");
+                status.setText(R.string.st_png_set);
             }
             bump();
         } catch (Exception e) {
-            status.setText("Gagal buka gambar: " + e.getMessage());
+            status.setText(getString(R.string.st_open_fail, String.valueOf(e.getMessage())));
         }
     }
 
@@ -310,10 +453,10 @@ public class MainActivity extends Activity {
     private void autoCut() {
         Bitmap bg = DepthRenderer.load(DepthRenderer.bgFile(this));
         if (bg == null) {
-            toast("Pilih wallpaper dulu");
+            toast(getString(R.string.st_pick_first));
             return;
         }
-        status.setText("Memotong subjek... (kali pertama mungkin lambat sebab model dimuat turun)");
+        status.setText(R.string.st_cutting);
         SubjectSegmenterOptions opts = new SubjectSegmenterOptions.Builder()
                 .enableForegroundBitmap()
                 .build();
@@ -323,20 +466,18 @@ public class MainActivity extends Activity {
                 .addOnSuccessListener(result -> {
                     Bitmap fg = result.getForegroundBitmap();
                     if (fg == null) {
-                        status.setText("Tiada subjek dijumpai. Cuba gambar orang/haiwan/objek yang jelas.");
+                        status.setText(R.string.st_no_subject);
                         return;
                     }
                     try {
                         save(fg, DepthRenderer.fgFile(this), true);
-                        status.setText("Siap! Subjek dipotong. Laraskan jam, kemudian tekan \"Set sebagai wallpaper\".");
+                        status.setText(R.string.st_cut_done);
                         bump();
                     } catch (Exception e) {
-                        status.setText("Gagal simpan: " + e.getMessage());
+                        status.setText(getString(R.string.st_save_fail, String.valueOf(e.getMessage())));
                     }
                 })
-                .addOnFailureListener(e -> status.setText(
-                        "Gagal potong: " + e.getMessage()
-                                + "\nKalau model belum siap, tunggu sekejap & cuba lagi, atau guna PNG subjek sendiri."));
+                .addOnFailureListener(e -> status.setText(getString(R.string.st_cut_fail, String.valueOf(e.getMessage()))));
     }
 
     private void renderPreview() {
@@ -354,7 +495,7 @@ public class MainActivity extends Activity {
         DepthRenderer.draw(this, c, w, h, cacheBg, cacheFg, prefs, true);
         preview.setImageBitmap(out);
         if (TextUtils.isEmpty(status.getText()) && !DepthRenderer.bgFile(this).exists()) {
-            status.setText("Mula dengan pilih wallpaper (gambar orang, haiwan atau objek jelas paling cantik).");
+            status.setText(R.string.st_start);
         }
     }
 
@@ -365,7 +506,7 @@ public class MainActivity extends Activity {
         try {
             startActivity(i);
         } catch (Exception e) {
-            toast("Tak boleh buka pemilih wallpaper");
+            toast(getString(R.string.wp_picker_fail));
         }
     }
 }
