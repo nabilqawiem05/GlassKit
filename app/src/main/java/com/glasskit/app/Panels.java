@@ -18,11 +18,17 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
+import android.location.LocationManager;
 import android.media.AudioManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.nfc.NfcAdapter;
 import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.view.Gravity;
@@ -46,10 +52,12 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-/** Pusat Kawalan & Pusat Pemberitahuan kaca, serta zon leret di bahagian atas skrin. */
+/** Tetapan Pantas & panel pemberitahuan gaya Pixel, versi liquid glass (jernih / gelap). */
 final class Panels {
-    private static final int NONE = 0, CONTROL = 1, NOTIFS = 2;
+    private static final int NONE = 0, QS = 1, SHADE = 2;
 
     private final PillService s;
     private final WindowManager wm;
@@ -61,21 +69,26 @@ final class Panels {
     private View content;
     private ScrollView scroll;
     private int open = NONE;
-    private boolean closing;
+    private boolean closing, blurOk, dark;
     private ValueAnimator anim;
-    private boolean blurOk;
 
-    // Pusat Kawalan
-    private Tg tWifi, tBt, tData, tPlane, tTorch, tDnd, tDark, tRotate, tSaver;
-    private Widgets.VSlider sBright, sVol;
-    private ImageView ccArt;
-    private TextView ccTitle, ccArtist;
-    private Icon ccPlay;
+    private Tile tWifi, tBt, tData, tDnd, tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc;
+    private Widgets.HSlider sBright;
+    private TextView hBattery;
+    private Icon hBatIcon, hWifi, hCell;
+    private String ssid;
+
+    private ImageView mArt;
+    private TextView mTitle, mArtist;
+    private Icon mPlay;
+    private Widgets.Bar mBar;
+    private View mediaCard;
+
     private boolean torchOn;
     private String torchId;
     private CameraManager.TorchCallback torchCb;
+    private boolean askedWrite;
 
-    // Pusat Pemberitahuan
     private LinearLayout ncList;
 
     Panels(PillService s) {
@@ -212,7 +225,10 @@ final class Panels {
 
         blurOk = wm.isCrossWindowBlurEnabled();
         root = new PanelRoot(s);
-        dim = new ColorDrawable(blurOk ? Color.argb(70, 0, 0, 0) : Color.argb(225, 14, 14, 18));
+        int dimColor = blurOk
+                ? (dark ? Color.argb(150, 0, 0, 0) : Color.argb(45, 0, 0, 0))
+                : (dark ? Color.argb(232, 12, 12, 16) : Color.argb(215, 52, 54, 64));
+        dim = new ColorDrawable(dimColor);
         dim.setAlpha(0);
         root.setBackground(dim);
         root.addView(c, new FrameLayout.LayoutParams(-1, -1));
@@ -240,13 +256,11 @@ final class Panels {
         root.requestFocus();
 
         c.setAlpha(0f);
-        c.setTranslationY(-dp(36));
-        c.setScaleX(0.94f);
-        c.setScaleY(0.94f);
-        final int maxBlur = dp(34);
+        c.setTranslationY(-dp(48));
+        final int maxBlur = dp(dark ? 40 : 30);
         anim = ValueAnimator.ofFloat(0f, 1f);
-        anim.setDuration(420);
-        anim.setInterpolator(new DecelerateInterpolator(2.4f));
+        anim.setDuration(380);
+        anim.setInterpolator(new DecelerateInterpolator(2.2f));
         anim.addUpdateListener(a -> {
             float f = (float) a.getAnimatedValue();
             dim.setAlpha(Math.round(255 * f));
@@ -256,8 +270,7 @@ final class Panels {
             }
         });
         anim.start();
-        c.animate().alpha(1f).translationY(0).scaleX(1f).scaleY(1f)
-                .setInterpolator(Ui.SPRING).setDuration(620).start();
+        c.animate().alpha(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(560).start();
     }
 
     void close() {
@@ -265,9 +278,9 @@ final class Panels {
         closing = true;
         final PanelRoot r = root;
         if (anim != null) anim.cancel();
-        final int from = blurOk ? dp(34) : 0;
+        final int from = blurOk ? dp(dark ? 40 : 30) : 0;
         anim = ValueAnimator.ofFloat(1f, 0f);
-        anim.setDuration(260);
+        anim.setDuration(240);
         anim.setInterpolator(new DecelerateInterpolator());
         anim.addUpdateListener(a -> {
             float f = (float) a.getAnimatedValue();
@@ -278,17 +291,17 @@ final class Panels {
             }
         });
         anim.start();
-        content.animate().alpha(0f).translationY(-dp(40)).scaleX(0.95f).scaleY(0.95f)
-                .setDuration(240).withEndAction(() -> {
-                    try { wm.removeViewImmediate(r); } catch (Exception ignored) {}
-                    if (root == r) {
-                        root = null;
-                        open = NONE;
-                        closing = false;
-                        stopTorchWatch();
-                        s.onPanelChanged();
-                    }
-                }).start();
+        content.animate().alpha(0f).translationY(-dp(56)).setDuration(220).withEndAction(() -> {
+            try { wm.removeViewImmediate(r); } catch (Exception ignored) {}
+            if (root == r) {
+                root = null;
+                open = NONE;
+                closing = false;
+                stopTorchWatch();
+                mediaCard = null;
+                s.onPanelChanged();
+            }
+        }).start();
     }
 
     private void launch(Intent i) {
@@ -297,222 +310,331 @@ final class Panels {
         close();
     }
 
-    // ===================== Togol bulat =====================
+    // ===================== Tile gaya Pixel =====================
 
-    private class Tg {
-        final FrameLayout v;
-        final GradientDrawable bg;
+    private class Tile {
+        final View v;
         final Icon ic;
-        final int onBg, onIcon;
+        final TextView label, sub;
+        final int rOffDp, rOnPx;
 
-        Tg(int kind, int onBg, int onIcon, String label, int size, View.OnClickListener l) {
-            this.onBg = onBg;
-            this.onIcon = onIcon;
-            v = new FrameLayout(s);
-            bg = new GradientDrawable();
-            bg.setShape(GradientDrawable.OVAL);
-            bg.setStroke(Math.max(1, dp(0.8f)), Color.argb(60, 255, 255, 255));
-            v.setBackground(bg);
+        Tile(int kind, String text, boolean big, int height, View.OnClickListener tap, Intent detail) {
+            rOffDp = big ? 22 : 20;
+            rOnPx = big ? height / 2 : dp(30);
             ic = new Icon(s, kind, Color.WHITE);
-            int is = Math.round(size * 0.42f);
-            v.addView(ic, new FrameLayout.LayoutParams(is, is, Gravity.CENTER));
-            v.setOnClickListener(l);
+            if (big) {
+                LinearLayout l = new LinearLayout(s);
+                l.setGravity(Gravity.CENTER_VERTICAL);
+                l.setPadding(dp(18), 0, dp(14), 0);
+                l.addView(ic, new LinearLayout.LayoutParams(dp(22), dp(22)));
+                LinearLayout col = new LinearLayout(s);
+                col.setOrientation(LinearLayout.VERTICAL);
+                col.setPadding(dp(12), 0, 0, 0);
+                label = Ui.line(s, 15, 600, Color.WHITE);
+                label.setText(text);
+                sub = Ui.line(s, 13, 400, Color.WHITE);
+                sub.setPadding(0, dp(3), 0, 0);
+                col.addView(label);
+                col.addView(sub);
+                l.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
+                v = l;
+            } else {
+                FrameLayout f = new FrameLayout(s);
+                f.addView(ic, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+                label = null;
+                sub = null;
+                v = f;
+            }
+            v.setOnClickListener(tap);
             v.setOnLongClickListener(x -> {
-                Toast.makeText(s, label, Toast.LENGTH_SHORT).show();
+                if (detail != null) launch(detail);
+                else Toast.makeText(s, text, Toast.LENGTH_SHORT).show();
                 return true;
             });
             Ui.press(v);
-            set(false);
+            set(false, null);
         }
 
-        void set(boolean on) {
-            bg.setColor(on ? onBg : Color.argb(52, 255, 255, 255));
-            ic.setColor(on ? onIcon : Color.WHITE);
+        void set(boolean on, String state) {
+            if (on) v.setBackground(Ui.round(Ui.accent(s, dark), rOnPx));
+            else v.setBackground(Ui.glassStyled(s, rOffDp, dark));
+            int fg = on ? Ui.onAccent(s) : Color.WHITE;
+            ic.setColor(fg);
+            if (label != null) {
+                label.setTextColor(fg);
+                sub.setTextColor(on ? fg : Color.argb(185, 255, 255, 255));
+                sub.setText(state != null ? state : s.getString(on ? R.string.st_on : R.string.st_off));
+            }
         }
     }
 
-    // ===================== Pusat Kawalan =====================
+    private Intent act(String a) { return new Intent(a); }
+
+    // ===================== Header (jam, tarikh, status) =====================
+
+    private View header() {
+        LinearLayout h = new LinearLayout(s);
+        h.setOrientation(LinearLayout.VERTICAL);
+        h.setPadding(dp(6), 0, dp(6), 0);
+        h.setClickable(true);
+
+        LinearLayout r1 = new LinearLayout(s);
+        r1.setGravity(Gravity.BOTTOM);
+        Date now = new Date();
+        boolean is24 = android.text.format.DateFormat.is24HourFormat(s);
+        TextView time = Ui.text(s, 44, 500, Color.WHITE);
+        time.setText(new SimpleDateFormat(is24 ? "HH:mm" : "h:mm", Locale.getDefault()).format(now));
+        r1.addView(time, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        LinearLayout st = new LinearLayout(s);
+        st.setGravity(Gravity.CENTER_VERTICAL);
+        st.setPadding(0, 0, 0, dp(8));
+        hWifi = new Icon(s, Icon.WIFI, Color.WHITE);
+        st.addView(hWifi, new LinearLayout.LayoutParams(dp(17), dp(17)));
+        hCell = new Icon(s, Icon.CELL, Color.WHITE);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(dp(16), dp(16));
+        cl.leftMargin = dp(8);
+        st.addView(hCell, cl);
+        hBatIcon = new Icon(s, Icon.BATTERY, Color.WHITE);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(dp(20), dp(20));
+        bl.leftMargin = dp(10);
+        st.addView(hBatIcon, bl);
+        hBattery = Ui.text(s, 14, 600, Color.WHITE);
+        hBattery.setPadding(dp(4), 0, 0, 0);
+        st.addView(hBattery);
+        r1.addView(st);
+        h.addView(r1);
+
+        LinearLayout r2 = new LinearLayout(s);
+        r2.setGravity(Gravity.CENTER_VERTICAL);
+        TextView date = Ui.text(s, 15, 500, Color.argb(220, 255, 255, 255));
+        date.setText(new SimpleDateFormat("EEE, d MMM", Locale.getDefault()).format(now));
+        r2.addView(date, new LinearLayout.LayoutParams(0, -2, 1f));
+        FrameLayout gear = new FrameLayout(s);
+        gear.setBackground(Ui.glassStyled(s, 18, dark));
+        gear.addView(new Icon(s, Icon.GEAR, Color.WHITE), new FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER));
+        gear.setOnClickListener(v -> launch(new Intent(Settings.ACTION_SETTINGS)));
+        Ui.press(gear);
+        r2.addView(gear, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        LinearLayout.LayoutParams r2l = new LinearLayout.LayoutParams(-1, -2);
+        r2l.topMargin = dp(2);
+        h.addView(r2, r2l);
+        updateHeader();
+        return h;
+    }
+
+    private void updateHeader() {
+        if (hBattery == null) return;
+        int lvl = Ui.battery(s);
+        boolean ch = Ui.charging(s);
+        hBattery.setText(lvl >= 0 ? lvl + "%" : "");
+        hBatIcon.setKind(ch ? Icon.BOLT : Icon.BATTERY);
+        hBatIcon.setColor(ch ? 0xFF30D158 : (lvl >= 0 && lvl <= 15 ? 0xFFFF453A : Color.WHITE));
+        hWifi.setColor(wifiConnected() ? Color.WHITE : Color.argb(90, 255, 255, 255));
+        hCell.setColor(global("mobile_data") ? Color.WHITE : Color.argb(90, 255, 255, 255));
+    }
+
+    // ===================== Tetapan Pantas (kanan) =====================
 
     void openControl() {
-        if (open == CONTROL) return;
-        int m = dp(22), gap = dp(16);
-        int w = Math.min(s.screenW, dp(440)) - 2 * m;
-        int sq = (w - gap) / 2;
-        int small = (sq - gap) / 2;
+        if (open == QS) return;
+        dark = s.prefs.getBoolean(Prefs.GLASS_DARK, false);
+        int m = dp(14), gap = dp(10);
+        int w = Math.min(s.screenW, dp(460)) - 2 * m;
 
+        ScrollView sv = new ScrollView(s);
+        sv.setVerticalScrollBarEnabled(false);
         LinearLayout col = new LinearLayout(s);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setGravity(Gravity.CENTER_HORIZONTAL);
-        col.setPadding(m, s.statusH + dp(48), m, dp(24));
+        col.setPadding(m, s.statusH + dp(10), m, dp(40));
         col.setClickable(true);
         col.setOnClickListener(v -> close());
+        sv.addView(col, new ScrollView.LayoutParams(-1, -2));
 
-        // Baris 1: rangkaian + media
-        LinearLayout r1 = row(w);
-        FrameLayout conn = block(sq, sq);
-        int pad = dp(14), c = (sq - 3 * pad) / 2;
-        tWifi = new Tg(Icon.WIFI, Ui.BLUE, Color.WHITE, s.getString(R.string.tg_wifi), c, v -> toggleWifi());
-        tBt = new Tg(Icon.BT, Ui.BLUE, Color.WHITE, s.getString(R.string.tg_bt), c, v -> toggleBt());
-        tData = new Tg(Icon.CELL, Ui.GREEN, Color.WHITE, s.getString(R.string.tg_data), c, v -> toggleData());
-        tPlane = new Tg(Icon.PLANE, Ui.ORANGE, Color.WHITE, s.getString(R.string.tg_plane), c, v -> togglePlane());
-        place(conn, tPlane.v, pad, pad, c);
-        place(conn, tData.v, pad * 2 + c, pad, c);
-        place(conn, tWifi.v, pad, pad * 2 + c, c);
-        place(conn, tBt.v, pad * 2 + c, pad * 2 + c, c);
-        r1.addView(conn, lpw(sq, sq, 0));
-        r1.addView(mediaBlock(sq), lpw(sq, sq, gap));
-        col.addView(r1);
+        col.addView(header(), new LinearLayout.LayoutParams(w, -2));
 
-        // Baris 2: 4 togol + 2 slider
-        LinearLayout r2 = row(w);
-        FrameLayout grid = new FrameLayout(s);
-        tTorch = new Tg(Icon.TORCH, Color.WHITE, Color.rgb(28, 28, 30), s.getString(R.string.tg_torch), small, v -> toggleTorch());
-        tDnd = new Tg(Icon.MOON, Ui.PURPLE, Color.WHITE, s.getString(R.string.tg_dnd), small, v -> toggleDnd());
-        tDark = new Tg(Icon.DARK, Color.WHITE, Color.rgb(28, 28, 30), s.getString(R.string.tg_dark), small, v -> toggleDark());
-        tRotate = new Tg(Icon.ROTATE, Color.WHITE, 0xFFFF453A, s.getString(R.string.tg_rotate), small, v -> toggleRotate());
-        place(grid, tTorch.v, 0, 0, small);
-        place(grid, tDnd.v, small + gap, 0, small);
-        place(grid, tDark.v, 0, small + gap, small);
-        place(grid, tRotate.v, small + gap, small + gap, small);
-        r2.addView(grid, lpw(sq, sq, 0));
-        sBright = new Widgets.VSlider(s, Icon.SUN);
-        sVol = new Widgets.VSlider(s, Icon.SPEAKER);
-        sBright.setCb((v, done) -> setBrightness(v, done));
-        sVol.setCb((v, done) -> setVolume(v));
-        r2.addView(sBright, lpw(small, sq, gap));
-        r2.addView(sVol, lpw(small, sq, gap));
-        LinearLayout.LayoutParams r2l = (LinearLayout.LayoutParams) r2.getLayoutParams();
-        r2l.topMargin = gap;
-        col.addView(r2);
+        sBright = new Widgets.HSlider(s, Icon.SUN, Ui.glassStyled(s, 26, dark), Ui.accent(s, dark), Ui.onAccent(s));
+        sBright.setCb(this::setBrightness);
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(w, dp(52));
+        sl.topMargin = dp(18);
+        col.addView(sBright, sl);
 
-        // Baris 3: tindakan pantas
-        LinearLayout r3 = row(w);
-        tSaver = new Tg(Icon.BATTERY, Color.WHITE, 0xFFFFB800, s.getString(R.string.tg_saver), small, v -> toggleSaver());
-        Tg shot = new Tg(Icon.SHOT, Color.WHITE, Color.BLACK, s.getString(R.string.tg_shot), small, v -> {
+        int bw = (w - gap) / 2, bh = dp(72);
+        tWifi = new Tile(Icon.WIFI, s.getString(R.string.tg_wifi), true, bh, v -> toggleWifi(), act(Settings.Panel.ACTION_WIFI));
+        tBt = new Tile(Icon.BT, s.getString(R.string.tg_bt), true, bh, v -> toggleBt(), act(Settings.ACTION_BLUETOOTH_SETTINGS));
+        tData = new Tile(Icon.CELL, s.getString(R.string.tg_data), true, bh, v -> toggleData(), act(Settings.Panel.ACTION_INTERNET_CONNECTIVITY));
+        tDnd = new Tile(Icon.MOON, s.getString(R.string.tg_dnd), true, bh, v -> toggleDnd(), act("android.settings.ZEN_MODE_SETTINGS"));
+        col.addView(pair(w, gap, bw, bh, tWifi.v, tBt.v, gap));
+        col.addView(pair(w, gap, bw, bh, tData.v, tDnd.v, gap));
+
+        int sw = (w - 3 * gap) / 4, shh = dp(64);
+        tPlane = new Tile(Icon.PLANE, s.getString(R.string.tg_plane), false, shh, v -> togglePlane(), act(Settings.ACTION_AIRPLANE_MODE_SETTINGS));
+        tTorch = new Tile(Icon.TORCH, s.getString(R.string.tg_torch), false, shh, v -> toggleTorch(), null);
+        tDark = new Tile(Icon.DARK, s.getString(R.string.tg_dark), false, shh, v -> toggleDark(), act(Settings.ACTION_DISPLAY_SETTINGS));
+        tRotate = new Tile(Icon.ROTATE, s.getString(R.string.tg_rotate), false, shh, v -> toggleRotate(), act(Settings.ACTION_DISPLAY_SETTINGS));
+        tSaver = new Tile(Icon.BATTERY, s.getString(R.string.tg_saver), false, shh, v -> toggleSaver(), act(Settings.ACTION_BATTERY_SAVER_SETTINGS));
+        tLoc = new Tile(Icon.PIN, s.getString(R.string.tg_location), false, shh, v -> toggleLocation(), act(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+        tNfc = new Tile(Icon.NFC, s.getString(R.string.tg_nfc), false, shh, v -> toggleNfc(), act(Settings.ACTION_NFC_SETTINGS));
+        Tile shot = new Tile(Icon.SHOT, s.getString(R.string.tg_shot), false, shh, v -> {
             close();
             s.h.postDelayed(() -> s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT), 520);
-        });
-        Tg lock = new Tg(Icon.LOCK, Color.WHITE, Color.BLACK, s.getString(R.string.tg_lock), small, v -> {
+        }, null);
+        Tile lock = new Tile(Icon.LOCK, s.getString(R.string.tg_lock), false, shh, v -> {
             close();
             s.h.postDelayed(() -> s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN), 300);
-        });
-        Tg cam = new Tg(Icon.CAMERA, Color.WHITE, Color.BLACK, s.getString(R.string.tg_camera), small,
-                v -> launch(new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)));
-        r3.addView(tSaver.v, lpw(small, small, 0));
-        r3.addView(shot.v, lpw(small, small, gap));
-        r3.addView(lock.v, lpw(small, small, gap));
-        r3.addView(cam.v, lpw(small, small, gap));
-        ((LinearLayout.LayoutParams) r3.getLayoutParams()).topMargin = gap;
-        col.addView(r3);
+        }, act(Settings.ACTION_SECURITY_SETTINGS));
+        Tile cam = new Tile(Icon.CAMERA, s.getString(R.string.tg_camera), false, shh,
+                v -> launch(new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)), null);
+        Tile vol = new Tile(Icon.SPEAKER, s.getString(R.string.tg_volume), false, shh, v -> {
+            close();
+            s.h.postDelayed(() -> {
+                AudioManager am = s.getSystemService(AudioManager.class);
+                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI);
+            }, 260);
+        }, act(Settings.ACTION_SOUND_SETTINGS));
+        Tile set = new Tile(Icon.GEAR, s.getString(R.string.tg_settings), false, shh,
+                v -> launch(new Intent(Settings.ACTION_SETTINGS)), null);
+        Tile[] small = {tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc, shot, lock, cam, vol, set};
+        for (int i = 0; i < small.length; i += 4) {
+            LinearLayout r = new LinearLayout(s);
+            for (int j = 0; j < 4; j++) {
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(sw, shh);
+                if (j > 0) p.leftMargin = gap;
+                r.addView(small[i + j].v, p);
+            }
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(w, -2);
+            rl.topMargin = gap;
+            col.addView(r, rl);
+        }
 
-        // Baris 4: pautan
-        LinearLayout r4 = row(w);
-        r4.addView(chip(Icon.GEAR, s.getString(R.string.system_panel), v -> {
+        View media = mediaCard();
+        if (media != null) {
+            LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(w, dp(160));
+            ml.topMargin = dp(14);
+            col.addView(media, ml);
+        }
+
+        TextView hint = Ui.text(s, 12, 500, Color.argb(170, 255, 255, 255));
+        hint.setText(R.string.tile_hint);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(0, dp(14), 0, 0);
+        col.addView(hint, new LinearLayout.LayoutParams(w, -2));
+
+        LinearLayout r4 = new LinearLayout(s);
+        r4.addView(chip(s.getString(R.string.system_panel), v -> {
             close();
             s.h.postDelayed(() -> s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS), 300);
-        }), new LinearLayout.LayoutParams(0, dp(46), 1f));
-        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        }), new LinearLayout.LayoutParams(0, dp(44), 1f));
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(0, dp(44), 1f);
         gl.leftMargin = gap;
-        r4.addView(chip(Icon.GEAR, s.getString(R.string.cc_settings), v -> {
-            Intent i = new Intent(s, MainActivity.class);
-            launch(i);
-        }), gl);
-        ((LinearLayout.LayoutParams) r4.getLayoutParams()).topMargin = dp(22);
-        col.addView(r4);
+        r4.addView(chip(s.getString(R.string.cc_settings), v -> launch(new Intent(s, MainActivity.class))), gl);
+        LinearLayout.LayoutParams r4l = new LinearLayout.LayoutParams(w, -2);
+        r4l.topMargin = dp(12);
+        col.addView(r4, r4l);
+        col.addView(handle());
 
-        show(CONTROL, col, null);
+        show(QS, sv, sv);
         refreshControl();
         startTorchWatch();
+        fetchSsid();
     }
 
-    private LinearLayout row(int w) {
+    private LinearLayout pair(int w, int gap, int bw, int bh, View a, View b, int top) {
         LinearLayout r = new LinearLayout(s);
-        r.setOrientation(LinearLayout.HORIZONTAL);
-        r.setLayoutParams(new LinearLayout.LayoutParams(w, -2));
+        r.addView(a, new LinearLayout.LayoutParams(bw, bh));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(bw, bh);
+        p.leftMargin = gap;
+        r.addView(b, p);
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(w, -2);
+        rl.topMargin = top;
+        r.setLayoutParams(rl);
         return r;
     }
 
-    private LinearLayout.LayoutParams lpw(int w, int h, int left) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(w, h);
-        p.leftMargin = left;
-        return p;
+    private View handle() {
+        View hnd = new View(s);
+        hnd.setBackground(Ui.round(Color.argb(140, 255, 255, 255), dp(3)));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(36), dp(5));
+        p.topMargin = dp(18);
+        p.gravity = Gravity.CENTER_HORIZONTAL;
+        hnd.setLayoutParams(p);
+        return hnd;
     }
 
-    private FrameLayout block(int w, int h) {
-        FrameLayout f = new FrameLayout(s);
-        f.setBackground(Ui.glass(s, 34, 34));
-        f.setClickable(true);
-        return f;
-    }
-
-    private void place(FrameLayout parent, View v, int x, int y, int size) {
-        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(size, size);
-        p.leftMargin = x;
-        p.topMargin = y;
-        parent.addView(v, p);
-    }
-
-    private View chip(int icon, String label, View.OnClickListener l) {
-        LinearLayout c = new LinearLayout(s);
-        c.setGravity(Gravity.CENTER);
-        c.setBackground(Ui.glass(s, 23, 34));
-        Icon ic = new Icon(s, icon, Color.WHITE);
-        c.addView(ic, new LinearLayout.LayoutParams(dp(16), dp(16)));
+    private View chip(String label, View.OnClickListener l) {
         TextView t = Ui.line(s, 13, 600, Color.WHITE);
         t.setText(label);
-        t.setPadding(dp(8), 0, 0, 0);
-        c.addView(t);
-        c.setOnClickListener(l);
-        Ui.press(c);
-        return c;
+        t.setGravity(Gravity.CENTER);
+        t.setBackground(Ui.glassStyled(s, 22, dark));
+        t.setOnClickListener(l);
+        Ui.press(t);
+        return t;
     }
 
-    private View mediaBlock(int sq) {
-        LinearLayout b = new LinearLayout(s);
-        b.setOrientation(LinearLayout.VERTICAL);
-        b.setBackground(Ui.glass(s, 34, 34));
-        b.setPadding(dp(16), dp(16), dp(16), dp(10));
-        b.setClickable(true);
-        b.setOnClickListener(v -> {
+    // ===================== Kad media gaya Pixel =====================
+
+    private View mediaCard() {
+        if (s.mc == null || (s.title == null && !s.playing)) {
+            mediaCard = null;
+            return null;
+        }
+        FrameLayout card = new FrameLayout(s);
+        card.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) {
+                o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(28));
+            }
+        });
+        card.setClipToOutline(true);
+        card.setBackground(Ui.glassStyled(s, 28, dark));
+        mArt = new ImageView(s);
+        mArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        mArt.setAlpha(0.55f);
+        card.addView(mArt, new FrameLayout.LayoutParams(-1, -1));
+        View shade = new View(s);
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.argb(200, 0, 0, 0), Color.argb(90, 0, 0, 0)}));
+        card.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+
+        LinearLayout col = new LinearLayout(s);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(dp(18), dp(16), dp(14), dp(14));
+        mTitle = Ui.line(s, 18, 600, Color.WHITE);
+        mArtist = Ui.line(s, 14, 400, Color.argb(200, 255, 255, 255));
+        mArtist.setPadding(0, dp(4), 0, 0);
+        col.addView(mTitle);
+        col.addView(mArtist);
+        col.addView(new View(s), new LinearLayout.LayoutParams(1, 0, 1f));
+        LinearLayout ctr = new LinearLayout(s);
+        ctr.setGravity(Gravity.CENTER_VERTICAL);
+        mBar = new Widgets.Bar(s);
+        ctr.addView(mBar, new LinearLayout.LayoutParams(0, dp(4), 1f));
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(48), dp(48));
+        pl.leftMargin = dp(10);
+        ctr.addView(btn(Icon.PREV, 20, 0, v -> { if (s.mc != null) s.mc.getTransportControls().skipToPrevious(); }), pl);
+        FrameLayout pb = btn(Icon.PLAY, 22, Ui.accent(s, true), v -> s.togglePlay());
+        mPlay = (Icon) pb.getChildAt(0);
+        mPlay.setColor(Ui.onAccent(s));
+        ctr.addView(pb, new LinearLayout.LayoutParams(dp(54), dp(48)));
+        ctr.addView(btn(Icon.NEXT, 20, 0, v -> { if (s.mc != null) s.mc.getTransportControls().skipToNext(); }),
+                new LinearLayout.LayoutParams(dp(48), dp(48)));
+        col.addView(ctr, new LinearLayout.LayoutParams(-1, -2));
+        card.addView(col, new FrameLayout.LayoutParams(-1, -1));
+        card.setOnClickListener(v -> {
             if (s.mc != null) {
                 s.sendIntent(s.mc.getSessionActivity());
                 close();
             }
         });
-        ccArt = new ImageView(s);
-        ccArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        ccArt.setOutlineProvider(new ViewOutlineProvider() {
-            @Override
-            public void getOutline(View view, Outline o) {
-                o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(11));
-            }
-        });
-        ccArt.setClipToOutline(true);
-        b.addView(ccArt, new LinearLayout.LayoutParams(dp(46), dp(46)));
-        ccTitle = Ui.line(s, 14, 600, Color.WHITE);
-        ccTitle.setPadding(0, dp(10), 0, 0);
-        ccArtist = Ui.line(s, 13, 400, Color.argb(160, 235, 235, 245));
-        ccArtist.setPadding(0, dp(3), 0, 0);
-        b.addView(ccTitle);
-        b.addView(ccArtist);
-        View spacer = new View(s);
-        b.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
-        LinearLayout ctr = new LinearLayout(s);
-        ctr.setGravity(Gravity.CENTER_VERTICAL);
-        ctr.addView(mediaBtn(Icon.PREV, 20, v -> { if (s.mc != null) s.mc.getTransportControls().skipToPrevious(); }),
-                new LinearLayout.LayoutParams(0, dp(40), 1f));
-        FrameLayout pb = mediaBtn(Icon.PLAY, 26, v -> s.togglePlay());
-        ccPlay = (Icon) pb.getChildAt(0);
-        ctr.addView(pb, new LinearLayout.LayoutParams(0, dp(40), 1f));
-        ctr.addView(mediaBtn(Icon.NEXT, 20, v -> { if (s.mc != null) s.mc.getTransportControls().skipToNext(); }),
-                new LinearLayout.LayoutParams(0, dp(40), 1f));
-        b.addView(ctr, new LinearLayout.LayoutParams(-1, -2));
+        mediaCard = card;
         updateMedia();
-        return b;
+        return card;
     }
 
-    private FrameLayout mediaBtn(int kind, int size, View.OnClickListener l) {
+    private FrameLayout btn(int kind, int size, int bg, View.OnClickListener l) {
         FrameLayout f = new FrameLayout(s);
+        if (bg != 0) f.setBackground(Ui.round(bg, dp(18)));
         f.addView(new Icon(s, kind, Color.WHITE), new FrameLayout.LayoutParams(dp(size), dp(size), Gravity.CENTER));
         f.setOnClickListener(l);
         Ui.press(f);
@@ -520,53 +642,90 @@ final class Panels {
     }
 
     void onMediaChanged() {
-        if (open == CONTROL) updateMedia();
+        if (mediaCard != null) updateMedia();
     }
 
     private void updateMedia() {
-        if (ccTitle == null) return;
-        boolean has = s.mc != null && (s.title != null || s.playing);
-        ccTitle.setText(has ? (s.title != null ? s.title : s.getString(R.string.no_title)) : s.getString(R.string.not_playing));
-        ccArtist.setText(has && s.artist != null ? s.artist : "");
-        if (s.art != null) {
-            ccArt.setImageBitmap(s.art);
-            ccArt.setBackground(null);
-        } else {
-            ccArt.setImageDrawable(null);
-            ccArt.setBackground(Ui.round(Color.argb(60, 255, 255, 255), dp(11)));
-        }
-        ccPlay.setKind(s.playing ? Icon.PAUSE : Icon.PLAY);
+        if (mTitle == null) return;
+        mTitle.setText(s.title != null ? s.title : s.getString(R.string.no_title));
+        mArtist.setText(s.artist != null ? s.artist : "");
+        mArt.setImageBitmap(s.art);
+        mPlay.setKind(s.playing ? Icon.PAUSE : Icon.PLAY);
+        long d = s.duration();
+        mBar.setValue(d > 0 ? (float) s.position() / d : 0);
     }
 
-    // ---- keadaan ----
+    // ===================== Keadaan =====================
 
     private boolean global(String key) {
         return Settings.Global.getInt(s.getContentResolver(), key, 0) != 0;
     }
 
+    private boolean wifiConnected() {
+        try {
+            ConnectivityManager cm = s.getSystemService(ConnectivityManager.class);
+            for (Network n : cm.getAllNetworks()) {
+                NetworkCapabilities c = cm.getNetworkCapabilities(n);
+                if (c != null && c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private String carrier() {
+        try {
+            String n = s.getSystemService(TelephonyManager.class).getNetworkOperatorName();
+            return TextUtils.isEmpty(n) ? null : n;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void fetchSsid() {
+        if (!Shell.granted()) return;
+        Shell.run("cmd wifi status", (ok, out) -> {
+            Matcher m = Pattern.compile("SSID: \"([^\"]+)\"").matcher(out);
+            ssid = m.find() ? m.group(1) : null;
+            refreshControl();
+        });
+    }
+
     private void refreshControl() {
-        if (open != CONTROL || tWifi == null) return;
-        tWifi.set(global("wifi_on"));
-        tBt.set(global("bluetooth_on"));
-        tData.set(global("mobile_data"));
-        tPlane.set(global(Settings.Global.AIRPLANE_MODE_ON));
-        tTorch.set(torchOn);
+        updateHeader();
+        if (open != QS || tWifi == null || tData == null) return;
+        boolean wifi = global("wifi_on");
+        boolean conn = wifiConnected();
+        tWifi.set(wifi, !wifi ? s.getString(R.string.st_off)
+                : conn ? (ssid != null ? ssid : s.getString(R.string.st_connected)) : s.getString(R.string.st_not_connected));
+        tBt.set(global("bluetooth_on"), null);
+        boolean data = global("mobile_data");
+        String car = carrier();
+        tData.set(data, data && car != null ? car : null);
         NotificationManager nm = s.getSystemService(NotificationManager.class);
-        tDnd.set(nm.getCurrentInterruptionFilter() > NotificationManager.INTERRUPTION_FILTER_ALL);
-        tDark.set(isDark());
-        tRotate.set(Settings.System.getInt(s.getContentResolver(), Settings.System.ACCELEROMETER_ROTATION, 1) == 0);
-        tSaver.set(s.getSystemService(PowerManager.class).isPowerSaveMode());
+        tDnd.set(nm.getCurrentInterruptionFilter() > NotificationManager.INTERRUPTION_FILTER_ALL, null);
+        tPlane.set(global(Settings.Global.AIRPLANE_MODE_ON), null);
+        tTorch.set(torchOn, null);
+        tDark.set(isDark(), null);
+        tRotate.set(Settings.System.getInt(s.getContentResolver(), Settings.System.ACCELEROMETER_ROTATION, 1) == 0, null);
+        tSaver.set(s.getSystemService(PowerManager.class).isPowerSaveMode(), null);
+        tLoc.set(s.getSystemService(LocationManager.class).isLocationEnabled(), null);
+        NfcAdapter nfc = NfcAdapter.getDefaultAdapter(s);
+        tNfc.set(nfc != null && nfc.isEnabled(), null);
         int br = Settings.System.getInt(s.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, 128);
         sBright.setValue(br / 255f);
-        AudioManager am = s.getSystemService(AudioManager.class);
-        int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        sVol.setValue(max > 0 ? (float) am.getStreamVolume(AudioManager.STREAM_MUSIC) / max : 0);
-        updateMedia();
+        if (mediaCard != null) updateMedia();
     }
 
     private void later() {
-        s.h.postDelayed(this::refreshControl, 700);
-        s.h.postDelayed(this::refreshControl, 1800);
+        s.h.postDelayed(this::refreshAll, 700);
+        s.h.postDelayed(this::refreshAll, 1800);
+        s.h.postDelayed(this::fetchSsid, 3500);
+    }
+
+    private void refreshAll() {
+        if (open == QS) refreshControl();
+        else if (open == SHADE) refreshShadeTiles();
     }
 
     private boolean isDark() {
@@ -587,26 +746,26 @@ final class Panels {
 
     private void toggleWifi() {
         boolean on = global("wifi_on");
-        tWifi.set(!on);
-        shellOr("svc wifi " + (on ? "disable" : "enable"), new Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY));
+        tWifi.set(!on, null);
+        shellOr("svc wifi " + (on ? "disable" : "enable"), new Intent(Settings.Panel.ACTION_WIFI));
     }
 
     private void toggleBt() {
         boolean on = global("bluetooth_on");
-        tBt.set(!on);
+        tBt.set(!on, null);
         String a = on ? "disable" : "enable";
         shellOr("cmd bluetooth_manager " + a + " || svc bluetooth " + a, new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));
     }
 
     private void toggleData() {
         boolean on = global("mobile_data");
-        tData.set(!on);
+        tData.set(!on, null);
         shellOr("svc data " + (on ? "disable" : "enable"), new Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY));
     }
 
     private void togglePlane() {
         boolean on = global(Settings.Global.AIRPLANE_MODE_ON);
-        tPlane.set(!on);
+        tPlane.set(!on, null);
         shellOr("cmd connectivity airplane-mode " + (on ? "disable" : "enable"),
                 new Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS));
     }
@@ -614,7 +773,7 @@ final class Panels {
     private void toggleDnd() {
         NotificationManager nm = s.getSystemService(NotificationManager.class);
         boolean on = nm.getCurrentInterruptionFilter() > NotificationManager.INTERRUPTION_FILTER_ALL;
-        tDnd.set(!on);
+        tDnd.set(!on, null);
         if (nm.isNotificationPolicyAccessGranted()) {
             nm.setInterruptionFilter(on ? NotificationManager.INTERRUPTION_FILTER_ALL
                     : NotificationManager.INTERRUPTION_FILTER_PRIORITY);
@@ -626,13 +785,13 @@ final class Panels {
 
     private void toggleDark() {
         boolean on = isDark();
-        tDark.set(!on);
+        tDark.set(!on, null);
         shellOr("cmd uimode night " + (on ? "no" : "yes"), new Intent(Settings.ACTION_DISPLAY_SETTINGS));
     }
 
     private void toggleRotate() {
         boolean locked = Settings.System.getInt(s.getContentResolver(), Settings.System.ACCELEROMETER_ROTATION, 1) == 0;
-        tRotate.set(!locked);
+        tRotate.set(!locked, null);
         if (Settings.System.canWrite(s)) {
             Settings.System.putInt(s.getContentResolver(), Settings.System.ACCELEROMETER_ROTATION, locked ? 1 : 0);
             later();
@@ -643,8 +802,21 @@ final class Panels {
 
     private void toggleSaver() {
         boolean on = s.getSystemService(PowerManager.class).isPowerSaveMode();
-        tSaver.set(!on);
+        tSaver.set(!on, null);
         shellOr("cmd power set-mode " + (on ? 0 : 1), new Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS));
+    }
+
+    private void toggleLocation() {
+        boolean on = s.getSystemService(LocationManager.class).isLocationEnabled();
+        tLoc.set(!on, null);
+        shellOr("cmd location set-location-enabled " + (!on), new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+    }
+
+    private void toggleNfc() {
+        NfcAdapter nfc = NfcAdapter.getDefaultAdapter(s);
+        boolean on = nfc != null && nfc.isEnabled();
+        tNfc.set(!on, null);
+        shellOr("svc nfc " + (on ? "disable" : "enable"), new Intent(Settings.ACTION_NFC_SETTINGS));
     }
 
     private void toggleTorch() {
@@ -675,7 +847,7 @@ final class Panels {
                     public void onTorchModeChanged(String cameraId, boolean enabled) {
                         if (cameraId.equals(torchId)) {
                             torchOn = enabled;
-                            if (tTorch != null) tTorch.set(enabled);
+                            if (tTorch != null && open != NONE) tTorch.set(enabled, null);
                         }
                     }
                 };
@@ -691,8 +863,6 @@ final class Panels {
             torchCb = null;
         }
     }
-
-    private boolean askedWrite;
 
     private void setBrightness(float v, boolean done) {
         int val = Math.max(1, Math.round(v * 255));
@@ -710,75 +880,99 @@ final class Panels {
         }
     }
 
-    private void setVolume(float v) {
-        AudioManager am = s.getSystemService(AudioManager.class);
-        int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        try { am.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(v * max), 0); } catch (Exception ignored) {}
-    }
-
-    // ===================== Pusat Pemberitahuan =====================
+    // ===================== Panel pemberitahuan (kiri) =====================
 
     void openNotifications() {
-        if (open == NOTIFS) return;
-        int m = dp(14);
+        if (open == SHADE) return;
+        dark = s.prefs.getBoolean(Prefs.GLASS_DARK, false);
+        tData = null;
+        int m = dp(14), gap = dp(8);
+        int w = Math.min(s.screenW, dp(460)) - 2 * m;
+
         ScrollView sv = new ScrollView(s);
         sv.setVerticalScrollBarEnabled(false);
-        sv.setOverScrollMode(View.OVER_SCROLL_ALWAYS);
-        sv.setClipToPadding(false);
         LinearLayout col = new LinearLayout(s);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(m, s.statusH + dp(30), m, dp(60));
+        col.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.setPadding(m, s.statusH + dp(10), m, dp(60));
         col.setClickable(true);
         col.setOnClickListener(v -> close());
         sv.addView(col, new ScrollView.LayoutParams(-1, -2));
 
-        Date now = new Date();
-        boolean is24 = android.text.format.DateFormat.is24HourFormat(s);
-        TextView time = Ui.text(s, 84, 600, Color.WHITE);
-        time.setText(new SimpleDateFormat(is24 ? "HH:mm" : "h:mm", Locale.getDefault()).format(now));
-        time.setGravity(Gravity.CENTER);
-        time.setLetterSpacing(-0.03f);
-        TextView date = Ui.text(s, 18, 500, Color.argb(220, 255, 255, 255));
-        date.setText(new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(now));
-        date.setGravity(Gravity.CENTER);
-        date.setPadding(0, 0, 0, dp(6));
-        col.addView(date, new LinearLayout.LayoutParams(-1, -2));
-        col.addView(time, new LinearLayout.LayoutParams(-1, -2));
+        col.addView(header(), new LinearLayout.LayoutParams(w, -2));
 
-        LinearLayout head = new LinearLayout(s);
-        head.setGravity(Gravity.CENTER_VERTICAL);
-        head.setPadding(dp(6), dp(30), 0, dp(12));
-        TextView ht = Ui.text(s, 20, 700, Color.WHITE);
-        ht.setText(R.string.notification_center);
-        head.addView(ht, new LinearLayout.LayoutParams(0, -2, 1f));
-        TextView clear = Ui.text(s, 13, 600, Color.WHITE);
-        clear.setText(R.string.clear_all);
-        clear.setPadding(dp(14), dp(8), dp(14), dp(8));
-        clear.setBackground(Ui.glass(s, 16, 40));
-        clear.setOnClickListener(v -> {
+        int tw = (w - 5 * gap) / 6, th = dp(52);
+        tWifi = new Tile(Icon.WIFI, s.getString(R.string.tg_wifi), false, th, v -> toggleWifi(), act(Settings.Panel.ACTION_WIFI));
+        tBt = new Tile(Icon.BT, s.getString(R.string.tg_bt), false, th, v -> toggleBt(), act(Settings.ACTION_BLUETOOTH_SETTINGS));
+        tDnd = new Tile(Icon.MOON, s.getString(R.string.tg_dnd), false, th, v -> toggleDnd(), act("android.settings.ZEN_MODE_SETTINGS"));
+        tTorch = new Tile(Icon.TORCH, s.getString(R.string.tg_torch), false, th, v -> toggleTorch(), null);
+        tDark = new Tile(Icon.DARK, s.getString(R.string.tg_dark), false, th, v -> toggleDark(), act(Settings.ACTION_DISPLAY_SETTINGS));
+        tRotate = new Tile(Icon.ROTATE, s.getString(R.string.tg_rotate), false, th, v -> toggleRotate(), act(Settings.ACTION_DISPLAY_SETTINGS));
+        LinearLayout qr = new LinearLayout(s);
+        Tile[] q = {tWifi, tBt, tDnd, tTorch, tDark, tRotate};
+        for (int i = 0; i < q.length; i++) {
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(tw, th);
+            if (i > 0) p.leftMargin = gap;
+            qr.addView(q[i].v, p);
+        }
+        LinearLayout.LayoutParams ql = new LinearLayout.LayoutParams(w, -2);
+        ql.topMargin = dp(16);
+        col.addView(qr, ql);
+
+        View media = mediaCard();
+        if (media != null) {
+            LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(w, dp(160));
+            ml.topMargin = dp(14);
+            col.addView(media, ml);
+        }
+
+        ncList = new LinearLayout(s);
+        ncList.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(w, -2);
+        nl.topMargin = dp(14);
+        col.addView(ncList, nl);
+
+        LinearLayout foot = new LinearLayout(s);
+        foot.addView(chip(s.getString(R.string.manage), v -> launch(new Intent("android.settings.NOTIFICATION_SETTINGS"))),
+                new LinearLayout.LayoutParams(dp(110), dp(40)));
+        foot.addView(new View(s), new LinearLayout.LayoutParams(0, 1, 1f));
+        foot.addView(chip(s.getString(R.string.clear_all), v -> {
             NotifListener l = NotifListener.inst;
             if (l != null) {
                 try { l.cancelAllNotifications(); } catch (Exception ignored) {}
             }
             s.h.postDelayed(this::fillNotifications, 350);
-        });
-        Ui.press(clear);
-        head.addView(clear);
-        col.addView(head);
+        }), new LinearLayout.LayoutParams(dp(130), dp(40)));
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(w, -2);
+        fl.topMargin = dp(12);
+        col.addView(foot, fl);
+        col.addView(handle());
 
-        ncList = new LinearLayout(s);
-        ncList.setOrientation(LinearLayout.VERTICAL);
-        col.addView(ncList, new LinearLayout.LayoutParams(-1, -2));
+        open = SHADE;
         fillNotifications();
-        show(NOTIFS, sv, sv);
+        show(SHADE, sv, sv);
+        refreshShadeTiles();
+        startTorchWatch();
+    }
+
+    private void refreshShadeTiles() {
+        updateHeader();
+        if (open != SHADE || tWifi == null) return;
+        tWifi.set(global("wifi_on"), null);
+        tBt.set(global("bluetooth_on"), null);
+        NotificationManager nm = s.getSystemService(NotificationManager.class);
+        tDnd.set(nm.getCurrentInterruptionFilter() > NotificationManager.INTERRUPTION_FILTER_ALL, null);
+        tTorch.set(torchOn, null);
+        tDark.set(isDark(), null);
+        tRotate.set(Settings.System.getInt(s.getContentResolver(), Settings.System.ACCELEROMETER_ROTATION, 1) == 0, null);
     }
 
     void onNotificationsChanged() {
-        if (open == NOTIFS) s.h.post(this::fillNotifications);
+        if (open == SHADE) s.h.post(this::fillNotifications);
     }
 
     private void fillNotifications() {
-        if (ncList == null) return;
+        if (ncList == null || open != SHADE) return;
         ncList.removeAllViews();
         NotifListener l = NotifListener.inst;
         List<StatusBarNotification> list = new ArrayList<>();
@@ -789,26 +983,26 @@ final class Panels {
             } catch (Exception ignored) {
             }
         }
-        list.removeIf(n -> n.isOngoing()
-                || (n.getNotification().flags & Notification.FLAG_GROUP_SUMMARY) != 0
-                || n.getPackageName().equals(s.getPackageName()));
+        list.removeIf(x -> x.isOngoing()
+                || (x.getNotification().flags & Notification.FLAG_GROUP_SUMMARY) != 0
+                || x.getPackageName().equals(s.getPackageName()));
         list.sort((a, b) -> Long.compare(b.getPostTime(), a.getPostTime()));
 
         if (list.isEmpty()) {
-            TextView e = Ui.text(s, 15, 500, Color.argb(160, 255, 255, 255));
+            TextView e = Ui.text(s, 15, 500, Color.argb(190, 255, 255, 255));
             e.setText(R.string.no_notifications);
             e.setGravity(Gravity.CENTER);
-            e.setPadding(0, dp(40), 0, dp(40));
+            e.setPadding(0, dp(26), 0, dp(26));
+            e.setBackground(Ui.glassStyled(s, 28, dark));
             ncList.addView(e, new LinearLayout.LayoutParams(-1, -2));
             return;
         }
-        int count = 0;
-        for (StatusBarNotification sbn : list) {
-            if (++count > 40) break;
-            View card = card(sbn);
+        int total = Math.min(40, list.size());
+        for (int i = 0; i < total; i++) {
+            View card = card(list.get(i), i == 0, i == total - 1);
             if (card == null) continue;
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-            p.bottomMargin = dp(10);
+            p.bottomMargin = dp(3);
             ncList.addView(card, p);
         }
     }
@@ -823,48 +1017,56 @@ final class Panels {
         }
     }
 
-    private View card(final StatusBarNotification sbn) {
-        Notification n = sbn.getNotification();
+    /** Kad bertindan gaya Pixel: sudut besar di atas/bawah kumpulan, sudut kecil di tengah. */
+    private Drawable stackBg(boolean first, boolean last) {
+        float big = dp(28), small = dp(6);
+        float t = first ? big : small, b = last ? big : small;
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadii(new float[]{t, t, t, t, b, b, b, b});
+        if (dark) {
+            g.setColor(Color.argb(125, 18, 18, 22));
+            g.setStroke(Math.max(1, dp(0.8f)), Color.argb(40, 255, 255, 255));
+        } else {
+            g.setColor(Color.argb(48, 255, 255, 255));
+            g.setStroke(Math.max(1, dp(0.8f)), Color.argb(70, 255, 255, 255));
+        }
+        return g;
+    }
+
+    private View card(final StatusBarNotification sbn, boolean first, boolean last) {
+        final Notification n = sbn.getNotification();
         CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
         CharSequence text = n.extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
         if (TextUtils.isEmpty(text)) text = n.extras.getCharSequence(Notification.EXTRA_TEXT);
         if (TextUtils.isEmpty(title) && TextUtils.isEmpty(text)) return null;
 
         LinearLayout c = new LinearLayout(s);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(Ui.glass(s, 24, 40));
-        c.setPadding(dp(14), dp(12), dp(14), dp(14));
+        c.setGravity(Gravity.TOP);
+        c.setBackground(stackBg(first, last));
+        c.setPadding(dp(14), dp(14), dp(16), dp(14));
 
-        LinearLayout top = new LinearLayout(s);
-        top.setGravity(Gravity.CENTER_VERTICAL);
         ImageView ic = new ImageView(s);
-        Drawable d = s.appIcon(sbn.getPackageName());
-        ic.setImageDrawable(d);
-        top.addView(ic, new LinearLayout.LayoutParams(dp(20), dp(20)));
-        TextView app = Ui.line(s, 13, 500, Color.argb(190, 255, 255, 255));
-        app.setText(appName(sbn.getPackageName()));
-        app.setPadding(dp(8), 0, dp(8), 0);
-        top.addView(app, new LinearLayout.LayoutParams(0, -2, 1f));
-        TextView when = Ui.text(s, 12, 500, Color.argb(150, 255, 255, 255));
-        long age = System.currentTimeMillis() - sbn.getPostTime();
-        when.setText(age < 60_000 ? s.getString(R.string.now)
-                : DateUtils.getRelativeTimeSpanString(sbn.getPostTime(), System.currentTimeMillis(),
-                DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE));
-        top.addView(when);
-        c.addView(top);
+        ic.setImageDrawable(s.appIcon(sbn.getPackageName()));
+        c.addView(ic, new LinearLayout.LayoutParams(dp(36), dp(36)));
 
-        LinearLayout body = new LinearLayout(s);
-        body.setGravity(Gravity.CENTER_VERTICAL);
-        body.setPadding(0, dp(8), 0, 0);
         LinearLayout tc = new LinearLayout(s);
         tc.setOrientation(LinearLayout.VERTICAL);
+        tc.setPadding(dp(12), 0, 0, 0);
+        TextView app = Ui.line(s, 12, 500, Color.argb(200, 255, 255, 255));
+        long age = System.currentTimeMillis() - sbn.getPostTime();
+        CharSequence when = age < 60_000 ? s.getString(R.string.now)
+                : DateUtils.getRelativeTimeSpanString(sbn.getPostTime(), System.currentTimeMillis(),
+                DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE);
+        app.setText(appName(sbn.getPackageName()) + " • " + when);
+        tc.addView(app);
         if (!TextUtils.isEmpty(title)) {
             TextView t = Ui.line(s, 15, 600, Color.WHITE);
             t.setText(title);
+            t.setPadding(0, dp(4), 0, 0);
             tc.addView(t);
         }
         if (!TextUtils.isEmpty(text)) {
-            TextView t = Ui.text(s, 14, 400, Color.argb(215, 255, 255, 255));
+            TextView t = Ui.text(s, 14, 400, Color.argb(220, 255, 255, 255));
             t.setText(text);
             t.setMaxLines(4);
             t.setEllipsize(TextUtils.TruncateAt.END);
@@ -872,7 +1074,8 @@ final class Panels {
             t.setPadding(0, dp(3), 0, 0);
             tc.addView(t);
         }
-        body.addView(tc, new LinearLayout.LayoutParams(0, -2, 1f));
+        c.addView(tc, new LinearLayout.LayoutParams(0, -2, 1f));
+
         if (n.getLargeIcon() != null) {
             try {
                 ImageView li = new ImageView(s);
@@ -881,17 +1084,16 @@ final class Panels {
                 li.setOutlineProvider(new ViewOutlineProvider() {
                     @Override
                     public void getOutline(View view, Outline o) {
-                        o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(10));
+                        o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(20));
                     }
                 });
                 li.setClipToOutline(true);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(40), dp(40));
                 lp.leftMargin = dp(10);
-                body.addView(li, lp);
+                c.addView(li, lp);
             } catch (Exception ignored) {
             }
         }
-        c.addView(body);
 
         c.setOnClickListener(v -> {
             s.sendIntent(n.contentIntent);
@@ -913,7 +1115,6 @@ final class Panels {
                     st[0] = e.getRawX();
                     st[1] = e.getRawY();
                     drag[0] = false;
-                    view.animate().scaleX(0.98f).scaleY(0.98f).setDuration(100).start();
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dx = e.getRawX() - st[0], dy = e.getRawY() - st[1];
@@ -930,7 +1131,6 @@ final class Panels {
                 }
                 case MotionEvent.ACTION_UP: {
                     float dx = e.getRawX() - st[0], dy = e.getRawY() - st[1];
-                    view.animate().scaleX(1f).scaleY(1f).setDuration(160).start();
                     if (drag[0]) {
                         if (Math.abs(dx) > view.getWidth() * 0.33f) {
                             view.animate().translationX(Math.signum(dx) * view.getWidth()).alpha(0f).setDuration(180)
@@ -950,7 +1150,7 @@ final class Panels {
                     return true;
                 }
                 case MotionEvent.ACTION_CANCEL:
-                    view.animate().translationX(0).alpha(1f).scaleX(1f).scaleY(1f).setDuration(200).start();
+                    view.animate().translationX(0).alpha(1f).setDuration(200).start();
                     return true;
             }
             return false;

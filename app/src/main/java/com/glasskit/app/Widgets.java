@@ -142,4 +142,71 @@ final class Widgets {
             if (value > 0) c.drawRoundRect(0, 0, Math.max(h, w * value), h, r, r, fill);
         }
     }
+
+    /** Slider mendatar tebal gaya Pixel (kecerahan). */
+    static class HSlider extends View {
+        interface Cb { void on(float v, boolean done); }
+
+        private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path clip = new Path();
+        private final Icon icon;
+        private android.graphics.drawable.Drawable track;
+        private float value = 0.5f;
+        private int iconOn;
+        private Cb cb;
+
+        HSlider(Context c, int iconKind, android.graphics.drawable.Drawable track, int fillColor, int iconOn) {
+            super(c);
+            this.track = track;
+            this.iconOn = iconOn;
+            fill.setColor(fillColor);
+            icon = new Icon(c, iconKind, Color.WHITE);
+        }
+
+        void setCb(Cb cb) { this.cb = cb; }
+
+        void setValue(float v) {
+            value = Math.max(0f, Math.min(1f, v));
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            int w = getWidth(), h = getHeight();
+            float r = h / 2f;
+            track.setBounds(0, 0, w, h);
+            track.draw(c);
+            clip.reset();
+            clip.addRoundRect(new RectF(0, 0, w, h), r, r, Path.Direction.CW);
+            c.save();
+            c.clipPath(clip);
+            float fw = Math.max(h, w * value);
+            c.drawRoundRect(0, 0, fw, h, r, r, fill);
+            c.restore();
+            float is = h * 0.46f;
+            int save = c.save();
+            c.translate(h * 0.3f, (h - is) / 2f);
+            icon.layout(0, 0, (int) is, (int) is);
+            icon.setColor(fw > h * 0.3f + is ? iconOn : Color.WHITE);
+            icon.draw(c);
+            c.restoreToCount(save);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent e) {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                case MotionEvent.ACTION_MOVE:
+                    setValue(e.getX() / getWidth());
+                    if (cb != null) cb.on(value, false);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (cb != null) cb.on(value, true);
+                    return true;
+            }
+            return false;
+        }
+    }
 }

@@ -39,6 +39,63 @@ final class Ui {
         return new LayerDrawable(new Drawable[]{fill, sheen});
     }
 
+    /** Kaca ikut gaya pilihan: jernih (putih lut sinar) atau gelap (hitam lut sinar). */
+    static Drawable glassStyled(Context c, float radiusDp, boolean dark) {
+        if (!dark) return glass(c, radiusDp, 44);
+        float r = dp(c, radiusDp);
+        GradientDrawable fill = new GradientDrawable();
+        fill.setCornerRadius(r);
+        fill.setColor(Color.argb(120, 18, 18, 22));
+        fill.setStroke(Math.max(1, dp(c, 0.8f)), Color.argb(46, 255, 255, 255));
+        GradientDrawable sheen = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(26, 255, 255, 255), Color.argb(0, 255, 255, 255), Color.argb(0, 255, 255, 255)});
+        sheen.setCornerRadius(r);
+        return new LayerDrawable(new Drawable[]{fill, sheen});
+    }
+
+    /** Warna aksen dari wallpaper (Material You). */
+    static int accent(Context c, boolean dark) {
+        try {
+            return c.getColor(dark ? android.R.color.system_accent1_200 : android.R.color.system_accent1_100);
+        } catch (Exception e) {
+            return 0xFFA8C7FA;
+        }
+    }
+
+    static int onAccent(Context c) {
+        try {
+            return c.getColor(android.R.color.system_accent1_900);
+        } catch (Exception e) {
+            return 0xFF062E6F;
+        }
+    }
+
+    static android.graphics.drawable.BitmapDrawable iconDrawable(Context c, int kind, int color, int bg, int sizePx) {
+        Bitmap b = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas cv = new android.graphics.Canvas(b);
+        if (bg != 0) {
+            android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            p.setColor(bg);
+            cv.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, p);
+        }
+        Icon ic = new Icon(c, kind, color);
+        int pad = bg != 0 ? sizePx / 4 : 0;
+        ic.layout(0, 0, sizePx - 2 * pad, sizePx - 2 * pad);
+        cv.translate(pad, pad);
+        ic.draw(cv);
+        return new android.graphics.drawable.BitmapDrawable(c.getResources(), b);
+    }
+
+    static int battery(Context c) {
+        android.os.BatteryManager bm = c.getSystemService(android.os.BatteryManager.class);
+        return bm == null ? -1 : bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);
+    }
+
+    static boolean charging(Context c) {
+        android.os.BatteryManager bm = c.getSystemService(android.os.BatteryManager.class);
+        return bm != null && bm.isCharging();
+    }
+
     static GradientDrawable round(int color, float radiusPx) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(color);

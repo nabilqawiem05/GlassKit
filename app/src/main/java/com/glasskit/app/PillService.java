@@ -5,7 +5,13 @@ import android.animation.ValueAnimator;
 import android.app.ActivityOptions;
 import android.app.Notification;
 import android.app.PendingIntent;
+import android.app.KeyguardManager;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.graphics.Canvas;
+import android.os.PowerManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
@@ -86,6 +92,34 @@ public class PillService extends AccessibilityService
     int artColor = Color.WHITE;
     private long holdMusicUntil, duration;
 
+    private LockPatch patch;
+    private boolean registered;
+    private final BroadcastReceiver sysRx = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            String a = i.getAction();
+            if (a == null) return;
+            switch (a) {
+                case Intent.ACTION_SCREEN_ON:
+                    if (patch != null) patch.screenOn();
+                    break;
+                case Intent.ACTION_SCREEN_OFF:
+                    if (patch != null) patch.hide(false);
+                    if (panels != null) panels.close();
+                    break;
+                case Intent.ACTION_USER_PRESENT:
+                    if (patch != null) patch.hide(true);
+                    break;
+                case Intent.ACTION_TIME_TICK:
+                    if (patch != null) patch.tick();
+                    break;
+                case Intent.ACTION_POWER_CONNECTED:
+                    h.postDelayed(PillService.this::showCharging, 600);
+                    break;
+            }
+        }
+    };
+
     private PendingIntent notiIntent;
     private boolean notiActive;
     private final Set<String> seenOnce = new HashSet<>();
@@ -123,6 +157,15 @@ public class PillService extends AccessibilityService
         buildViews();
         panels = new Panels(this);
         panels.updateEdges();
+        patch = new LockPatch();
+        IntentFilter f = new IntentFilter();
+        f.addAction(Intent.ACTION_SCREEN_ON);
+        f.addAction(Intent.ACTION_SCREEN_OFF);
+        f.addAction(Intent.ACTION_USER_PRESENT);
+        f.addAction(Intent.ACTION_TIME_TICK);
+        f.addAction(Intent.ACTION_POWER_CONNECTED);
+        registerReceiver(sysRx, f, Context.RECEIVER_EXPORTED);
+        registered = true;
         initMedia();
         refresh();
     }
@@ -143,6 +186,11 @@ public class PillService extends AccessibilityService
             try { msm.removeOnActiveSessionsChangedListener(sessL); } catch (Exception ignored) {}
         }
         if (panels != null) panels.destroy();
+        if (patch != null) patch.hide(false);
+        if (registered) {
+            try { unregisterReceiver(sysRx); } catch (Exception ignored) {}
+            registered = false;
+        }
         detach();
         super.onDestroy();
     }
@@ -669,8 +717,11 @@ public class PillService extends AccessibilityService
             mBar.setColor(Color.WHITE);
         }
         if (panels != null) panels.onMediaChanged();
+        MusicWidget.push(this);
         refresh();
     }
+
+    long duration() { return duration; }
 
     long position() {
         if (mc == null) return 0;
@@ -694,6 +745,108 @@ public class PillService extends AccessibilityService
             mBar.setValue(0);
             mElapsed.setText("");
             mRemain.setText("");
+        }
+    }
+
+    private void showCharging() {
+        if (prefs == null || !prefs.getBoolean(Prefs.PILL_ON, true)) return;
+        int lvl = Ui.battery(this);
+        Drawable d = Ui.iconDrawable(this, com.glasskit.app.Icon.BOLT, Color.BLACK, 0xFF30D158, dp(42));
+        show(d, d, getString(R.string.charging), lvl >= 0 ? lvl + "%" : "", null);
+    }
+
+    /**
+     * Tutup jam stock lock screen dengan salinan wallpaper GlassKit (piksel sama),
+     * hanya ketika lock screen dipaparkan. Hilang bila skrin disentuh.
+     */
+    private class LockPatch {
+        private View v;
+        private Bitmap frame;
+        private boolean dismissed;
+
+        void screenOn() {
+            dismissed = false;
+            h.postDelayed(this::maybeShow, 120);
+        }
+
+        private boolean onLock() {
+            KeyguardManager km = getSystemService(KeyguardManager.class);
+            PowerManager pm = getSystemService(PowerManager.class);
+            return km != null && km.isKeyguardLocked() && pm != null && pm.isInteractive();
+        }
+
+        void maybeShow() {
+            if (dismissed || v != null || !prefs.getBoolean(Prefs.HIDE_STOCK, false) || !onLock()) return;
+            render();
+            if (frame == null) return;
+            final int top = statusH;
+            int hgt = dp(prefs.getInt(Prefs.HIDE_H, 130));
+            v = new View(PillService.this) {
+                @Override
+                protected void onDraw(Canvas c) {
+                    if (frame != null) c.drawBitmap(frame, 0, -top, null);
+                }
+            };
+            WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT, hgt,
+                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                            | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                    PixelFormat.TRANSLUCENT);
+            p.gravity = Gravity.TOP | Gravity.LEFT;
+            p.x = 0;
+            p.y = top;
+            p.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+            p.setTitle("GlassKitLockPatch");
+            v.setOnTouchListener((x, e) -> {
+                if (e.getActionMasked() == MotionEvent.ACTION_DOWN || e.getActionMasked() == MotionEvent.ACTION_OUTSIDE) {
+                    dismissed = true;
+                    hide(true);
+                }
+                return false;
+            });
+            try {
+                wm.addView(v, p);
+            } catch (Exception e) {
+                v = null;
+            }
+        }
+
+        private void render() {
+            try {
+                Bitmap bg = DepthRenderer.load(DepthRenderer.bgFile(PillService.this));
+                if (bg == null) { frame = null; return; }
+                Bitmap fg = DepthRenderer.load(DepthRenderer.fgFile(PillService.this));
+                if (frame == null || frame.getWidth() != screenW || frame.getHeight() != screenH) {
+                    frame = Bitmap.createBitmap(screenW, screenH, Bitmap.Config.ARGB_8888);
+                }
+                DepthRenderer.draw(PillService.this, new Canvas(frame), screenW, screenH, bg, fg, prefs, true);
+            } catch (Throwable t) {
+                frame = null;
+            }
+        }
+
+        void tick() {
+            if (v != null) {
+                render();
+                v.invalidate();
+            }
+        }
+
+        void hide(boolean fade) {
+            final View old = v;
+            v = null;
+            if (old == null) return;
+            if (fade) {
+                old.animate().alpha(0f).setDuration(180).withEndAction(() -> {
+                    try { wm.removeViewImmediate(old); } catch (Exception ignored) {}
+                }).start();
+            } else {
+                try { wm.removeViewImmediate(old); } catch (Exception ignored) {}
+            }
         }
     }
 

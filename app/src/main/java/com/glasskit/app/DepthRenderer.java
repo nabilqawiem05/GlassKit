@@ -4,10 +4,17 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
+import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.text.format.DateFormat;
 
@@ -16,9 +23,15 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-/** Lukis: wallpaper -> jam -> subjek (supaya jam nampak di belakang subjek). */
+/**
+ * Lukis: wallpaper -> jam -> subjek (supaya jam nampak di belakang subjek).
+ * Jam gaya liquid glass: isi kabur dari wallpaper, kilauan, dan bingkai cahaya.
+ * Mesti dilukis atas kanvas perisian (Bitmap) kerana guna BlurMaskFilter.
+ */
 public final class DepthRenderer {
     private DepthRenderer() {}
+
+    private static Bitmap blurSrc, blurOut;
 
     public static File bgFile(Context c) { return new File(c.getFilesDir(), "bg.jpg"); }
     public static File fgFile(Context c) { return new File(c.getFilesDir(), "fg.png"); }
@@ -34,58 +47,167 @@ public final class DepthRenderer {
 
     public static Typeface font(int idx) {
         switch (idx) {
-            case 1: return Typeface.create(Typeface.SANS_SERIF, 200, false);
+            case 1: return Typeface.create(Typeface.SANS_SERIF, 300, false);
             case 2: return Typeface.create(Typeface.SERIF, Typeface.BOLD);
             case 3: return Typeface.create(Typeface.MONOSPACE, 700, false);
             default: return Typeface.create(Typeface.SANS_SERIF, 900, false);
         }
     }
 
-    private static RectF centerCrop(Bitmap b, int w, int h) {
+    static RectF centerCrop(Bitmap b, int w, int h) {
         float s = Math.max((float) w / b.getWidth(), (float) h / b.getHeight());
         float dw = b.getWidth() * s, dh = b.getHeight() * s;
         float l = (w - dw) / 2f, t = (h - dh) / 2f;
         return new RectF(l, t, l + dw, t + dh);
     }
 
+    private static synchronized Bitmap blurred(Bitmap bg) {
+        if (bg == blurSrc && blurOut != null) return blurOut;
+        int sw = Math.max(2, bg.getWidth() / 28), sh = Math.max(2, bg.getHeight() / 28);
+        Bitmap tiny = Bitmap.createScaledBitmap(bg, sw, sh, true);
+        Bitmap mid = Bitmap.createScaledBitmap(tiny, sw * 3, sh * 3, true);
+        blurOut = Bitmap.createScaledBitmap(mid, Math.max(2, bg.getWidth() / 4), Math.max(2, bg.getHeight() / 4), true);
+        blurSrc = bg;
+        return blurOut;
+    }
+
+    /** Laluan jam (sudah diregang ikut lebar/tinggi). Garis dasar kekal di y. */
+    static Path clockPath(Context ctx, SharedPreferences p, int w, int h) {
+        float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
+        float y = h * p.getInt(Prefs.CLOCK_Y, 28) / 100f;
+        float sx = p.getInt(Prefs.CLOCK_W, 100) / 100f;
+        float sy = p.getInt(Prefs.CLOCK_H, 100) / 100f;
+        boolean is24 = DateFormat.is24HourFormat(ctx);
+        String time = new SimpleDateFormat(is24 ? "HH:mm" : "h:mm", Locale.getDefault()).format(new Date());
+
+        Paint tp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        tp.setTextAlign(Paint.Align.CENTER);
+        tp.setTextSize(size);
+        tp.setLetterSpacing(-0.03f);
+        tp.setTypeface(font(p.getInt(Prefs.CLOCK_FONT, 0)));
+        Path path = new Path();
+        tp.getTextPath(time, 0, time.length(), w / 2f, y, path);
+        Matrix m = new Matrix();
+        m.setScale(sx, sy, w / 2f, y);
+        path.transform(m);
+        return path;
+    }
+
     public static void draw(Context ctx, Canvas c, int w, int h, Bitmap bg, Bitmap fg,
                             SharedPreferences p, boolean showClock) {
         Paint bmp = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+        RectF bgRect = null;
         if (bg != null) {
             c.drawColor(Color.BLACK);
-            c.drawBitmap(bg, null, centerCrop(bg, w, h), bmp);
+            bgRect = centerCrop(bg, w, h);
+            c.drawBitmap(bg, null, bgRect, bmp);
         } else {
             c.drawColor(Color.rgb(28, 36, 48));
         }
 
         if (showClock) {
             int color = p.getInt(Prefs.CLOCK_COLOR, Color.WHITE);
+            boolean glass = p.getBoolean(Prefs.CLOCK_GLASS, true);
+            boolean dark = p.getBoolean(Prefs.GLASS_DARK, false);
             float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
-            float y = h * p.getInt(Prefs.CLOCK_Y, 28) / 100f;
 
-            Date now = new Date();
-            boolean is24 = DateFormat.is24HourFormat(ctx);
-            String time = new SimpleDateFormat(is24 ? "HH:mm" : "h:mm", Locale.getDefault()).format(now);
-            String date = new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(now);
+            Path path = clockPath(ctx, p, w, h);
+            RectF b = new RectF();
+            path.computeBounds(b, true);
 
+            // Tarikh di atas jam
             Paint dp = new Paint(Paint.ANTI_ALIAS_FLAG);
-            dp.setColor(color);
+            dp.setColor(glass ? Color.WHITE : color);
             dp.setTextAlign(Paint.Align.CENTER);
-            dp.setTextSize(size * 0.16f);
-            dp.setTypeface(Typeface.create(Typeface.SANS_SERIF, 500, false));
-            c.drawText(date, w / 2f, y - size * 0.82f, dp);
+            dp.setTextSize(Math.max(28f, size * 0.15f));
+            dp.setTypeface(Typeface.create(Typeface.SANS_SERIF, 600, false));
+            dp.setShadowLayer(size * 0.03f, 0, size * 0.008f, Color.argb(70, 0, 0, 0));
+            String date = new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(new Date());
+            c.drawText(date, w / 2f, b.top - size * 0.1f, dp);
 
-            Paint tp = new Paint(Paint.ANTI_ALIAS_FLAG);
-            tp.setColor(color);
-            tp.setTextAlign(Paint.Align.CENTER);
-            tp.setTextSize(size);
-            tp.setLetterSpacing(-0.03f);
-            tp.setTypeface(font(p.getInt(Prefs.CLOCK_FONT, 0)));
-            c.drawText(time, w / 2f, y, tp);
+            if (glass) {
+                // 1) bayang lembut
+                Paint sh = new Paint(Paint.ANTI_ALIAS_FLAG);
+                sh.setColor(Color.argb(dark ? 90 : 55, 0, 0, 0));
+                sh.setMaskFilter(new BlurMaskFilter(Math.max(2f, size * 0.05f), BlurMaskFilter.Blur.NORMAL));
+                c.save();
+                c.translate(0, size * 0.02f);
+                c.drawPath(path, sh);
+                c.restore();
+
+                // 2) isi kaca: wallpaper kabur & dicerahkan
+                c.save();
+                c.clipPath(path);
+                if (bg != null) {
+                    Paint fp = new Paint(Paint.FILTER_BITMAP_FLAG);
+                    ColorMatrix cm = new ColorMatrix();
+                    float k = dark ? 0.75f : 1.12f, t = dark ? -10 : 38;
+                    cm.set(new float[]{k, 0, 0, 0, t, 0, k, 0, 0, t, 0, 0, k, 0, t, 0, 0, 0, 1, 0});
+                    ColorMatrix sat = new ColorMatrix();
+                    sat.setSaturation(1.25f);
+                    cm.postConcat(sat);
+                    fp.setColorFilter(new ColorMatrixColorFilter(cm));
+                    c.drawBitmap(blurred(bg), null, bgRect, fp);
+                }
+                int tint = (color & 0x00FFFFFF) | ((dark ? 70 : 85) << 24);
+                c.drawColor(tint);
+                c.restore();
+
+                // 3) kilauan dalam
+                Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
+                sheen.setShader(new LinearGradient(0, b.top, 0, b.bottom,
+                        new int[]{Color.argb(120, 255, 255, 255), Color.argb(0, 255, 255, 255),
+                                Color.argb(0, 255, 255, 255), Color.argb(60, 255, 255, 255)},
+                        new float[]{0f, 0.42f, 0.72f, 1f}, Shader.TileMode.CLAMP));
+                c.drawPath(path, sheen);
+
+                // 4) bingkai cahaya (specular rim)
+                Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
+                rim.setStyle(Paint.Style.STROKE);
+                rim.setStrokeWidth(Math.max(1.5f, size * 0.014f));
+                rim.setShader(new LinearGradient(b.left, b.top, b.right, b.bottom,
+                        new int[]{Color.argb(235, 255, 255, 255), Color.argb(60, 255, 255, 255),
+                                Color.argb(40, 255, 255, 255), Color.argb(190, 255, 255, 255)},
+                        new float[]{0f, 0.4f, 0.65f, 1f}, Shader.TileMode.CLAMP));
+                c.drawPath(path, rim);
+            } else {
+                Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
+                fp.setColor(color);
+                c.drawPath(path, fp);
+            }
         }
 
         if (fg != null) {
             c.drawBitmap(fg, null, centerCrop(fg, w, h), bmp);
         }
+    }
+
+    /** Kedudukan Y (piksel skrin) bahagian paling atas subjek, atau -1. */
+    static float subjectTop(Bitmap fg, int w, int h) {
+        if (fg == null) return -1;
+        int sw = 72, sh = Math.max(1, Math.round(72f * fg.getHeight() / fg.getWidth()));
+        Bitmap s = Bitmap.createScaledBitmap(fg, sw, sh, true);
+        RectF r = centerCrop(fg, w, h);
+        for (int y = 0; y < sh; y++) {
+            int hits = 0;
+            for (int x = sw / 6; x < sw * 5 / 6; x++) {
+                if (Color.alpha(s.getPixel(x, y)) > 140) hits++;
+            }
+            if (hits >= 2) return r.top + (y + 0.5f) / sh * r.height();
+        }
+        return -1;
+    }
+
+    /** Letak jam supaya bahagian bawah digit tersorok di belakang kepala subjek. */
+    static boolean autoPlace(Context ctx, SharedPreferences p, Bitmap fg, int w, int h) {
+        float top = subjectTop(fg, w, h);
+        if (top < 0) return false;
+        float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
+        float capH = size * 0.72f * p.getInt(Prefs.CLOCK_H, 100) / 100f;
+        float baseline = top + capH * 0.42f;
+        int pct = Math.round(baseline / h * 100f);
+        pct = Math.max(12, Math.min(70, pct));
+        p.edit().putInt(Prefs.CLOCK_Y, pct).apply();
+        return true;
     }
 }

@@ -17,6 +17,12 @@ public final class Prefs {
     public static final String PILL_MUSIC = "pillMusic";
     public static final String PILL_NOTI = "pillNoti";
     public static final String PANELS_ON = "panelsOn";
+    public static final String GLASS_DARK = "glassDark";   // panel & widget: false jernih, true gelap
+    public static final String CLOCK_W = "clockW";         // % skala lebar
+    public static final String CLOCK_H = "clockH";         // % skala tinggi
+    public static final String CLOCK_GLASS = "clockGlass"; // gaya liquid glass
+    public static final String HIDE_STOCK = "hideStock";
+    public static final String HIDE_H = "hideH";           // dp
 
     private Prefs() {}
 

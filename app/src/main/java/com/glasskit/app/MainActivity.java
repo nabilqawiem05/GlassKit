@@ -54,7 +54,6 @@ public class MainActivity extends Activity {
     private ImageView preview;
     private TextView status;
     private TextView stShizuku, stAcc, stNotif;
-    private LinearLayout fontSeg;
     private Bitmap cacheBg, cacheFg;
     private long cacheVer = Long.MIN_VALUE;
 
@@ -123,6 +122,13 @@ public class MainActivity extends Activity {
         // ---------- Panel ----------
         LinearLayout pan = card(box, R.string.sec_panels, Icon.GEAR, Ui.BLUE);
         toggle(pan, R.string.panels_on, Prefs.PANELS_ON, true);
+        label(pan, R.string.glass_style);
+        segmented(pan, new int[]{R.string.glass_clear, R.string.glass_dark},
+                prefs.getBoolean(Prefs.GLASS_DARK, false) ? 1 : 0, i -> {
+                    prefs.edit().putBoolean(Prefs.GLASS_DARK, i == 1).apply();
+                    ClockWidget.updateAll(this);
+                    MusicWidget.push(this);
+                });
         note(pan, getString(R.string.panels_hint));
         LinearLayout pr = new LinearLayout(this);
         pan.addView(pr);
@@ -196,27 +202,32 @@ public class MainActivity extends Activity {
         }
 
         label(clk, R.string.lbl_font);
-        fontSeg = new LinearLayout(this);
-        fontSeg.setBackground(Ui.glass(this, 22, 26));
-        fontSeg.setPadding(dp(4), dp(4), dp(4), dp(4));
-        int[] fonts = {R.string.font_bold, R.string.font_thin, R.string.font_serif, R.string.font_mono};
-        for (int i = 0; i < fonts.length; i++) {
-            final int idx = i;
-            TextView t = Ui.text(this, 14, 600, Color.WHITE);
-            t.setText(fonts[i]);
-            t.setGravity(Gravity.CENTER);
-            t.setOnClickListener(v -> {
-                prefs.edit().putInt(Prefs.CLOCK_FONT, idx).apply();
-                paintSeg();
-            });
-            fontSeg.addView(t, new LinearLayout.LayoutParams(0, dp(38), 1f));
-        }
-        clk.addView(fontSeg, new LinearLayout.LayoutParams(-1, -2));
-        paintSeg();
+        segmented(clk, new int[]{R.string.font_bold, R.string.font_thin, R.string.font_serif, R.string.font_mono},
+                prefs.getInt(Prefs.CLOCK_FONT, 0), i -> prefs.edit().putInt(Prefs.CLOCK_FONT, i).apply());
+
+        label(clk, R.string.clock_style);
+        segmented(clk, new int[]{R.string.style_glass, R.string.style_solid},
+                prefs.getBoolean(Prefs.CLOCK_GLASS, true) ? 0 : 1,
+                i -> prefs.edit().putBoolean(Prefs.CLOCK_GLASS, i == 0).apply());
+
+        label(clk, R.string.lbl_width);
+        slider(clk, 60, 170, prefs.getInt(Prefs.CLOCK_W, 100), val -> prefs.edit().putInt(Prefs.CLOCK_W, val).apply());
+        label(clk, R.string.lbl_height);
+        slider(clk, 60, 240, prefs.getInt(Prefs.CLOCK_H, 100), val -> prefs.edit().putInt(Prefs.CLOCK_H, val).apply());
+        button(clk, getString(R.string.btn_auto_pos), false, v -> autoPlace(true));
+
+        toggle(clk, R.string.hide_stock, Prefs.HIDE_STOCK, false);
+        label(clk, R.string.lbl_hide_h);
+        slider(clk, 60, 260, prefs.getInt(Prefs.HIDE_H, 130), val -> prefs.edit().putInt(Prefs.HIDE_H, val).apply());
+        note(clk, getString(R.string.hide_stock_note));
 
         toggle(clk, R.string.lock_only, Prefs.LOCK_ONLY, true);
         button(clk, getString(R.string.btn_set_wp), true, v -> setWallpaper());
         note(clk, getString(R.string.clock_tip));
+
+        LinearLayout wg = card(box, R.string.sec_widgets, Icon.NOTE, Ui.PURPLE);
+        note(wg, getString(R.string.widgets_hint));
+        note(wg, getString(R.string.themed_hint));
 
         prefs.registerOnSharedPreferenceChangeListener(prefL);
         try { Shizuku.addRequestPermissionResultListener(shizukuL); } catch (Throwable ignored) {}
@@ -359,13 +370,41 @@ public class MainActivity extends Activity {
         parent.addView(s, new LinearLayout.LayoutParams(-1, dp(36)));
     }
 
-    private void paintSeg() {
-        int sel = prefs.getInt(Prefs.CLOCK_FONT, 0);
-        for (int i = 0; i < fontSeg.getChildCount(); i++) {
-            TextView t = (TextView) fontSeg.getChildAt(i);
+    private void segmented(LinearLayout parent, int[] labels, int selected, IntCb cb) {
+        final LinearLayout seg = new LinearLayout(this);
+        seg.setBackground(Ui.glass(this, 22, 26));
+        seg.setPadding(dp(4), dp(4), dp(4), dp(4));
+        for (int i = 0; i < labels.length; i++) {
+            final int idx = i;
+            TextView t = Ui.text(this, 14, 600, Color.WHITE);
+            t.setText(labels[i]);
+            t.setGravity(Gravity.CENTER);
+            t.setOnClickListener(v -> {
+                paint(seg, idx);
+                cb.on(idx);
+            });
+            seg.addView(t, new LinearLayout.LayoutParams(0, dp(38), 1f));
+        }
+        parent.addView(seg, new LinearLayout.LayoutParams(-1, -2));
+        paint(seg, selected);
+    }
+
+    private void paint(LinearLayout seg, int sel) {
+        for (int i = 0; i < seg.getChildCount(); i++) {
+            TextView t = (TextView) seg.getChildAt(i);
             boolean on = i == sel;
             t.setBackground(on ? Ui.round(Color.WHITE, dp(19)) : null);
             t.setTextColor(on ? 0xFF0B0B10 : Color.WHITE);
+        }
+    }
+
+    private void autoPlace(boolean say) {
+        Bitmap fg = DepthRenderer.load(DepthRenderer.fgFile(this));
+        android.graphics.Rect b = getSystemService(android.view.WindowManager.class).getCurrentWindowMetrics().getBounds();
+        if (DepthRenderer.autoPlace(this, prefs, fg, b.width(), b.height())) {
+            if (say) status.setText(R.string.st_auto_done);
+        } else if (say) {
+            status.setText(R.string.st_need_subject);
         }
     }
 
@@ -473,6 +512,7 @@ public class MainActivity extends Activity {
                         save(fg, DepthRenderer.fgFile(this), true);
                         status.setText(R.string.st_cut_done);
                         bump();
+                        autoPlace(false);
                     } catch (Exception e) {
                         status.setText(getString(R.string.st_save_fail, String.valueOf(e.getMessage())));
                     }

@@ -31,6 +31,7 @@ public class DepthWallpaperService extends WallpaperService {
         private boolean visible;
         private int width, height;
         private boolean registered;
+        private Bitmap frame;
 
         private final BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override
@@ -123,13 +124,20 @@ public class DepthWallpaperService extends WallpaperService {
             boolean locked = km != null && km.isKeyguardLocked();
             boolean showClock = !prefs.getBoolean(Prefs.LOCK_ONLY, true) || locked || isPreview();
 
+            // Lukis dalam Bitmap perisian (kesan kaca guna BlurMaskFilter), kemudian salin ke skrin
+            try {
+                if (frame == null || frame.getWidth() != width || frame.getHeight() != height) {
+                    frame = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                }
+                DepthRenderer.draw(DepthWallpaperService.this, new Canvas(frame), width, height, bg, fg, prefs, showClock);
+            } catch (Throwable t) {
+                return;
+            }
             SurfaceHolder holder = getSurfaceHolder();
             Canvas c = null;
             try {
                 c = holder.lockHardwareCanvas();
-                if (c != null) {
-                    DepthRenderer.draw(DepthWallpaperService.this, c, width, height, bg, fg, prefs, showClock);
-                }
+                if (c != null) c.drawBitmap(frame, 0, 0, null);
             } catch (Exception ignored) {
             } finally {
                 if (c != null) {
