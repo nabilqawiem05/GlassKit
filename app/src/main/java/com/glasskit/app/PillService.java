@@ -95,6 +95,16 @@ public class PillService extends AccessibilityService
     private LockPatch patch;
     CallOverlay call;
     VolumePanel volume;
+    private boolean volRepeatUp;
+    private int volRepeatN;
+    private final Runnable volRepeat = new Runnable() {
+        @Override
+        public void run() {
+            if (volume == null || !volume.onKey(volRepeatUp)) return;
+            volRepeatN++;
+            h.postDelayed(this, volRepeatN < 4 ? 140 : 70); // makin lama makin laju
+        }
+    };
     private boolean stepReg, calObs;
     private final android.hardware.SensorEventListener stepL = new android.hardware.SensorEventListener() {
         @Override
@@ -195,7 +205,12 @@ public class PillService extends AccessibilityService
                 case android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED:
                     if (sbar != null && sbarShown) sbar.refresh();
                     break;
+                case Intent.ACTION_POWER_DISCONNECTED:
+                    if (sbar != null && sbarShown) sbar.refresh();
+                    GlassWidget.updateAll(PillService.this, BatteryWidget.class);
+                    break;
                 case Intent.ACTION_POWER_CONNECTED:
+                    if (sbar != null && sbarShown) sbar.refresh();
                     Sounds.play(PillService.this, Sounds.CHARGE);
                     h.postDelayed(PillService.this::showCharging, 600);
                     break;
@@ -250,6 +265,7 @@ public class PillService extends AccessibilityService
         f.addAction(Intent.ACTION_USER_PRESENT);
         f.addAction(Intent.ACTION_TIME_TICK);
         f.addAction(Intent.ACTION_POWER_CONNECTED);
+        f.addAction(Intent.ACTION_POWER_DISCONNECTED);
         f.addAction(Intent.ACTION_BATTERY_CHANGED);
         f.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         f.addAction(android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED);
@@ -275,9 +291,19 @@ public class PillService extends AccessibilityService
         if (volume == null || prefs == null || !prefs.getBoolean(Prefs.VOLUME_ON, true)) return false;
         if (k != android.view.KeyEvent.KEYCODE_VOLUME_UP && k != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return false;
         if (call != null && call.showing()) return false;
+        boolean up = k == android.view.KeyEvent.KEYCODE_VOLUME_UP;
         if (e.getAction() == android.view.KeyEvent.ACTION_DOWN) {
-            return volume.onKey(k == android.view.KeyEvent.KEYCODE_VOLUME_UP);
+            if (e.getRepeatCount() > 0) return true; // ulangan dikawal sendiri
+            boolean used = volume.onKey(up);
+            if (used) {
+                volRepeatUp = up;
+                volRepeatN = 0;
+                h.removeCallbacks(volRepeat);
+                h.postDelayed(volRepeat, 380);
+            }
+            return used;
         }
+        if (e.getAction() == android.view.KeyEvent.ACTION_UP) h.removeCallbacks(volRepeat);
         return true;
     }
 

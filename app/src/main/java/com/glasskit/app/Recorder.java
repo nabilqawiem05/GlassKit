@@ -1,5 +1,6 @@
 package com.glasskit.app;
 
+import android.content.Intent;
 import android.widget.Toast;
 
 /**
@@ -16,15 +17,23 @@ final class Recorder {
 
     private Recorder() {}
 
-    static boolean recording() { return rec; }
+    static boolean recording() { return rec || ScreenRecService.running; }
 
-    static long elapsed() { return rec ? System.currentTimeMillis() - start : 0; }
+    static long elapsed() {
+        if (ScreenRecService.running) return System.currentTimeMillis() - ScreenRecService.startedAt;
+        return rec ? System.currentTimeMillis() - start : 0;
+    }
 
     static void toggle(PillService s) {
-        if (rec) stop(s); else start(s);
+        if (recording()) stop(s); else start(s);
     }
 
     static void start(PillService s) {
+        if (Prefs.get(s).getInt(Prefs.REC_AUDIO, ScreenRecService.AUDIO_INTERNAL) != ScreenRecService.AUDIO_NONE) {
+            Intent i = new Intent(s, RecordActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            s.startActivity(i);
+            return;
+        }
         if (!Shell.granted()) {
             Toast.makeText(s, R.string.need_shizuku, Toast.LENGTH_SHORT).show();
             return;
@@ -43,6 +52,10 @@ final class Recorder {
     }
 
     static void stop(PillService s) {
+        if (ScreenRecService.running) {
+            s.startService(new Intent(s, ScreenRecService.class).setAction(ScreenRecService.ACTION_STOP));
+            return;
+        }
         if (!rec) return;
         rec = false;
         s.onRecChanged();

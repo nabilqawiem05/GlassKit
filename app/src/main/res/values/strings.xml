@@ -216,4 +216,14 @@
     <string name="btn_clear_crash">Clear</string>
     <string name="tg_rec">Screen record</string>
     <string name="rec_saved">Recording saved to Movies/GlassKit</string>
+    <string name="sec_rec">Screen record</string>
+    <string name="rec_audio">Audio</string>
+    <string name="rec_none">None</string>
+    <string name="rec_internal">Internal</string>
+    <string name="rec_mic">Mic</string>
+    <string name="rec_both">Both</string>
+    <string name="rec_note">Start and stop from the Screen record tile or by tapping the red island. Touches are shown when Shizuku is running. With audio, Android may ask for permission each time. Videos go to Movies/GlassKit.</string>
+    <string name="rec_running">Recording screen</string>
+    <string name="rec_stop">Stop</string>
+    <string name="rec_failed">Couldn\'t start recording</string>
 </resources>

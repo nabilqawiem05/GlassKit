@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
@@ -43,6 +48,18 @@
             android:showWhenLocked="true"
             android:taskAffinity="com.glasskit.app.lock"
             android:theme="@style/LockTheme" />
+
+        <activity
+            android:name=".RecordActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity="com.glasskit.app.rec"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <service
+            android:name=".ScreenRecService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection|microphone" />
 
         <activity
             android:name=".IconsActivity"

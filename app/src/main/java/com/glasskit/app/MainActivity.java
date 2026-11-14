@@ -340,6 +340,12 @@ public class MainActivity extends Activity {
         pr.addView(b1, l1);
         pr.addView(b2, l2);
 
+        LinearLayout rc = card(pPanels, R.string.sec_rec, Icon.REC, 0xFFFF3B30);
+        label(rc, R.string.rec_audio);
+        segmented(rc, new int[]{R.string.rec_none, R.string.rec_internal, R.string.rec_mic, R.string.rec_both},
+                prefs.getInt(Prefs.REC_AUDIO, 1), i -> prefs.edit().putInt(Prefs.REC_AUDIO, i).apply());
+        note(rc, getString(R.string.rec_note));
+
         // ---------- Jam depth ----------
         LinearLayout clk = card(pLock, R.string.sec_clock, Icon.SUN, Ui.ORANGE);
         preview = new ImageView(this);

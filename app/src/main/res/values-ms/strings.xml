@@ -209,4 +209,14 @@
     <string name="btn_clear_crash">Padam</string>
     <string name="tg_rec">Rakam skrin</string>
     <string name="rec_saved">Rakaman disimpan dalam Movies/GlassKit</string>
+    <string name="sec_rec">Rakam skrin</string>
+    <string name="rec_audio">Audio</string>
+    <string name="rec_none">Tiada</string>
+    <string name="rec_internal">Dalaman</string>
+    <string name="rec_mic">Mikrofon</string>
+    <string name="rec_both">Kedua</string>
+    <string name="rec_note">Mula dan henti dari tile Rakam skrin atau tekan island merah. Sentuhan jari ditunjukkan bila Shizuku berjalan. Dengan audio, Android mungkin minta kebenaran setiap kali. Video disimpan dalam Movies/GlassKit.</string>
+    <string name="rec_running">Sedang merakam skrin</string>
+    <string name="rec_stop">Henti</string>
+    <string name="rec_failed">Gagal mula merakam</string>
 </resources>

@@ -271,7 +271,7 @@ class StatusBar extends View {
         float bw = dp(25), bh = dp(12.5f), r = dp(4);
         RectF body = new RectF(x, cy - bh / 2, x + bw, cy + bh / 2);
         int lvl = Math.max(0, battery);
-        int col = charging ? 0xFF30D158 : (lvl <= 15 ? 0xFFFF453A : Color.WHITE);
+        int col = charging ? 0xFF30D158 : (lvl <= 20 ? 0xFFFF453A : Color.WHITE);
 
         fill.setColor(Color.argb(85, 255, 255, 255));
         c.drawRoundRect(body, r, r, fill);
@@ -286,7 +286,7 @@ class StatusBar extends View {
         c.drawRoundRect(body.right + dp(1.2f), cy - dp(2.3f), body.right + dp(2.6f), cy + dp(2.3f), dp(1), dp(1), fill);
 
         if (showPct && battery >= 0) {
-            pct.setColor(lvl > 45 || charging || lvl <= 15 ? Color.argb(235, 0, 0, 0) : Color.WHITE);
+            pct.setColor(lvl > 45 || charging ? Color.argb(235, 0, 0, 0) : Color.WHITE);
             Paint.FontMetrics fm = pct.getFontMetrics();
             c.drawText(String.valueOf(battery), body.centerX(), cy - (fm.ascent + fm.descent) / 2f, pct);
         }

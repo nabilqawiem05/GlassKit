@@ -92,7 +92,19 @@ final class Ui {
         return bm == null ? -1 : bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);
     }
 
+    /** Mengecas = charger bersambung (termasuk pengecasan pintar yang ditahan) atau status mengecas/penuh. */
     static boolean charging(Context c) {
+        try {
+            android.content.Intent i = c.getApplicationContext().registerReceiver(null,
+                    new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
+            if (i != null) {
+                int plugged = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0);
+                int st = i.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1);
+                if (plugged != 0 || st == android.os.BatteryManager.BATTERY_STATUS_CHARGING
+                        || st == android.os.BatteryManager.BATTERY_STATUS_FULL) return true;
+            }
+        } catch (Exception ignored) {
+        }
         android.os.BatteryManager bm = c.getSystemService(android.os.BatteryManager.class);
         return bm != null && bm.isCharging();
     }
