@@ -65,6 +65,10 @@ public final class DepthRenderer {
             case 1: return Typeface.create(Typeface.SANS_SERIF, 300, false);
             case 2: return Typeface.create(Typeface.SERIF, Typeface.BOLD);
             case 3: return Typeface.create(Typeface.MONOSPACE, 700, false);
+            case 4: return Typeface.create(Typeface.create("google-sans", Typeface.NORMAL), 200, false); // sangat nipis
+            case 5: return Typeface.create(Typeface.create("sans-serif-condensed", Typeface.NORMAL), 700, false); // sempit
+            case 6: return Typeface.create(Typeface.create("google-sans", Typeface.NORMAL), 500, false); // lembut
+            case 7: return Typeface.create(Typeface.SANS_SERIF, 900, false); // hitam tebal
             default: return Typeface.create(Typeface.create("google-sans", Typeface.NORMAL), 800, false);
         }
     }

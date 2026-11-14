@@ -58,7 +58,7 @@ public class PillService extends AccessibilityService
 
     static PillService inst;
 
-    private static final int IDLE = 0, MUSIC = 1, NOTI = 2, REC = 3, CALL = 4, LIVE = 5;
+    private static final int IDLE = 0, MUSIC = 1, NOTI = 2, REC = 3, CALL = 4, LIVE = 5, PRIV = 6;
 
     final Handler h = new Handler(Looper.getMainLooper());
     WindowManager wm;
@@ -126,6 +126,42 @@ public class PillService extends AccessibilityService
 
     private LockPatch patch;
     private int lastNight = -1;
+    IslandExtras extras;
+    private View privDot;
+
+    /** Tunjuk mesej dalam island (dipanggil oleh IslandExtras). */
+    void showIsland(Drawable small, Drawable big, CharSequence t, CharSequence body, PendingIntent pi) {
+        if (prefs == null || !prefs.getBoolean(Prefs.PILL_ON, true) || islandCallActive()) return;
+        show(small, big, t, body, pi);
+    }
+
+    /** Goyang ikon loceng (mod bunyi). */
+    void shakeIslandIcon(boolean ring) {
+        for (View v : new View[]{cAppIcon, nIcon}) {
+            if (v == null) continue;
+            v.animate().cancel();
+            v.setRotation(0);
+            android.animation.ObjectAnimator a = android.animation.ObjectAnimator.ofFloat(v, View.ROTATION,
+                    0, ring ? 22 : 12, ring ? -20 : -10, ring ? 16 : 6, ring ? -12 : -4, 6, 0);
+            a.setDuration(ring ? 900 : 600);
+            a.start();
+        }
+    }
+
+    /** Titik privasi: hijau = kamera, oren = mikrofon. */
+    private int lastPriv = -1;
+
+    void onPrivacy() {
+        if (privDot == null || extras == null) return;
+        int k = extras.privacy();
+        if (k != lastPriv) {
+            lastPriv = k;
+            h.post(this::refresh);
+        }
+        privDot.setVisibility(k == 0 || expanded ? View.GONE : View.VISIBLE);
+        if (k != 0) privDot.setBackground(Ui.circle(k == 1 ? 0xFF30D158 : 0xFFFF9F0A));
+    }
+
     CallOverlay call;
     VolumePanel volume;
     private boolean volRepeatUp;
@@ -229,6 +265,13 @@ public class PillService extends AccessibilityService
                     h.postDelayed(PillService.this::updateStatusBar, 300);
                     if (!prefs.getBoolean(Prefs.LOCK_ON, false)) Sounds.play(PillService.this, Sounds.UNLOCK);
                     break;
+                case android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED:
+                case "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED":
+                    if (extras != null) extras.onBluetooth(i);
+                    break;
+                case android.media.AudioManager.RINGER_MODE_CHANGED_ACTION:
+                    if (extras != null) extras.onRinger(i);
+                    break;
                 case Intent.ACTION_TIME_TICK:
                     prayerTick();
                     if (patch != null) patch.tick();
@@ -318,6 +361,8 @@ public class PillService extends AccessibilityService
         patch = new LockPatch();
         call = new CallOverlay(this);
         volume = new VolumePanel(this);
+        extras = new IslandExtras(this);
+        h.post(() -> { try { extras.start(); } catch (Throwable t) { CrashLog.write(this, t); } });
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_SCREEN_ON);
         f.addAction(Intent.ACTION_SCREEN_OFF);
@@ -327,6 +372,9 @@ public class PillService extends AccessibilityService
         f.addAction(Intent.ACTION_POWER_DISCONNECTED);
         f.addAction(Intent.ACTION_BATTERY_CHANGED);
         f.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        f.addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED);
+        f.addAction("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED");
+        f.addAction(android.media.AudioManager.RINGER_MODE_CHANGED_ACTION);
         f.addAction(android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED);
         registerReceiver(sysRx, f, Context.RECEIVER_EXPORTED);
         registered = true;
@@ -343,6 +391,11 @@ public class PillService extends AccessibilityService
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event != null && event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && extras != null
+                && event.getPackageName() != null) {
+            String fp = event.getPackageName().toString();
+            if (!fp.equals("com.android.systemui") && !fp.equals(getPackageName()) && !fp.equals("android")) extras.fgPkg = fp;
+        }
         if (lockCover == null || !lockCover.shown() || event == null) return;
         if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
         CharSequence p = event.getPackageName();
@@ -381,6 +434,7 @@ public class PillService extends AccessibilityService
 
     @Override
     public void onDestroy() {
+        if (extras != null) extras.stop();
         if (lockCover != null) lockCover.destroy();
         inst = null;
         h.removeCallbacksAndMessages(null);
@@ -507,6 +561,11 @@ public class PillService extends AccessibilityService
         pill.setClipToOutline(true);
         root.addView(pill, new FrameLayout.LayoutParams(compactW, compactH, Gravity.CENTER_HORIZONTAL));
 
+        privDot = new View(this);
+        privDot.setVisibility(View.GONE);
+        FrameLayout.LayoutParams pdl = new FrameLayout.LayoutParams(dp(7), dp(7), Gravity.END | Gravity.CENTER_VERTICAL);
+        pdl.rightMargin = dp(5);
+
         // ---- padat ----
         compact = new FrameLayout(this);
         int ic = compactH - dp(10);
@@ -532,6 +591,7 @@ public class PillService extends AccessibilityService
         tl.rightMargin = dp(13);
         compact.addView(cText, tl);
         pill.addView(compact, new FrameLayout.LayoutParams(-1, -1));
+        pill.addView(privDot, pdl);
 
         // ---- muzik besar ----
         expMusic = new LinearLayout(this);
@@ -1070,6 +1130,8 @@ public class PillService extends AccessibilityService
             else if (Live.current() != null && prefs.getBoolean(Prefs.LIVE_ON, true)) newMode = LIVE;
             else if (musicOn) newMode = MUSIC;
         }
+        if (newMode == IDLE && on && !land && extras != null && extras.privacy() != 0
+                && (panels == null || !panels.isOpen())) newMode = PRIV;
         boolean wasExpanded = compact.getVisibility() == View.GONE && attached;
         mode = newMode;
         if (mode == IDLE) {
@@ -1086,6 +1148,7 @@ public class PillService extends AccessibilityService
         boolean showMusic = expanded && mode == MUSIC;
         boolean showNoti = expanded && mode == NOTI;
         boolean showCall = expanded && mode == CALL;
+        onPrivacy();
         boolean showLive = expanded && mode == LIVE;
         if (showLive && expLive.getVisibility() != View.VISIBLE) fadeIn(expLive);
         expLive.setVisibility(showLive ? View.VISIBLE : View.GONE);
@@ -1103,7 +1166,17 @@ public class PillService extends AccessibilityService
         expCall.setVisibility(showCall ? View.VISIBLE : View.GONE);
         kWave.setRunning(showCall && !callRinging);
 
-        if (mode == LIVE) {
+        if (mode == PRIV) {
+            int k = extras.privacy();
+            cArt.setVisibility(View.GONE);
+            cAppIcon.setVisibility(View.VISIBLE);
+            cAppIcon.setImageDrawable(Ui.iconDrawable(this, k == 1 ? com.glasskit.app.Icon.CAMERA : com.glasskit.app.Icon.NOTE,
+                    Color.WHITE, k == 1 ? 0xFF248A3D : 0xFFC93400, dp(30)));
+            cText.setVisibility(View.GONE);
+            cWave.setVisibility(View.GONE);
+            cWave.setRunning(false);
+            mWave.setRunning(false);
+        } else if (mode == LIVE) {
             Live.Item li = Live.current();
             cArt.setVisibility(View.GONE);
             cAppIcon.setVisibility(View.VISIBLE);
@@ -1178,6 +1251,10 @@ public class PillService extends AccessibilityService
     }
 
     private void onPillTap() {
+        if (mode == PRIV && extras != null) {
+            extras.showPrivacyInfo();
+            return;
+        }
         if (mode == LIVE) {
             if (!expanded) {
                 expanded = true;
@@ -1458,6 +1535,7 @@ public class PillService extends AccessibilityService
 
     /** Daftar sensor langkah, pemerhati kalendar dan ambil cuaca bila kebenaran ada. */
     void onDataPermissions() {
+        if (extras != null) h.post(() -> extras.restartScreenshotsIfNeeded());
         h.post(this::prayerTick);
         if (!stepReg && Data.has(this, android.Manifest.permission.ACTIVITY_RECOGNITION)) {
             try {
@@ -1600,6 +1678,16 @@ public class PillService extends AccessibilityService
             prayDay = day;
             Prayer.fetch(this);
             Prayer.schedule(this);
+            Shuffle.daily(this, false);
+            Updater.check(this, (info, err) -> {
+                if (info == null) return;
+                h.post(() -> {
+                    Intent oi = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    PendingIntent op = PendingIntent.getActivity(this, 95, oi, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                    Drawable ic = getApplicationInfo().loadIcon(getPackageManager());
+                    showIsland(ic, ic, getString(R.string.upd_island, info.version), getString(R.string.upd_island_body), op);
+                });
+            });
             GlassWidget.updateAll(this, PrayerWidget.class);
         }
         Prayer.Day d = Prayer.today(this);

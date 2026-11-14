@@ -386,10 +386,12 @@ final class CallOverlay {
     private View card;
 
     private void buildCard(CharSequence name, String subtitle, Drawable photo, String pkg) {
-        final boolean dark = Ui.darkGlass(s);
-        final int ink = dark ? Color.WHITE : 0xFF14161A, ink2 = dark ? Color.argb(190, 235, 235, 245) : 0xFF4B5059;
+        Posters.Poster poster = Posters.match(s, name);
+        Bitmap pPhoto = poster != null ? Posters.photo(s, poster) : null;
+        final boolean dark = pPhoto != null || Ui.darkGlass(s);
+        final int ink = dark ? Color.WHITE : 0xFF14161A, ink2 = dark ? Color.argb(210, 255, 255, 255) : 0xFF4B5059;
         root = new FrameLayout(s);
-        Bitmap ph = toBitmap(photo, dp(160));
+        Bitmap ph = pPhoto != null ? pPhoto : toBitmap(photo, dp(160));
         Bitmap wall = DepthRenderer.load(DepthRenderer.bgFile(s));
         if (wall != null) bd.set(wall, s.screenW, s.screenH);
 
@@ -397,7 +399,13 @@ final class CallOverlay {
         c.setOrientation(LinearLayout.VERTICAL);
         c.setGravity(Gravity.CENTER_HORIZONTAL);
         c.setPadding(dp(20), dp(16), dp(20), dp(20));
-        c.setBackground(new LiquidGlass.Surface(s, dp(34), dark, bd, 0));
+        if (pPhoto != null) {
+            c.setBackground(Posters.background(s, pPhoto, poster.color, dp(34)));
+            c.setPadding(dp(20), dp(16), dp(20), dp(20));
+        } else {
+            c.setBackground(new LiquidGlass.Surface(s, dp(34), dark, bd, 0));
+        }
+        c.setClipToOutline(pPhoto != null);
         c.setElevation(dp(10));
         c.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -420,7 +428,7 @@ final class CallOverlay {
         // avatar dengan cincin
         FrameLayout av = new FrameLayout(s);
         int as = dp(84);
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < (pPhoto != null ? 0 : 2); i++) {
             View ring = new View(s);
             GradientDrawable g = new GradientDrawable();
             g.setShape(GradientDrawable.OVAL);
@@ -448,7 +456,13 @@ final class CallOverlay {
         av.addView(avatar, new FrameLayout.LayoutParams(as, as, Gravity.CENTER));
         LinearLayout.LayoutParams avl = new LinearLayout.LayoutParams(dp(124), dp(124));
         avl.topMargin = dp(4);
-        c.addView(av, avl);
+        if (pPhoto != null) {
+            // poster: gambar sudah memenuhi kad, jadi ganti avatar dengan ruang kosong
+            View spacer = new View(s);
+            c.addView(spacer, new LinearLayout.LayoutParams(1, dp(150)));
+        } else {
+            c.addView(av, avl);
+        }
 
         nameV = Ui.text(s, 24, 700, ink);
         nameV.setText(name);

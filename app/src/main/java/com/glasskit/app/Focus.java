@@ -59,6 +59,10 @@ final class Focus {
         NotesWidget.refresh(c);
         PillService s = PillService.inst;
         if (s != null) s.h.post(() -> s.focusChanged(mode));
+        if (p.getBoolean(Prefs.FACE_FOCUS, false)) {
+            int f = Faces.forFocus(mode);
+            if (f >= 0) Faces.switchTo(c, f, null);
+        }
     }
 
     private static int filter(Context c) {

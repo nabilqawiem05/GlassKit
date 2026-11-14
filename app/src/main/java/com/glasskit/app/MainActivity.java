@@ -48,7 +48,7 @@ public class MainActivity extends Activity {
     static final String EXTRA_WIDGET_ID = "widgetId";
     private int pickWidgetId = -1;
     private boolean pickFromWidget;
-    private static final int REQ_BG = 1, REQ_FG = 2, REQ_PHOTOS = 3, REQ_PERMS = 77, REQ_AZAN = 4;
+    private static final int REQ_BG = 1, REQ_FG = 2, REQ_PHOTOS = 3, REQ_PERMS = 77, REQ_AZAN = 4, REQ_SHUF = 5, REQ_POSTER = 6, REQ_BK_OUT = 7, REQ_BK_IN = 8;
     private TextView prayerNote;
 
     private String prayerSummary() {
@@ -243,6 +243,27 @@ public class MainActivity extends Activity {
             toast(getString(R.string.copied));
         });
 
+        // ---------- Kemas kini & sandaran ----------
+        LinearLayout up = card(pHome, R.string.sec_update, Icon.ROTATE, 0xFF0A84FF);
+        updNote = note(up, getString(R.string.upd_current, Updater.current(this)));
+        updBtn = (TextView) button(up, getString(R.string.upd_check), true, v -> checkUpdate(true));
+        LinearLayout bk = new LinearLayout(this);
+        up.addView(bk);
+        addPair(bk, button(null, getString(R.string.bk_save), false, v -> {
+                    Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                            .setType("application/zip")
+                            .putExtra(Intent.EXTRA_TITLE, "GlassKit-sandaran-"
+                                    + new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(new java.util.Date()) + ".zip");
+                    startActivityForResult(i, REQ_BK_OUT);
+                }),
+                button(null, getString(R.string.bk_restore), false, v -> {
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                            .setType("application/zip");
+                    startActivityForResult(i, REQ_BK_IN);
+                }));
+        note(up, getString(R.string.bk_note));
+        if (System.currentTimeMillis() - prefs.getLong("updChecked", 0) > 6 * 3600_000L) checkUpdate(false);
+
         final String crash = CrashLog.read(this);
         if (crash != null) {
             LinearLayout cr0 = card(pHome, R.string.sec_crash, Icon.CLOSE, 0xFFFF453A);
@@ -266,6 +287,13 @@ public class MainActivity extends Activity {
         label(sys, R.string.call_style);
         segmented(sys, new int[]{R.string.call_style_island, R.string.call_style_full, R.string.call_style_card},
                 prefs.getInt(Prefs.CALL_STYLE, 0), i -> prefs.edit().putInt(Prefs.CALL_STYLE, i).apply());
+        label(sys, R.string.poster_title);
+        posterList = new LinearLayout(this);
+        posterList.setOrientation(LinearLayout.VERTICAL);
+        sys.addView(posterList);
+        buildPosterList();
+        button(sys, getString(R.string.poster_add), false, v -> addPosterDialog());
+        note(sys, getString(R.string.poster_note));
         toggle(sys, R.string.vol_on, Prefs.VOLUME_ON, true);
         note(sys, getString(R.string.system_note));
 
@@ -283,6 +311,10 @@ public class MainActivity extends Activity {
         toggle(isl, R.string.island_music, Prefs.PILL_MUSIC, true);
         toggle(isl, R.string.island_noti, Prefs.PILL_NOTI, true);
         toggle(isl, R.string.live_on, Prefs.LIVE_ON, true);
+        toggle(isl, R.string.isl_bt_on, Prefs.ISL_BT, true);
+        toggle(isl, R.string.isl_ringer_on, Prefs.ISL_RINGER, true);
+        toggle(isl, R.string.isl_privacy_on, Prefs.ISL_PRIVACY, true);
+        toggle(isl, R.string.isl_shot_on, Prefs.ISL_SHOT, true);
         note(isl, getString(R.string.live_note));
         toggle(isl, R.string.charge_anim, Prefs.CHARGE_ANIM, true);
         button(isl, getString(R.string.btn_test), false, v -> {
@@ -401,6 +433,7 @@ public class MainActivity extends Activity {
         note(rc, getString(R.string.rec_note));
 
         // ---------- Jam depth ----------
+        buildFacesCard(pLock);
         LinearLayout clk = card(pLock, R.string.sec_clock, Icon.SUN, Ui.ORANGE);
         preview = new ImageView(this);
         preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -454,8 +487,7 @@ public class MainActivity extends Activity {
         }
 
         label(clk, R.string.lbl_font);
-        segmented(clk, new int[]{R.string.font_bold, R.string.font_thin, R.string.font_serif, R.string.font_mono},
-                prefs.getInt(Prefs.CLOCK_FONT, 0), i -> prefs.edit().putInt(Prefs.CLOCK_FONT, i).apply());
+        fontChips(clk);
 
         label(clk, R.string.clock_style);
         segmented(clk, new int[]{R.string.style_glass, R.string.style_solid},
@@ -831,6 +863,216 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    /** Pilihan fon jam dengan pratonton "12:30" dalam setiap gaya. */
+    private void fontChips(LinearLayout parent) {
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);
+        hs.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        int[] order = {0, 7, 6, 1, 4, 5, 2, 3};
+        int[] names = {R.string.font_bold, R.string.font_black, R.string.font_soft, R.string.font_thin,
+                R.string.font_ultra, R.string.font_narrow, R.string.font_serif, R.string.font_mono};
+        final java.util.List<TextView> all = new java.util.ArrayList<>();
+        for (int k = 0; k < order.length; k++) {
+            final int idx = order[k];
+            LinearLayout col = new LinearLayout(this);
+            col.setOrientation(LinearLayout.VERTICAL);
+            col.setGravity(Gravity.CENTER);
+            col.setPadding(dp(14), dp(8), dp(14), dp(8));
+            TextView sample = new TextView(this);
+            sample.setText("12:30");
+            sample.setTextSize(24);
+            sample.setTypeface(DepthRenderer.font(idx));
+            sample.setTextColor(Color.WHITE);
+            col.addView(sample);
+            TextView nm = Ui.text(this, 11, 600, Color.argb(190, 235, 235, 245));
+            nm.setText(names[k]);
+            col.addView(nm);
+            col.setTag(idx);
+            all.add(sample);
+            col.setOnClickListener(v -> {
+                prefs.edit().putInt(Prefs.CLOCK_FONT, idx).apply();
+                for (int j = 0; j < row.getChildCount(); j++) {
+                    View cv = row.getChildAt(j);
+                    cv.setBackground((int) cv.getTag() == idx ? Ui.round(Color.argb(60, 255, 255, 255), dp(16)) : null);
+                }
+            });
+            col.setBackground(prefs.getInt(Prefs.CLOCK_FONT, 0) == idx ? Ui.round(Color.argb(60, 255, 255, 255), dp(16)) : null);
+            Ui.press(col);
+            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(-2, -2);
+            l.rightMargin = dp(6);
+            row.addView(col, l);
+        }
+        hs.addView(row);
+        parent.addView(hs, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private void buildFacesCard(LinearLayout parent) {
+        LinearLayout fc = card(parent, R.string.sec_faces, Icon.LOCK, 0xFFBF5AF2);
+        segmented(fc, new int[]{Faces.NAMES[0], Faces.NAMES[1], Faces.NAMES[2], Faces.NAMES[3]},
+                Faces.active(this), i -> {
+                    toast(getString(R.string.face_switching));
+                    Faces.switchTo(this, i, () -> runOnUiThread(this::recreate));
+                });
+        note(fc, getString(R.string.faces_note));
+        toggle(fc, R.string.face_swipe, Prefs.FACE_SWIPE, true);
+        toggle(fc, R.string.face_focus, Prefs.FACE_FOCUS, false);
+
+        label(fc, R.string.shuffle_title);
+        toggle(fc, R.string.shuffle_on, Prefs.SHUFFLE_ON, false);
+        shuffleNote = note(fc, getString(R.string.shuffle_note, Shuffle.count(this)));
+        LinearLayout r = new LinearLayout(this);
+        fc.addView(r);
+        addPair(r, button(null, getString(R.string.shuffle_pick), true, v -> {
+                    Intent p = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+                    p.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 30);
+                    try {
+                        startActivityForResult(p, REQ_SHUF);
+                    } catch (Exception e) {
+                        Intent q = new Intent(Intent.ACTION_GET_CONTENT).setType("image/*")
+                                .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                        startActivityForResult(q, REQ_SHUF);
+                    }
+                }),
+                button(null, getString(R.string.shuffle_now), false, v -> {
+                    if (Shuffle.count(this) == 0) {
+                        toast(getString(R.string.shuffle_empty));
+                        return;
+                    }
+                    prefs.edit().putBoolean(Prefs.SHUFFLE_ON, true).apply();
+                    Shuffle.daily(this, true);
+                    toast(getString(R.string.shuffle_working));
+                }));
+    }
+
+    private TextView shuffleNote;
+    private TextView updNote, updBtn;
+    private Updater.Info updInfo;
+    private boolean updBusy;
+
+    private void checkUpdate(boolean manual) {
+        if (updBusy) return;
+        if (updInfo != null) {
+            doUpdate();
+            return;
+        }
+        if (manual) updNote.setText(R.string.upd_checking);
+        Updater.check(this, (info, err) -> runOnUiThread(() -> {
+            if (isFinishing()) return;
+            if (info != null) {
+                updInfo = info;
+                updNote.setText(getString(R.string.upd_available, info.version, Updater.current(this)));
+                updBtn.setText(getString(R.string.upd_install, info.version));
+            } else if (manual) {
+                updNote.setText(err != null ? getString(R.string.upd_error, err) : getString(R.string.upd_latest, Updater.current(this)));
+            }
+        }));
+    }
+
+    private void doUpdate() {
+        updBusy = true;
+        updBtn.setText(R.string.upd_downloading);
+        Updater.install(this, updInfo, pct -> runOnUiThread(() -> updNote.setText(getString(R.string.upd_progress, pct))),
+                (x, err) -> runOnUiThread(() -> {
+                    updBusy = false;
+                    if (err != null) {
+                        updNote.setText(getString(R.string.upd_error, err));
+                        updBtn.setText(getString(R.string.upd_install, updInfo.version));
+                    } else {
+                        updNote.setText(R.string.upd_installing);
+                    }
+                }));
+    }
+    private LinearLayout posterList;
+    private String posterName;
+    private int posterColor = Posters.COLORS[0];
+
+    private void buildPosterList() {
+        if (posterList == null) return;
+        posterList.removeAllViews();
+        for (Posters.Poster p : Posters.all(this)) {
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(6), 0, dp(6));
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            Bitmap b = Posters.photo(this, p);
+            if (b != null) iv.setImageBitmap(b);
+            iv.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, android.graphics.Outline o) { o.setOval(0, 0, view.getWidth(), view.getHeight()); }
+            });
+            iv.setClipToOutline(true);
+            row.addView(iv, new LinearLayout.LayoutParams(dp(40), dp(40)));
+            TextView t = Ui.line(this, 15, 600, Color.WHITE);
+            t.setText(p.name);
+            t.setPadding(dp(12), 0, dp(8), 0);
+            row.addView(t, new LinearLayout.LayoutParams(0, -2, 1f));
+            View dot = new View(this);
+            dot.setBackground(Ui.circle(p.color));
+            row.addView(dot, new LinearLayout.LayoutParams(dp(18), dp(18)));
+            TextView del = Ui.text(this, 18, 600, Color.argb(170, 255, 255, 255));
+            del.setText("✕");
+            del.setPadding(dp(16), dp(4), dp(4), dp(4));
+            del.setOnClickListener(v -> {
+                Posters.delete(this, p.id);
+                buildPosterList();
+            });
+            row.addView(del);
+            posterList.addView(row);
+        }
+    }
+
+    private void addPosterDialog() {
+        LinearLayout v = new LinearLayout(this);
+        v.setOrientation(LinearLayout.VERTICAL);
+        v.setPadding(dp(22), dp(8), dp(22), 0);
+        final android.widget.EditText et = new android.widget.EditText(this);
+        et.setHint(R.string.poster_name_hint);
+        v.addView(et);
+        LinearLayout cr = new LinearLayout(this);
+        cr.setPadding(0, dp(12), 0, 0);
+        final View[] chips = new View[Posters.COLORS.length];
+        for (int k = 0; k < Posters.COLORS.length; k++) {
+            final int col = Posters.COLORS[k];
+            View ch = new View(this);
+            GradientDrawable g = Ui.circle(col);
+            if (col == posterColor) g.setStroke(dp(3), Color.WHITE);
+            ch.setBackground(g);
+            ch.setOnClickListener(x -> {
+                posterColor = col;
+                for (int j = 0; j < chips.length; j++) {
+                    GradientDrawable gg = Ui.circle(Posters.COLORS[j]);
+                    if (Posters.COLORS[j] == col) gg.setStroke(dp(3), Color.WHITE);
+                    chips[j].setBackground(gg);
+                }
+            });
+            chips[k] = ch;
+            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(dp(30), dp(30));
+            l.rightMargin = dp(8);
+            cr.addView(ch, l);
+        }
+        v.addView(cr);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.poster_add)
+                .setView(v)
+                .setPositiveButton(R.string.poster_pick_photo, (d, w) -> {
+                    String n = et.getText().toString().trim();
+                    if (n.isEmpty()) {
+                        toast(getString(R.string.poster_need_name));
+                        return;
+                    }
+                    posterName = n;
+                    Intent p = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+                    try {
+                        startActivityForResult(p, REQ_POSTER);
+                    } catch (Exception e) {
+                        startActivityForResult(new Intent(Intent.ACTION_GET_CONTENT).setType("image/*"), REQ_POSTER);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
     private void toast(String s) {
         Toast.makeText(this, s, Toast.LENGTH_SHORT).show();
     }
@@ -908,6 +1150,67 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
+        if ((req == REQ_BK_OUT || req == REQ_BK_IN) && res == RESULT_OK && data != null && data.getData() != null) {
+            final Uri u = data.getData();
+            toast(getString(R.string.bk_working));
+            new Thread(() -> {
+                try {
+                    if (req == REQ_BK_OUT) {
+                        Backup.export(this, u);
+                        runOnUiThread(() -> toast(getString(R.string.bk_saved)));
+                    } else {
+                        int n = Backup.restore(this, u);
+                        runOnUiThread(() -> {
+                            toast(getString(R.string.bk_restored, n));
+                            recreate();
+                        });
+                    }
+                } catch (Exception e) {
+                    runOnUiThread(() -> toast(getString(R.string.upd_error, String.valueOf(e.getMessage()))));
+                }
+            }).start();
+            return;
+        }
+        if (req == REQ_POSTER) {
+            if (res != RESULT_OK || data == null || data.getData() == null || posterName == null) return;
+            final Uri u = data.getData();
+            final String n = posterName;
+            final int col = posterColor;
+            new Thread(() -> {
+                try {
+                    Posters.add(this, n, col, decode(u));
+                    runOnUiThread(() -> {
+                        buildPosterList();
+                        toast(getString(R.string.poster_saved, n));
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() -> toast(String.valueOf(e.getMessage())));
+                }
+            }).start();
+            return;
+        }
+        if (req == REQ_SHUF) {
+            if (res != RESULT_OK || data == null) return;
+            final java.util.List<Uri> us = new java.util.ArrayList<>();
+            if (data.getClipData() != null) {
+                for (int k = 0; k < data.getClipData().getItemCount(); k++) us.add(data.getClipData().getItemAt(k).getUri());
+            } else if (data.getData() != null) {
+                us.add(data.getData());
+            }
+            toast(getString(R.string.shuffle_working));
+            new Thread(() -> {
+                int n = Shuffle.importUris(this, us);
+                runOnUiThread(() -> {
+                    if (shuffleNote != null) shuffleNote.setText(getString(R.string.shuffle_note, n));
+                    toast(getString(R.string.shuffle_saved, n));
+                    if (n > 0) {
+                        prefs.edit().putBoolean(Prefs.SHUFFLE_ON, true).apply();
+                        Shuffle.daily(this, true);
+                    }
+                });
+            }).start();
+            return;
+        }
         if (req == REQ_AZAN) {
             if (res == RESULT_OK && data != null && data.getData() != null) {
                 try {
@@ -963,6 +1266,7 @@ public class MainActivity extends Activity {
 
     private void bump() {
         prefs.edit().putLong(Prefs.IMG_VER, System.currentTimeMillis()).apply();
+        Faces.saveCurrent(this);
     }
 
     private void autoCut() {

@@ -38,6 +38,14 @@ public final class Prefs {
     public static final String REC_AUDIO = "recAudio";
     public static final String CALL_ON = "callOn";
     public static final String LIVE_ON = "liveOn";
+    public static final String FACE = "face";
+    public static final String FACE_FOCUS = "faceFocus";
+    public static final String FACE_SWIPE = "faceSwipe";
+    public static final String SHUFFLE_ON = "shuffleOn";
+    public static final String ISL_BT = "islBt";
+    public static final String ISL_RINGER = "islRinger";
+    public static final String ISL_PRIVACY = "islPrivacy";
+    public static final String ISL_SHOT = "islShot";
     public static final String WALL_MOOD = "wallMood";
     public static final String FOCUS = "focus";           // 0 tiada, 1 kerja, 2 rumah, 3 tidur, 4 memandu
     public static final String NIGHTSTAND = "nightstand";

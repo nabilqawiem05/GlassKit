@@ -397,6 +397,66 @@ public class LockActivity extends Activity {
 
     // ======================= Lukisan =======================
 
+    // ---------- leret kiri/kanan di kawasan jam: tukar muka ----------
+    private float fx0, fy0;
+    private boolean fTrack;
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent e) {
+        try {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    fx0 = e.getRawX();
+                    fy0 = e.getRawY();
+                    fTrack = prefs.getBoolean(Prefs.FACE_SWIPE, true)
+                            && fy0 < getResources().getDisplayMetrics().heightPixels * 0.5f;
+                    break;
+                case MotionEvent.ACTION_UP:
+                    if (fTrack) {
+                        float dx = e.getRawX() - fx0, dy = e.getRawY() - fy0;
+                        if (Math.abs(dx) > dp(90) && Math.abs(dy) < dp(70)) {
+                            fTrack = false;
+                            switchFace(dx < 0 ? 1 : -1);
+                            MotionEvent c = MotionEvent.obtain(e);
+                            c.setAction(MotionEvent.ACTION_CANCEL);
+                            super.dispatchTouchEvent(c);
+                            c.recycle();
+                            return true;
+                        }
+                    }
+                    break;
+            }
+        } catch (Throwable ignored) {
+        }
+        return super.dispatchTouchEvent(e);
+    }
+
+    private TextView faceLabel;
+
+    private void switchFace(int dir) {
+        int next = (Faces.active(this) + dir + Faces.COUNT) % Faces.COUNT;
+        if (faceLabel == null) {
+            faceLabel = Ui.text(this, 22, 700, Color.WHITE);
+            faceLabel.setGravity(Gravity.CENTER);
+            faceLabel.setPadding(dp(22), dp(10), dp(22), dp(10));
+            faceLabel.setBackground(GlassEngine.drawable(this, 24, true, 30));
+            ((android.view.ViewGroup) wall.getParent()).addView(faceLabel, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        }
+        faceLabel.setText(Faces.NAMES[next]);
+        faceLabel.animate().cancel();
+        faceLabel.setAlpha(1f);
+        faceLabel.setScaleX(0.8f);
+        faceLabel.setScaleY(0.8f);
+        faceLabel.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(400).start();
+        wall.animate().alpha(0.35f).translationX(dir < 0 ? dp(30) : -dp(30)).setDuration(180).start();
+        Faces.switchTo(this, next, () -> h.post(() -> {
+            render();
+            wall.setTranslationX(dir < 0 ? -dp(30) : dp(30));
+            wall.animate().alpha(1f).translationX(0).setInterpolator(Ui.SPRING).setDuration(500).start();
+            faceLabel.animate().alpha(0f).setStartDelay(700).setDuration(400).start();
+        }));
+    }
+
     interface FrameCb { void done(Bitmap b); }
 
     /** Bingkai terakhir jika saiznya sepadan dengan skrin. */
