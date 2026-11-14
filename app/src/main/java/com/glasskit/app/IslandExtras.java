@@ -200,6 +200,9 @@ final class IslandExtras {
     /** 0 tiada, 1 kamera (hijau), 2 mikrofon (oren). */
     int privacy() {
         if (!s.prefs.getBoolean(Prefs.ISL_PRIVACY, true)) return 0;
+        // buka kunci wajah guna kamera hadapan seketika: jangan tunjuk titik semasa berkunci
+        android.app.KeyguardManager km = s.getSystemService(android.app.KeyguardManager.class);
+        if (km != null && km.isKeyguardLocked()) return 0;
         if (!camBusy.isEmpty()) return 1;
         if (micBusy && !ScreenRecService.running) return 2;
         return 0;
