@@ -75,6 +75,8 @@ final class Panels {
 
     private Tile tWifi, tBt, tData, tDnd, tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc;
     private Widgets.HSlider sBright;
+    private VSlider vBright, vVolume;
+    private LiquidSheet liquid;
     private TextView hBattery;
     private Icon hBatIcon, hWifi, hCell;
     private String ssid;
@@ -308,6 +310,11 @@ final class Panels {
         LiquidGlass.invalidateTree(r);
         r.setAlpha(0f);
         r.animate().alpha(1f).setDuration(180).start();
+        if (liquid != null && open == QS) {
+            final LiquidSheet ls = liquid;
+            ls.post(ls::enter);
+            return;
+        }
         content.setTranslationY(-dp(48));
         content.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(560).start();
     }
@@ -321,6 +328,11 @@ final class Panels {
             open = NONE;
             closing = false;
             s.onPanelChanged();
+            return;
+        }
+        if (liquid != null && open == QS) {
+            final LiquidSheet ls = liquid;
+            ls.exit(() -> r.animate().alpha(0f).setDuration(120).withEndAction(() -> finishClose(r)).start());
             return;
         }
         content.animate().translationY(-dp(56)).setDuration(220).start();
@@ -337,6 +349,20 @@ final class Panels {
         }).start();
     }
 
+    private void finishClose(PanelRoot r) {
+        try { wm.removeViewImmediate(r); } catch (Exception ignored) {}
+        if (liquid != null) liquid.stopTilt();
+        if (root == r) {
+            root = null;
+            open = NONE;
+            closing = false;
+            stopTorchWatch();
+            mediaCard = null;
+            liquid = null;
+            s.onPanelChanged();
+        }
+    }
+
     private void launch(Intent i) {
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try { s.startActivity(i); } catch (Exception ignored) {}
@@ -350,6 +376,39 @@ final class Panels {
         final Icon ic;
         final TextView label, sub;
         final int rOffDp, rOnPx;
+        boolean round;
+        int onColor;
+        FrameLayout disc;
+
+        /** Tile bulat berwarna (gaya Island Cecair): bulatan + label kecil di bawah. */
+        Tile(int kind, String text, int onColor, View.OnClickListener tap, Intent detail) {
+            this.round = true;
+            this.onColor = onColor;
+            rOffDp = 0;
+            rOnPx = 0;
+            ic = new Icon(s, kind, Color.WHITE);
+            LinearLayout col = new LinearLayout(s);
+            col.setOrientation(LinearLayout.VERTICAL);
+            col.setGravity(Gravity.CENTER_HORIZONTAL);
+            disc = new FrameLayout(s);
+            disc.addView(ic, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+            disc.setOnClickListener(tap);
+            disc.setOnLongClickListener(x -> {
+                if (detail != null) launch(detail);
+                else Toast.makeText(s, text, Toast.LENGTH_SHORT).show();
+                return true;
+            });
+            Ui.press(disc);
+            col.addView(disc, new LinearLayout.LayoutParams(dp(58), dp(58)));
+            label = Ui.line(s, 11, 500, Color.argb(200, 255, 255, 255));
+            label.setText(text);
+            label.setGravity(Gravity.CENTER);
+            label.setPadding(0, dp(5), 0, 0);
+            col.addView(label, new LinearLayout.LayoutParams(dp(76), -2));
+            sub = null;
+            v = col;
+            set(false, null);
+        }
 
         Tile(int kind, String text, boolean big, int height, View.OnClickListener tap, Intent detail) {
             rOffDp = big ? 22 : 20;
@@ -389,6 +448,23 @@ final class Panels {
         }
 
         void set(boolean on, String state) {
+            if (round) {
+                android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+                g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                if (on) {
+                    g.setColors(new int[]{lighten(onColor), onColor});
+                    g.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+                    g.setGradientRadius(dp(40));
+                    g.setGradientCenter(0.35f, 0.3f);
+                } else {
+                    g.setColor(Color.argb(42, 255, 255, 255));
+                }
+                g.setStroke(Math.max(1, dp(0.8f)), on ? Color.argb(110, 255, 255, 255) : Color.argb(45, 255, 255, 255));
+                disc.setBackground(g);
+                boolean darkIcon = on && Color.luminance(onColor) > 0.5f;
+                ic.setColor(darkIcon ? 0xFF2A1B00 : Color.WHITE);
+                return;
+            }
             if (on) v.setBackground(new LiquidGlass.Surface(s, rOnPx, dark, bd, Ui.accent(s, true)));
             else v.setBackground(new LiquidGlass.Surface(s, dp(rOffDp), dark, bd, 0));
             int fg = Color.WHITE;
@@ -402,6 +478,10 @@ final class Panels {
     }
 
     private Intent act(String a) { return new Intent(a); }
+
+    private static int lighten(int c) {
+        return Color.rgb(Math.min(255, Color.red(c) + 60), Math.min(255, Color.green(c) + 60), Math.min(255, Color.blue(c) + 60));
+    }
 
     // ===================== Header (jam, tarikh, status) =====================
 
@@ -471,6 +551,13 @@ final class Panels {
 
     void openControl() {
         if (open == QS) return;
+        if (s.prefs.getInt(Prefs.PANEL_STYLE, 1) == 1) {
+            openLiquid();
+            return;
+        }
+        sBright = null;
+        vBright = vVolume = null;
+        liquid = null;
         bd = new LiquidGlass.Backdrop();
         LiquidGlass.current = bd;
         dark = Ui.darkGlass(s);
@@ -571,6 +658,403 @@ final class Panels {
         r4l.topMargin = dp(12);
         col.addView(r4, r4l);
         col.addView(handle());
+
+        LiquidGlass.current = null;
+        show(QS, sv, sv);
+        refreshControl();
+        startTorchWatch();
+        fetchSsid();
+    }
+
+    // ===================== Gaya Island Cecair (E + I + L) =====================
+
+    /** Bar kaca tegak (kecerahan / volume). */
+    private class VSlider extends View {
+        float v = 0.5f;
+        final int kind;
+        interface Cb { void on(float v, boolean done); }
+        Cb cb;
+        private final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final Icon icon;
+
+        VSlider(int kind, Cb cb) {
+            super(s);
+            this.kind = kind;
+            this.cb = cb;
+            icon = new Icon(s, kind, 0xFF2C2C2E);
+        }
+
+        void setValue(float x) {
+            v = Math.max(0f, Math.min(1f, x));
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(android.graphics.Canvas c) {
+            float w = getWidth(), h = getHeight(), rad = w / 2.6f;
+            android.graphics.RectF r = new android.graphics.RectF(0, 0, w, h);
+            p.setShader(null);
+            p.setColor(Color.argb(46, 255, 255, 255));
+            c.drawRoundRect(r, rad, rad, p);
+            c.save();
+            android.graphics.Path clip = new android.graphics.Path();
+            clip.addRoundRect(r, rad, rad, android.graphics.Path.Direction.CW);
+            c.clipPath(clip);
+            float top = h * (1f - v);
+            p.setShader(new android.graphics.LinearGradient(0, top, 0, h, Color.WHITE, Color.rgb(222, 226, 234),
+                    android.graphics.Shader.TileMode.CLAMP));
+            c.drawRect(0, top, w, h, p);
+            c.restore();
+            p.setShader(null);
+            p.setStyle(android.graphics.Paint.Style.STROKE);
+            p.setStrokeWidth(Math.max(1f, dp(0.8f)));
+            p.setColor(Color.argb(60, 255, 255, 255));
+            c.drawRoundRect(r, rad, rad, p);
+            p.setStyle(android.graphics.Paint.Style.FILL);
+            int is = Math.round(w * 0.5f);
+            icon.setColor(v > 0.12f ? 0xFF2C2C2E : Color.WHITE);
+            icon.layout(0, 0, is, is);
+            c.save();
+            c.translate((w - is) / 2f, h - is - w * 0.3f);
+            icon.draw(c);
+            c.restore();
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent e) {
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) getParent().requestDisallowInterceptTouchEvent(true);
+            setValue(1f - e.getY() / getHeight());
+            boolean done = e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL;
+            if (cb != null) cb.on(v, done);
+            return true;
+        }
+    }
+
+    /**
+     * Helaian hitam yang tumbuh dari Dynamic Island dan "mencair" ke bawah: tepi bawah beralun seperti
+     * cecair sebelum mendap, tile menitis keluar satu demi satu, dan kilauan kaca bergerak ikut condongan telefon.
+     */
+    private class LiquidSheet extends FrameLayout implements android.hardware.SensorEventListener {
+        final LinearLayout body;
+        final java.util.List<View> drops = new java.util.ArrayList<>();
+        float melt = 0f;          // 0 = island, 1 = penuh
+        float wobble = 0f;        // ayunan tepi bawah semasa mendap
+        float tx, ty;             // condongan (-1..1)
+        private final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Path path = new android.graphics.Path();
+        private android.hardware.SensorManager sm;
+        private final float rad = dp(38);
+
+        LiquidSheet() {
+            super(s);
+            setWillNotDraw(false);
+            body = new LinearLayout(s);
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.setPadding(dp(18), dp(16), dp(18), dp(20));
+            addView(body, new FrameLayout.LayoutParams(-1, -2));
+            setClipToOutline(false);
+            setClickable(true);
+        }
+
+        @Override
+        protected void dispatchDraw(android.graphics.Canvas c) {
+            float w = getWidth(), h = getHeight();
+            if (w <= 0 || h <= 0) return;
+            float hh = Math.max(dp(36), h * melt);
+            // bentuk cecair: segi empat bucu bulat dengan tepi bawah beralun (3 titisan)
+            path.reset();
+            float r = Math.min(rad, hh / 2f);
+            path.moveTo(0, r);
+            path.quadTo(0, 0, r, 0);
+            path.lineTo(w - r, 0);
+            path.quadTo(w, 0, w, r);
+            float base = hh - r;
+            path.lineTo(w, base);
+            float amp = wobble * dp(26);
+            path.quadTo(w, hh, w - r, hh);
+            float seg = (w - 2 * r) / 3f;
+            for (int i = 0; i < 3; i++) {
+                float x0 = w - r - seg * i, x1 = x0 - seg;
+                float a = amp * (i == 1 ? 1.25f : 0.8f) * (i % 2 == 0 ? 1 : -0.6f);
+                path.cubicTo(x0 - seg * 0.3f, hh + a, x1 + seg * 0.3f, hh + a, x1, hh);
+            }
+            path.quadTo(0, hh, 0, base);
+            path.close();
+            // badan kaca hitam
+            p.setShader(new android.graphics.LinearGradient(0, 0, 0, hh, Color.argb(246, 6, 6, 8), Color.argb(236, 14, 14, 18),
+                    android.graphics.Shader.TileMode.CLAMP));
+            c.drawPath(path, p);
+            // kilauan yang bergerak ikut condongan (L)
+            float gx = w * (0.3f + 0.25f * tx), gy = hh * (0.15f + 0.2f * ty);
+            p.setShader(new android.graphics.RadialGradient(gx, gy, Math.max(w, hh) * 0.75f,
+                    Color.argb(38, 255, 255, 255), Color.argb(0, 255, 255, 255), android.graphics.Shader.TileMode.CLAMP));
+            c.drawPath(path, p);
+            // bingkai kaca
+            p.setShader(new android.graphics.LinearGradient(0, 0, w, hh,
+                    new int[]{Color.argb(120, 255, 255, 255), Color.argb(20, 255, 255, 255), Color.argb(70, 255, 255, 255)},
+                    null, android.graphics.Shader.TileMode.CLAMP));
+            p.setStyle(android.graphics.Paint.Style.STROKE);
+            p.setStrokeWidth(Math.max(1f, dp(1f)));
+            c.drawPath(path, p);
+            p.setStyle(android.graphics.Paint.Style.FILL);
+            p.setShader(null);
+            c.save();
+            c.clipRect(0, 0, w, hh + Math.abs(amp));
+            super.dispatchDraw(c);
+            c.restore();
+        }
+
+        void enter() {
+            setPivotX(getWidth() / 2f);
+            setPivotY(0);
+            melt = 0f;
+            body.setAlpha(0f);
+            for (View d : drops) {
+                d.setAlpha(0f);
+                d.setScaleX(0.2f);
+                d.setScaleY(0.2f);
+                d.setTranslationY(-dp(36));
+            }
+            setScaleX(0.35f);
+            animate().scaleX(1f).setInterpolator(Ui.SPRING).setDuration(520).start();
+            android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
+            a.setDuration(620);
+            a.setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f));
+            a.addUpdateListener(x -> {
+                melt = (float) x.getAnimatedValue();
+                wobble = (float) Math.sin(melt * Math.PI) * 0.9f;
+                invalidate();
+            });
+            a.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(android.animation.Animator an) {
+                    settle();
+                }
+            });
+            a.start();
+            body.animate().alpha(1f).setStartDelay(160).setDuration(260).start();
+            for (int i = 0; i < drops.size(); i++) {
+                View d = drops.get(i);
+                d.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0)
+                        .setInterpolator(new android.view.animation.OvershootInterpolator(2.2f))
+                        .setStartDelay(180 + i * 28L).setDuration(460).start();
+            }
+            startTilt();
+        }
+
+        /** Tepi bawah berayun sekejap sebelum tenang, macam cecair mendap. */
+        private void settle() {
+            android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
+            a.setDuration(700);
+            a.addUpdateListener(x -> {
+                float t = (float) x.getAnimatedValue();
+                wobble = (float) (Math.sin(t * Math.PI * 3) * Math.exp(-4 * t)) * 0.7f;
+                invalidate();
+            });
+            a.start();
+        }
+
+        void exit(Runnable end) {
+            for (int i = 0; i < drops.size(); i++) {
+                View d = drops.get(drops.size() - 1 - i);
+                d.animate().alpha(0f).scaleX(0.3f).scaleY(0.3f).translationY(-dp(30))
+                        .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                        .setStartDelay(i * 12L).setDuration(200).start();
+            }
+            body.animate().alpha(0f).setStartDelay(120).setDuration(180).start();
+            android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(1f, 0f);
+            a.setStartDelay(120);
+            a.setDuration(340);
+            a.setInterpolator(new android.view.animation.AccelerateInterpolator(1.4f));
+            a.addUpdateListener(x -> {
+                melt = (float) x.getAnimatedValue();
+                wobble = -(float) Math.sin(melt * Math.PI) * 0.5f;
+                invalidate();
+            });
+            a.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(android.animation.Animator an) {
+                    stopTilt();
+                    end.run();
+                }
+            });
+            a.start();
+            animate().scaleX(0.35f).setStartDelay(200).setDuration(300).start();
+        }
+
+        void startTilt() {
+            try {
+                sm = s.getSystemService(android.hardware.SensorManager.class);
+                android.hardware.Sensor g = sm.getDefaultSensor(android.hardware.Sensor.TYPE_GRAVITY);
+                if (g == null) g = sm.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER);
+                if (g != null) sm.registerListener(this, g, android.hardware.SensorManager.SENSOR_DELAY_GAME, s.h);
+            } catch (Exception ignored) {
+            }
+        }
+
+        void stopTilt() {
+            if (sm != null) {
+                try { sm.unregisterListener(this); } catch (Exception ignored) {}
+                sm = null;
+            }
+        }
+
+        @Override
+        public void onSensorChanged(android.hardware.SensorEvent e) {
+            float nx = Math.max(-1f, Math.min(1f, -e.values[0] / 4.5f));
+            float ny = Math.max(-1f, Math.min(1f, (e.values[1] - 6.5f) / 4.5f));
+            tx += (nx - tx) * 0.12f;
+            ty += (ny - ty) * 0.12f;
+            // kedalaman halus: helaian condong sedikit, titisan beralih (paralaks)
+            setRotationY(tx * 3.5f);
+            setRotationX(-ty * 2.5f);
+            for (View d : drops) {
+                if (d.getAnimation() == null && d.getAlpha() >= 0.99f) {
+                    d.setTranslationX(tx * dp(3));
+                    d.setTranslationY(ty * dp(2));
+                }
+            }
+            invalidate();
+        }
+
+        @Override
+        public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) { }
+    }
+
+    private void openLiquid() {
+        bd = new LiquidGlass.Backdrop();
+        LiquidGlass.current = bd;
+        dark = true;
+        sBright = null;
+        int m = dp(10), gap = dp(8);
+        int w = Math.min(s.screenW, dp(460)) - 2 * m;
+
+        ScrollView sv = new ScrollView(s);
+        sv.setVerticalScrollBarEnabled(false);
+        sv.setClipChildren(false);
+        LinearLayout col = new LinearLayout(s);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.setPadding(m, Math.max(dp(6), s.statusH - dp(30)), m, dp(60));
+        col.setClipChildren(false);
+        col.setClickable(true);
+        col.setOnClickListener(v -> close());
+        sv.addView(col, new ScrollView.LayoutParams(-1, -2));
+
+        final LiquidSheet sheet = new LiquidSheet();
+        liquid = sheet;
+        sheet.body.setAlpha(0f);
+        sheet.setScaleX(0.35f);
+        sheet.setCameraDistance(dp(1200) * s.getResources().getDisplayMetrics().density);
+        col.addView(sheet, new LinearLayout.LayoutParams(w, -2));
+        LinearLayout b = sheet.body;
+
+        // kepala: jam, tarikh, cuaca, bateri
+        View hd = header();
+        b.addView(hd, new LinearLayout.LayoutParams(-1, -2));
+
+        // muzik
+        View media = mediaCard();
+        if (media != null) {
+            LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-1, dp(150));
+            ml.topMargin = dp(14);
+            b.addView(media, ml);
+            sheet.drops.add(media);
+        }
+
+        // tile bulat berwarna + dua bar tegak
+        tWifi = new Tile(Icon.WIFI, s.getString(R.string.tg_wifi), 0xFF0A84FF, v -> toggleWifi(), act(Settings.Panel.ACTION_WIFI));
+        tBt = new Tile(Icon.BT, s.getString(R.string.tg_bt), 0xFF0A84FF, v -> toggleBt(), act(Settings.ACTION_BLUETOOTH_SETTINGS));
+        tData = new Tile(Icon.CELL, s.getString(R.string.tg_data), 0xFF30D158, v -> toggleData(), act(Settings.Panel.ACTION_INTERNET_CONNECTIVITY));
+        tDnd = new Tile(Icon.MOON, s.getString(R.string.tg_dnd), 0xFF5E5CE6, v -> toggleDnd(), act("android.settings.ZEN_MODE_SETTINGS"));
+        tPlane = new Tile(Icon.PLANE, s.getString(R.string.tg_plane), 0xFFFF9F0A, v -> togglePlane(), act(Settings.ACTION_AIRPLANE_MODE_SETTINGS));
+        tTorch = new Tile(Icon.TORCH, s.getString(R.string.tg_torch), 0xFFFFD60A, v -> toggleTorch(), null);
+        tDark = new Tile(Icon.DARK, s.getString(R.string.tg_dark), 0xFF8E8E93, v -> toggleDark(), act(Settings.ACTION_DISPLAY_SETTINGS));
+        tRotate = new Tile(Icon.ROTATE, s.getString(R.string.tg_rotate), 0xFFFF375F, v -> toggleRotate(), act(Settings.ACTION_DISPLAY_SETTINGS));
+        tSaver = new Tile(Icon.BATTERY, s.getString(R.string.tg_saver), 0xFFFFCC00, v -> toggleSaver(), act(Settings.ACTION_BATTERY_SAVER_SETTINGS));
+        tLoc = new Tile(Icon.PIN, s.getString(R.string.tg_location), 0xFF0A84FF, v -> toggleLocation(), act(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+        tNfc = new Tile(Icon.NFC, s.getString(R.string.tg_nfc), 0xFF64D2FF, v -> toggleNfc(), act(Settings.ACTION_NFC_SETTINGS));
+        Tile shot = new Tile(Icon.SHOT, s.getString(R.string.tg_shot), Color.WHITE, v -> {
+            close();
+            s.h.postDelayed(() -> s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT), 700);
+        }, null);
+        Tile rec = new Tile(Icon.REC, s.getString(R.string.tg_rec), 0xFFFF3B30, v -> {
+            if (Recorder.recording()) {
+                Recorder.stop(s);
+                close();
+            } else {
+                close();
+                s.h.postDelayed(() -> Recorder.start(s), 800);
+            }
+        }, null);
+        rec.set(Recorder.recording(), null);
+        Tile cam = new Tile(Icon.CAMERA, s.getString(R.string.tg_camera), Color.WHITE,
+                v -> launch(new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)), null);
+        Tile lock = new Tile(Icon.LOCK, s.getString(R.string.tg_lock), Color.WHITE, v -> {
+            close();
+            s.h.postDelayed(() -> s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN), 500);
+        }, act(Settings.ACTION_SECURITY_SETTINGS));
+        Tile set = new Tile(Icon.GEAR, s.getString(R.string.tg_settings), Color.WHITE,
+                v -> launch(new Intent(Settings.ACTION_SETTINGS)), null);
+        Tile[] all = {tWifi, tBt, tData, tDnd, tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc, shot, rec, cam, lock, set};
+
+        LinearLayout mid = new LinearLayout(s);
+        LinearLayout grid = new LinearLayout(s);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        int cols = 3;
+        for (int i = 0; i < 9; i += cols) {
+            LinearLayout row = new LinearLayout(s);
+            for (int j = 0; j < cols; j++) {
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+                row.addView(all[i + j].v, lp);
+                sheet.drops.add(all[i + j].v);
+            }
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+            rl.topMargin = dp(10);
+            grid.addView(row, rl);
+        }
+        mid.addView(grid, new LinearLayout.LayoutParams(0, -2, 1f));
+        vBright = new VSlider(Icon.SUN, this::setBrightness);
+        vVolume = new VSlider(Icon.SPEAKER, (v, done) -> {
+            android.media.AudioManager am = s.getSystemService(android.media.AudioManager.class);
+            int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC);
+            am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Math.round(v * max), 0);
+        });
+        LinearLayout.LayoutParams vl = new LinearLayout.LayoutParams(dp(62), -1);
+        vl.leftMargin = dp(8);
+        vl.topMargin = dp(10);
+        mid.addView(vBright, vl);
+        LinearLayout.LayoutParams vl2 = new LinearLayout.LayoutParams(dp(62), -1);
+        vl2.leftMargin = dp(10);
+        vl2.topMargin = dp(10);
+        mid.addView(vVolume, vl2);
+        sheet.drops.add(vBright);
+        sheet.drops.add(vVolume);
+        LinearLayout.LayoutParams midl = new LinearLayout.LayoutParams(-1, -2);
+        midl.topMargin = dp(4);
+        b.addView(mid, midl);
+
+        LinearLayout row2 = new LinearLayout(s);
+        for (int i = 9; i < all.length; i++) {
+            row2.addView(all[i].v, new LinearLayout.LayoutParams(0, -2, 1f));
+            sheet.drops.add(all[i].v);
+        }
+        LinearLayout.LayoutParams r2 = new LinearLayout.LayoutParams(-1, -2);
+        r2.topMargin = dp(12);
+        b.addView(row2, r2);
+
+        LinearLayout foot = new LinearLayout(s);
+        foot.addView(chip(s.getString(R.string.system_panel), v -> {
+            close();
+            s.h.postDelayed(() -> s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS), 450);
+        }), new LinearLayout.LayoutParams(0, dp(42), 1f));
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(0, dp(42), 1f);
+        fl.leftMargin = gap;
+        foot.addView(chip(s.getString(R.string.cc_settings), v -> launch(new Intent(s, MainActivity.class))), fl);
+        LinearLayout.LayoutParams fll = new LinearLayout.LayoutParams(-1, -2);
+        fll.topMargin = dp(16);
+        b.addView(foot, fll);
+        sheet.drops.add(foot);
 
         LiquidGlass.current = null;
         show(QS, sv, sv);
@@ -752,7 +1236,13 @@ final class Panels {
         NfcAdapter nfc = NfcAdapter.getDefaultAdapter(s);
         tNfc.set(nfc != null && nfc.isEnabled(), null);
         int br = Settings.System.getInt(s.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, 128);
-        sBright.setValue(br / 255f);
+        if (sBright != null) sBright.setValue(br / 255f);
+        if (vBright != null) vBright.setValue(br / 255f);
+        if (vVolume != null) {
+            android.media.AudioManager am = s.getSystemService(android.media.AudioManager.class);
+            vVolume.setValue((float) am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                    / Math.max(1, am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)));
+        }
         if (mediaCard != null) updateMedia();
     }
 
@@ -1039,14 +1529,142 @@ final class Panels {
             ncList.addView(e, new LinearLayout.LayoutParams(-1, -2));
             return;
         }
-        int total = Math.min(40, list.size());
-        for (int i = 0; i < total; i++) {
-            View card = card(list.get(i), i == 0, i == total - 1);
-            if (card == null) continue;
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-            p.bottomMargin = dp(10);
-            ncList.addView(card, p);
+        // kumpul ikut app (kekal susunan terbaru dahulu)
+        java.util.LinkedHashMap<String, List<StatusBarNotification>> groups = new java.util.LinkedHashMap<>();
+        for (StatusBarNotification x : list) {
+            List<StatusBarNotification> g = groups.get(x.getPackageName());
+            if (g == null) groups.put(x.getPackageName(), g = new ArrayList<>());
+            if (g.size() < 30) g.add(x);
         }
+        for (java.util.Map.Entry<String, List<StatusBarNotification>> en : groups.entrySet()) {
+            final String pkg = en.getKey();
+            final List<StatusBarNotification> g = en.getValue();
+            if (g.size() == 1) {
+                View card = card(g.get(0), true, true);
+                if (card == null) continue;
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+                p.bottomMargin = dp(10);
+                ncList.addView(card, p);
+            } else if (openGroups.contains(pkg)) {
+                // kumpulan dibuka: tajuk + semua kad
+                LinearLayout hdr = new LinearLayout(s);
+                hdr.setGravity(Gravity.CENTER_VERTICAL);
+                hdr.setPadding(dp(6), dp(4), dp(2), dp(8));
+                TextView ht = Ui.line(s, 15, 650, Color.WHITE);
+                ht.setText(appName(pkg));
+                hdr.addView(ht, new LinearLayout.LayoutParams(0, -2, 1f));
+                View less = chip(s.getString(R.string.show_less), v -> {
+                    openGroups.remove(pkg);
+                    fillNotifications();
+                });
+                hdr.addView(less, new LinearLayout.LayoutParams(-2, dp(32)));
+                ncList.addView(hdr, new LinearLayout.LayoutParams(-1, -2));
+                for (StatusBarNotification x : g) {
+                    View card = card(x, true, true);
+                    if (card == null) continue;
+                    LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+                    p.bottomMargin = dp(8);
+                    ncList.addView(card, p);
+                }
+            } else {
+                View stack = stack(pkg, g);
+                if (stack == null) continue;
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+                p.bottomMargin = dp(18);
+                ncList.addView(stack, p);
+            }
+        }
+    }
+
+    private final java.util.Set<String> openGroups = new java.util.HashSet<>();
+
+    /** Tindanan kad kaca untuk satu app: kad terbaru di depan, dua lapisan di belakang. */
+    private View stack(final String pkg, final List<StatusBarNotification> g) {
+        View front = card(g.get(0), true, true);
+        if (front == null) return null;
+        FrameLayout f = new FrameLayout(s);
+        f.setClipChildren(false);
+        for (int i = 2; i >= 1; i--) {
+            if (g.size() <= i) continue;
+            View ghost = new View(s);
+            ghost.setBackground(GlassEngine.drawable(s, 24, true, 18 + i * 4));
+            ghost.setScaleX(1f - 0.045f * i);
+            FrameLayout.LayoutParams gl = new FrameLayout.LayoutParams(-1, dp(40), Gravity.BOTTOM);
+            gl.bottomMargin = -dp(7) * i;
+            ghost.setAlpha(1f - 0.25f * i);
+            f.addView(ghost, gl);
+        }
+        f.addView(front, new FrameLayout.LayoutParams(-1, -2));
+        // label "+N lagi" pada kad hadapan
+        TextView more = Ui.line(s, 11, 700, Color.WHITE);
+        more.setText(s.getString(R.string.n_more, g.size() - 1));
+        more.setPadding(dp(9), dp(3), dp(9), dp(3));
+        more.setBackground(Ui.round(Color.argb(70, 255, 255, 255), dp(10)));
+        FrameLayout.LayoutParams ml = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
+        ml.bottomMargin = dp(10);
+        ml.rightMargin = dp(14);
+        f.addView(more, ml);
+        // tekan: buka kumpulan; leret: padam semua notifikasi app ini
+        front.setOnClickListener(v -> {
+            openGroups.add(pkg);
+            fillNotifications();
+        });
+        swipeGroup(front, f, g);
+        return f;
+    }
+
+    private void swipeGroup(View handle, final View whole, final List<StatusBarNotification> g) {
+        final float[] st = new float[2];
+        final boolean[] drag = new boolean[1];
+        handle.setOnTouchListener((view, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    st[0] = e.getRawX();
+                    st[1] = e.getRawY();
+                    drag[0] = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = e.getRawX() - st[0], dy = e.getRawY() - st[1];
+                    if (!drag[0] && Math.abs(dx) > dp(12) && Math.abs(dx) > Math.abs(dy)) {
+                        drag[0] = true;
+                        ViewGroup p = (ViewGroup) whole.getParent();
+                        if (p != null) p.requestDisallowInterceptTouchEvent(true);
+                    }
+                    if (drag[0]) {
+                        whole.setTranslationX(dx);
+                        whole.setAlpha(1f - Math.min(1f, Math.abs(dx) / whole.getWidth()));
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP: {
+                    float dx = e.getRawX() - st[0], dy = e.getRawY() - st[1];
+                    if (drag[0]) {
+                        if (Math.abs(dx) > whole.getWidth() * 0.33f) {
+                            whole.animate().translationX(Math.signum(dx) * whole.getWidth()).alpha(0f).setDuration(200)
+                                    .withEndAction(() -> {
+                                        NotifListener l = NotifListener.inst;
+                                        if (l != null) {
+                                            for (StatusBarNotification x : g) {
+                                                try { l.cancelNotification(x.getKey()); } catch (Exception ignored) {}
+                                            }
+                                        }
+                                        ViewGroup p = (ViewGroup) whole.getParent();
+                                        if (p != null) p.removeView(whole);
+                                    }).start();
+                        } else {
+                            whole.animate().translationX(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(420).start();
+                        }
+                    } else if (Math.abs(dx) < dp(10) && Math.abs(dy) < dp(10)) {
+                        view.performClick();
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_CANCEL:
+                    whole.animate().translationX(0).alpha(1f).setDuration(200).start();
+                    return true;
+            }
+            return false;
+        });
     }
 
     private String appName(String pkg) {

@@ -38,6 +38,7 @@ public final class Prefs {
     public static final String REC_AUDIO = "recAudio";
     public static final String CALL_ON = "callOn";
     public static final String LIVE_ON = "liveOn";
+    public static final String PANEL_STYLE = "panelStyle"; // 0 klasik, 1 island cecair
     public static final String FACE = "face";
     public static final String FACE_FOCUS = "faceFocus";
     public static final String FACE_SWIPE = "faceSwipe";

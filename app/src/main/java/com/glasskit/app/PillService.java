@@ -1016,6 +1016,13 @@ public class PillService extends AccessibilityService
     }
 
     private void onPillSwipe(boolean down) {
+        if (down && expanded && mode != CALL && panels != null && prefs.getBoolean(Prefs.PANELS_ON, true)) {
+            // tarik island yang sudah besar: ia "mencair" menjadi panel kawalan
+            expanded = false;
+            refresh();
+            panels.openControl();
+            return;
+        }
         if (down) {
             if (!expanded && (mode == MUSIC || mode == CALL || mode == LIVE)) {
                 expanded = true;

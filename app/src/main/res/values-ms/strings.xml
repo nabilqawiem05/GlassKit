@@ -387,4 +387,10 @@
     <string name="bk_saved">Sandaran disimpan</string>
     <string name="bk_restored">Dipulihkan (%d fail)</string>
     <string name="w_up_next">Seterusnya</string>
+    <string name="show_less">Tunjuk kurang</string>
+    <string name="n_more">+%d lagi</string>
+    <string name="panel_style">Gaya panel kawalan</string>
+    <string name="panel_classic">Klasik</string>
+    <string name="panel_liquid">Island cecair</string>
+    <string name="panel_style_note">Island cecair: panel tumbuh dari Dynamic Island dan mencair ke bawah, tile menitis ke tempatnya, dan kilauan kaca ikut condongan telefon. Buka dengan leret ke bawah dari atas kanan, atau tarik ke bawah island yang sedang besar.</string>
 </resources>
