@@ -83,7 +83,7 @@ class StatusBar extends View {
         Context c = getContext();
         style = prefs.getInt(Prefs.SBAR_STYLE, CAPSULE);
         showPct = prefs.getBoolean(Prefs.SBAR_PCT, true);
-        dark = prefs.getBoolean(Prefs.GLASS_DARK, false);
+        dark = Ui.darkGlass(c);
         setLayerType(style == MINIMAL ? LAYER_TYPE_SOFTWARE : LAYER_TYPE_HARDWARE, null);
         text.setShadowLayer(style == MINIMAL ? dp(3) : 0, 0, dp(0.6f), Color.argb(130, 0, 0, 0));
 

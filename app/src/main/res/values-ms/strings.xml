@@ -219,4 +219,7 @@
     <string name="rec_running">Sedang merakam skrin</string>
     <string name="rec_stop">Henti</string>
     <string name="rec_failed">Gagal mula merakam</string>
+    <string name="glass_tinted">Gelap tinted</string>
+    <string name="glass_auto">Auto</string>
+    <string name="glass_mode_note">Untuk semua: panel, volume, lock screen, status bar, jam dan widget. Gelap tinted ialah kaca gelap berasap dengan sedikit warna wallpaper. Auto ikut mod gelap.</string>
 </resources>

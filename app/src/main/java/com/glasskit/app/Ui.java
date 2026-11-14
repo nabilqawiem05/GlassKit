@@ -40,6 +40,21 @@ final class Ui {
     }
 
     /** Kaca ikut gaya pilihan: jernih (putih lut sinar) atau gelap (hitam lut sinar). */
+    /** Mod kaca dipilih pengguna: 0 cerah, 1 gelap tinted, 2 ikut mod gelap sistem. */
+    static int glassMode(Context c) {
+        android.content.SharedPreferences p = Prefs.get(c);
+        return p.getInt(Prefs.GLASS_MODE, p.getBoolean(Prefs.GLASS_DARK, false) ? 1 : 0);
+    }
+
+    static boolean darkGlass(Context c) {
+        int m = glassMode(c);
+        if (m == 2) {
+            int night = c.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+            return night == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        }
+        return m == 1;
+    }
+
     static Drawable glassStyled(Context c, float radiusDp, boolean dark) {
         if (LiquidGlass.current != null) return new LiquidGlass.Surface(c, dp(c, radiusDp), dark, LiquidGlass.current, 0);
         if (!dark) return glass(c, radiusDp, 44);

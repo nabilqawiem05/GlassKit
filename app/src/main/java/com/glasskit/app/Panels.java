@@ -473,7 +473,7 @@ final class Panels {
         if (open == QS) return;
         bd = new LiquidGlass.Backdrop();
         LiquidGlass.current = bd;
-        dark = s.prefs.getBoolean(Prefs.GLASS_DARK, false);
+        dark = Ui.darkGlass(s);
         int m = dp(14), gap = dp(10);
         int w = Math.min(s.screenW, dp(460)) - 2 * m;
 
@@ -925,7 +925,7 @@ final class Panels {
         if (open == SHADE) return;
         bd = new LiquidGlass.Backdrop();
         LiquidGlass.current = bd;
-        dark = s.prefs.getBoolean(Prefs.GLASS_DARK, false);
+        dark = Ui.darkGlass(s);
         tData = null;
         int m = dp(14), gap = dp(8);
         int w = Math.min(s.screenW, dp(460)) - 2 * m;

@@ -132,7 +132,7 @@ public abstract class GlassWidget extends AppWidgetProvider {
 
     // ================= Pembantu lukisan =================
 
-    static boolean dark(Context c) { return Prefs.get(c).getBoolean(Prefs.GLASS_DARK, false); }
+    static boolean dark(Context c) { return Ui.darkGlass(c); }
 
     static String time(Context c) {
         boolean is24 = android.text.format.DateFormat.is24HourFormat(c);

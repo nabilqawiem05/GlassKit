@@ -63,10 +63,6 @@
             android:foregroundServiceType="mediaProjection|microphone" />
 
         <activity
-            android:name=".IconsActivity"
-            android:exported="false" />
-
-        <activity
             android:name=".MainActivity"
             android:launchMode="singleTop"
             android:exported="true">

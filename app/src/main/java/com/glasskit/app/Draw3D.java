@@ -33,6 +33,7 @@ final class Draw3D {
 
     static void useWidgetTheme(Context c) {
         mode = Prefs.get(c).getInt(Prefs.WIDGET_THEME, GLASS);
+        if (mode == GLASS && Ui.darkGlass(c)) mode = DARK;
     }
 
     private static Paint.Align al(int a) {

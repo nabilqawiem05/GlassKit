@@ -120,7 +120,7 @@ public final class DepthRenderer {
         if (showClock) {
             int color = p.getInt(Prefs.CLOCK_COLOR, Color.WHITE);
             boolean glass = p.getBoolean(Prefs.CLOCK_GLASS, true);
-            boolean dark = p.getBoolean(Prefs.GLASS_DARK, false);
+            boolean dark = Ui.darkGlass(ctx);
             float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
 
             Path path = clockPath(ctx, p, w, h);

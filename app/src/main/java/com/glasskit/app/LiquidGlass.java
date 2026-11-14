@@ -108,7 +108,7 @@ final class LiquidGlass {
         private final float radius, dp;
         private final boolean dark;
         private final Backdrop bd;
-        private final int tint;
+        private final int tint, smoke;
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final Path rr = new Path();
         private final int[] loc = new int[2];
@@ -121,6 +121,13 @@ final class LiquidGlass {
             this.bd = bd;
             this.tint = tint;
             this.dp = c.getResources().getDisplayMetrics().density;
+            int acc;
+            try { acc = c.getColor(android.R.color.system_accent1_600); } catch (Exception e) { acc = 0xFF3A5BA0; }
+            this.smoke = (acc & 0x00FFFFFF) | 0x2E000000; // ~18% tint warna wallpaper
+        }
+
+        Surface(Context c, float radiusPx, Backdrop bd, int tint) {
+            this(c, radiusPx, Ui.darkGlass(c), bd, tint);
         }
 
         @Override
@@ -190,6 +197,10 @@ final class LiquidGlass {
             p.setColorFilter(null);
             p.setColor(base);
             c.drawRect(r, p);
+            if (dark && tint == 0) {
+                p.setColor(smoke);
+                c.drawRect(r, p);
+            }
             if (tint != 0) {
                 p.setColor((tint & 0x00FFFFFF) | 0x8C000000);
                 c.drawRect(r, p);

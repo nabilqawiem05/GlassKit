@@ -316,11 +316,13 @@ public class MainActivity extends Activity {
         LinearLayout pan = card(pPanels, R.string.sec_panels, Icon.GEAR, Ui.BLUE);
         toggle(pan, R.string.panels_on, Prefs.PANELS_ON, true);
         label(pan, R.string.glass_style);
-        segmented(pan, new int[]{R.string.glass_clear, R.string.glass_dark},
-                prefs.getBoolean(Prefs.GLASS_DARK, false) ? 1 : 0, i -> {
-                    prefs.edit().putBoolean(Prefs.GLASS_DARK, i == 1).apply();
+        segmented(pan, new int[]{R.string.glass_clear, R.string.glass_tinted, R.string.glass_auto},
+                Ui.glassMode(this), i -> {
+                    prefs.edit().putInt(Prefs.GLASS_MODE, i).putBoolean(Prefs.GLASS_DARK, i == 1).apply();
                     GlassWidget.refreshAll(this);
+                    if (PillService.inst != null) PillService.inst.updateStatusBar();
                 });
+        note(pan, getString(R.string.glass_mode_note));
         note(pan, getString(R.string.panels_hint));
         LinearLayout pr = new LinearLayout(this);
         pan.addView(pr);
@@ -434,8 +436,6 @@ public class MainActivity extends Activity {
                 });
         note(wg, getString(R.string.widgets_hint));
         button(wg, getString(R.string.btn_refresh_widgets), false, v -> GlassWidget.refreshAll(this));
-        note(wg, getString(R.string.themed_hint));
-        button(wg, getString(R.string.btn_open_icons), true, v -> startActivity(new Intent(this, IconsActivity.class)));
 
         LinearLayout dc = card(pWidgets, R.string.sec_data, Icon.PIN, 0xFF34C759);
         note(dc, getString(R.string.data_hint));

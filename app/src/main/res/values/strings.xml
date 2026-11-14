@@ -226,4 +226,7 @@
     <string name="rec_running">Recording screen</string>
     <string name="rec_stop">Stop</string>
     <string name="rec_failed">Couldn\'t start recording</string>
+    <string name="glass_tinted">Dark tinted</string>
+    <string name="glass_auto">Auto</string>
+    <string name="glass_mode_note">Applies to everything: panels, volume, lock screen, status bar, clock and widgets. Dark tinted is smoked glass with a hint of your wallpaper color. Auto follows dark mode.</string>
 </resources>

@@ -227,7 +227,7 @@ public class LockActivity extends Activity {
         clearAll = Ui.text(this, 13, 650, Color.WHITE);
         clearAll.setText(R.string.clear_all);
         clearAll.setPadding(dp(14), dp(7), dp(14), dp(7));
-        clearAll.setBackground(Ui.glassStyled(this, 16, true));
+        clearAll.setBackground(Ui.glassStyled(this, 16, Ui.darkGlass(this)));
         clearAll.setOnClickListener(v -> {
             NotifListener l = NotifListener.inst;
             if (l != null) {
@@ -531,7 +531,7 @@ public class LockActivity extends Activity {
 
     private View circle(int icon, View.OnClickListener l) {
         FrameLayout f = new FrameLayout(this);
-        f.setBackground(Ui.glassStyled(this, 27, true));
+        f.setBackground(Ui.glassStyled(this, 27, Ui.darkGlass(this)));
         f.addView(new Icon(this, icon, Color.WHITE), new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
         f.setOnClickListener(l);
         Ui.press(f);
@@ -639,7 +639,7 @@ public class LockActivity extends Activity {
 
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        LiquidGlass.apply(c, 24, prefs.getBoolean(Prefs.GLASS_DARK, false));
+        LiquidGlass.apply(c, 24, Ui.darkGlass(this));
         c.setPadding(dp(14), dp(12), dp(14), dp(12));
 
         LinearLayout top = new LinearLayout(this);
@@ -685,7 +685,7 @@ public class LockActivity extends Activity {
                 et.setTextColor(Color.WHITE);
                 et.setHintTextColor(Color.argb(150, 255, 255, 255));
                 et.setTextSize(15);
-                et.setBackground(Ui.glassStyled(this, 20, true));
+                et.setBackground(Ui.glassStyled(this, 20, Ui.darkGlass(this)));
                 et.setPadding(dp(14), dp(10), dp(14), dp(10));
                 et.setImeOptions(EditorInfo.IME_ACTION_SEND);
                 et.setSingleLine(false);
@@ -756,7 +756,7 @@ public class LockActivity extends Activity {
         t.setText(s);
         t.setGravity(Gravity.CENTER);
         t.setPadding(dp(16), 0, dp(16), 0);
-        t.setBackground(primary ? Ui.round(Color.WHITE, dp(18)) : Ui.glassStyled(this, 18, true));
+        t.setBackground(primary ? Ui.round(Color.WHITE, dp(18)) : Ui.glassStyled(this, 18, Ui.darkGlass(this)));
         Ui.press(t);
         return t;
     }
@@ -862,7 +862,7 @@ public class LockActivity extends Activity {
         if (s == null || s.mc == null || (s.title == null && !s.playing)) return;
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(Ui.glassStyled(this, 28, prefs.getBoolean(Prefs.GLASS_DARK, false)));
+        c.setBackground(Ui.glassStyled(this, 28, Ui.darkGlass(this)));
         c.setPadding(dp(16), dp(14), dp(16), dp(8));
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);

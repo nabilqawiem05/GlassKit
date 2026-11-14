@@ -93,6 +93,7 @@ public class PillService extends AccessibilityService
     private long holdMusicUntil, duration;
 
     private LockPatch patch;
+    private int lastNight = -1;
     CallOverlay call;
     VolumePanel volume;
     private boolean volRepeatUp;
@@ -355,6 +356,11 @@ public class PillService extends AccessibilityService
             try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
         }
         if (panels != null) panels.updateEdges();
+        int night = newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        if (night != lastNight) {
+            lastNight = night;
+            if (prefs != null && Ui.glassMode(this) == 2) GlassWidget.refreshAll(this);
+        }
         hideStatusBar();
         updateStatusBar();
         refresh();

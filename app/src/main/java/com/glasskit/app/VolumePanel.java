@@ -63,7 +63,7 @@ final class VolumePanel {
         level.v = value();
         level.shown = level.v;
         FrameLayout pill = new FrameLayout(s);
-        pill.setBackground(new LiquidGlass.Surface(s, dp(27), true, bd, 0));
+        pill.setBackground(new LiquidGlass.Surface(s, dp(27), Ui.darkGlass(s), bd, 0));
         pill.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline o) {
