@@ -61,6 +61,24 @@ import java.util.Set;
 public class LockActivity extends Activity {
     static LockActivity inst;
     static boolean visible;
+    /** Bingkai terakhir dikongsi antara instance: lock screen muncul serta-merta, tiada skrin hitam. */
+    private static Bitmap lastFrame;
+    private static String lastKey;
+    private static final LiquidGlass.Backdrop lastBd = new LiquidGlass.Backdrop();
+    private static final java.util.concurrent.ExecutorService RENDER =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "gk-lock-render");
+                t.setPriority(Thread.NORM_PRIORITY - 1);
+                return t;
+            });
+    private boolean renderBusy, renderAgain;
+    private int lastBatt = -2;
+    private boolean lastPlug;
+    // data tolok (dikira di latar, dilukis di UI)
+    private volatile String gLine;
+    private volatile int gCol = 0xFF0A84FF, gSteps, gLvl;
+    private volatile boolean gCharging;
+    private volatile Data.Weather gWx;
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private SharedPreferences prefs;
@@ -85,13 +103,23 @@ public class LockActivity extends Activity {
     private Runnable afterUnlock;
     private boolean leaving, soundPlayed;
     private long lastSensorTouch;
+    private int hintRes;
     final LiquidGlass.Backdrop bd = new LiquidGlass.Backdrop();
 
     private final BroadcastReceiver rx = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
+            if (Intent.ACTION_BATTERY_CHANGED.equals(i.getAction())) {
+                int lv = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
+                boolean pl = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0;
+                if (lv == lastBatt && pl == lastPlug) return;
+                lastBatt = lv;
+                lastPlug = pl;
+                refreshGauges();
+                return;
+            }
             render();
-            if (gauges != null) gauges.invalidate();
+            refreshGauges();
         }
     };
 
@@ -112,7 +140,11 @@ public class LockActivity extends Activity {
                 lockAnim.setLocked();
                 soundPlayed = false;
             }
-            hint.setText(locked ? R.string.swipe_open : R.string.unlocked_swipe);
+            int want = locked ? R.string.swipe_open : R.string.unlocked_swipe;
+            if (hintRes != want) {
+                hintRes = want;
+                hint.setText(want);
+            }
             h.postDelayed(this, 300);
         }
     };
@@ -160,6 +192,13 @@ public class LockActivity extends Activity {
         wall = new ImageView(this);
         wall.setScaleType(ImageView.ScaleType.FIT_XY);
         root.addView(wall, new FrameLayout.LayoutParams(-1, -1));
+        synchronized (lastBd) {
+            if (lastFrame != null && lastFrame.getWidth() == W && lastFrame.getHeight() == H) {
+                frame = lastFrame;
+                wall.setImageBitmap(frame);
+                copyBd(lastBd, bd);
+            }
+        }
 
         ui = new FrameLayout(this);
         root.addView(ui, new FrameLayout.LayoutParams(-1, -1));
@@ -294,6 +333,8 @@ public class LockActivity extends Activity {
     }
 
     private void resetUi() {
+        ui.animate().cancel();
+        wall.animate().cancel();
         leaving = false;
         afterUnlock = null;
         replyKey = null;
@@ -309,36 +350,119 @@ public class LockActivity extends Activity {
             soundPlayed = false;
         }
         render();
+        refreshGauges();
         refreshNotifs();
         refreshMusic();
     }
 
     // ======================= Lukisan =======================
 
+    private static void copyBd(LiquidGlass.Backdrop from, LiquidGlass.Backdrop to) {
+        to.sharp = from.sharp;
+        to.soft = from.soft;
+        to.screenW = from.screenW;
+        to.screenH = from.screenH;
+        to.luminance = from.luminance;
+    }
+
+    private String frameKey() {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        return prefs.getLong(Prefs.IMG_VER, 0) + "|" + c.get(java.util.Calendar.DAY_OF_YEAR) + "|"
+                + c.get(java.util.Calendar.HOUR_OF_DAY) + ":" + c.get(java.util.Calendar.MINUTE) + "|"
+                + prefs.getAll().hashCode() + "|" + W + "x" + H + "|" + java.util.Locale.getDefault();
+    }
+
+    /** Lukis bingkai wallpaper + jam di thread latar; UI tidak tersekat. Bingkai lama kekal sehingga yang baru siap. */
     void render() {
-        long v = prefs.getLong(Prefs.IMG_VER, 0);
-        if (v != imgVer) {
-            imgVer = v;
-            bg = DepthRenderer.load(DepthRenderer.bgFile(this));
-            fg = DepthRenderer.load(DepthRenderer.fgFile(this));
-        }
         try {
-            if (frame == null) frame = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
-            DepthRenderer.draw(this, new Canvas(frame), W, H, bg, fg, prefs, true);
-            wall.setImageBitmap(frame);
-            wall.invalidate();
-            bd.set(frame, W, H);
-            LiquidGlass.invalidateTree(ui);
+            placeGauges();
         } catch (Throwable ignored) {
         }
+        final String key = frameKey();
+        if (key.equals(lastKey) && frame != null) return;
+        if (renderBusy) {
+            renderAgain = true;
+            return;
+        }
+        renderBusy = true;
+        final android.content.Context app = getApplicationContext();
+        final int w = W, hh = H;
+        RENDER.execute(() -> {
+            Bitmap out = null;
+            LiquidGlass.Backdrop nb = new LiquidGlass.Backdrop();
+            try {
+                Bitmap bgB = DepthRenderer.load(DepthRenderer.bgFile(app));
+                Bitmap fgB = DepthRenderer.load(DepthRenderer.fgFile(app));
+                out = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
+                DepthRenderer.draw(app, new Canvas(out), w, hh, bgB, fgB, prefs, true);
+                nb.set(out, w, hh);
+            } catch (Throwable t) {
+                CrashLog.write(app, t);
+            }
+            final Bitmap done = out;
+            h.post(() -> {
+                renderBusy = false;
+                if (done != null) {
+                    frame = done;
+                    synchronized (lastBd) {
+                        lastFrame = done;
+                        lastKey = key;
+                        copyBd(nb, lastBd);
+                    }
+                    if (!isDestroyed()) {
+                        wall.setImageBitmap(done);
+                        copyBd(nb, bd);
+                        LiquidGlass.invalidateTree(ui);
+                        gauges.invalidate();
+                    }
+                }
+                if (renderAgain) {
+                    renderAgain = false;
+                    if (!isDestroyed()) render();
+                }
+            });
+        });
+    }
+
+    private void placeGauges() {
         Path p = DepthRenderer.clockPath(this, prefs, W, H);
         RectF r = new RectF();
         p.computeBounds(r, true);
         float scale = (float) getResources().getDisplayMetrics().widthPixels / W;
         FrameLayout.LayoutParams gl = (FrameLayout.LayoutParams) gauges.getLayoutParams();
-        gl.topMargin = Math.round(r.bottom * scale) + dp(16);
-        gauges.setLayoutParams(gl);
-        gauges.invalidate();
+        int top = Math.round(r.bottom * scale) + dp(16);
+        if (gl.topMargin != top) {
+            gl.topMargin = top;
+            gauges.setLayoutParams(gl);
+        }
+    }
+
+    /** Kira data tolok (kalendar, cuaca, langkah, bateri) di latar. */
+    void refreshGauges() {
+        final android.content.Context ctx = getApplicationContext();
+        RENDER.execute(() -> {
+            try {
+                List<Data.Event> ev = Data.events(ctx, 2, 1);
+                String line;
+                int col = Ui.accent(ctx, false);
+                if (ev.isEmpty()) {
+                    line = Data.dayLabel(ctx, System.currentTimeMillis()) + " · " + ctx.getString(R.string.no_events);
+                } else {
+                    Data.Event e = ev.get(0);
+                    col = e.color;
+                    line = (e.allDay ? ctx.getString(R.string.all_day) : Data.eventTime(ctx, e).split(" – ")[0]) + "  " + e.title;
+                }
+                gLine = line;
+                gCol = col;
+                gWx = Data.weather(ctx);
+                gSteps = Data.steps(ctx);
+                gLvl = Math.max(0, Ui.battery(ctx));
+                gCharging = Ui.charging(ctx);
+            } catch (Throwable t) {
+                CrashLog.write(ctx, t);
+            }
+            h.post(() -> { if (gauges != null) gauges.invalidate(); });
+        });
     }
 
     private class GaugeRow extends View {
@@ -365,17 +489,10 @@ public class LockActivity extends Activity {
             Draw3D.backdropRect = new RectF(-lc[0], -lc[1], W - lc[0], H - lc[1]);
             float w = getWidth(), cx = w / 2f;
             float u = dp(1);
-            // baris 1: acara seterusnya
-            List<Data.Event> ev = Data.events(ctx, 2, 1);
-            String line;
-            int col = Ui.accent(ctx, false);
-            if (ev.isEmpty()) {
-                line = Data.dayLabel(ctx, System.currentTimeMillis()) + " · " + getString(R.string.no_events);
-            } else {
-                Data.Event e = ev.get(0);
-                col = e.color;
-                line = (e.allDay ? getString(R.string.all_day) : Data.eventTime(ctx, e).split(" – ")[0]) + "  " + e.title;
-            }
+            // baris 1: acara seterusnya (data dari refreshGauges)
+            String line = gLine;
+            if (line == null) return;
+            int col = gCol;
             line = Draw3D.fit(line, 16 * u, 700, w - 60 * u);
             float tw = Draw3D.measure(line, 16 * u, 700);
             Path bar = new Path();
@@ -385,20 +502,20 @@ public class LockActivity extends Activity {
 
             // baris 2: cuaca, langkah, bateri
             float cy = 82 * u, gap = 96 * u;
-            Data.Weather wx = Data.weather(ctx);
+            Data.Weather wx = gWx;
             if (wx != null) {
                 Draw3D.weather(c, wx.code, wx.day, cx - gap, cy - 12 * u, 40 * u);
                 Draw3D.text(c, Math.round(wx.temp) + "°", cx - gap, cy + 34 * u, 17 * u, 700, Color.WHITE, Draw3D.CENTER);
             } else {
                 Draw3D.weather(c, 2, true, cx - gap, cy - 12 * u, 40 * u);
             }
-            int steps = Data.steps(ctx);
+            int steps = gSteps;
             int goal = Math.max(1000, prefs.getInt("stepGoal", 10000));
             Draw3D.ring(c, cx, cy, 27 * u, 6 * u, steps / (float) goal, 0xFF30D158, Color.argb(70, 48, 209, 88));
             String st = steps >= 10000 ? (steps / 1000) + "k" : String.valueOf(steps);
             Draw3D.text(c, st, cx, cy + 5 * u, 14 * u, 800, Color.WHITE, Draw3D.CENTER);
-            int lvl = Math.max(0, Ui.battery(ctx));
-            boolean ch = Ui.charging(ctx);
+            int lvl = gLvl;
+            boolean ch = gCharging;
             Draw3D.ring(c, cx + gap, cy, 27 * u, 6 * u, lvl / 100f, ch ? 0xFF30D158 : (lvl <= 20 ? 0xFFFF453A : Color.WHITE),
                     Color.argb(70, 255, 255, 255));
             Draw3D.text(c, lvl + "%", cx + gap, cy + 5 * u, 14 * u, 800, Color.WHITE, Draw3D.CENTER);
@@ -860,7 +977,10 @@ public class LockActivity extends Activity {
             ui.animate().translationY(-H * 0.12f).alpha(0f).setDuration(240).start();
             wall.animate().scaleX(1.08f).scaleY(1.08f).alpha(0f).setDuration(260).withEndAction(() -> {
                 if (r != null) r.run();
-                finish();
+                // simpan aktiviti di belakang supaya dibuka semula serta-merta (tiada skrin hitam)
+                boolean moved = false;
+                try { moved = moveTaskToBack(true); } catch (Throwable ignored) {}
+                if (!moved) finish();
                 overridePendingTransition(0, 0);
             }).start();
         };

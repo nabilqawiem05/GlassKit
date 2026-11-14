@@ -43,10 +43,18 @@ public final class DepthRenderer {
     public static File bgFile(Context c) { return new File(c.getFilesDir(), "bg.jpg"); }
     public static File fgFile(Context c) { return new File(c.getFilesDir(), "fg.png"); }
 
-    public static Bitmap load(File f) {
+    private static final java.util.HashMap<String, Object[]> loaded = new java.util.HashMap<>();
+
+    /** Muat (dengan cache dikongsi, ikut masa ubah fail) supaya lock screen & wallpaper guna bitmap yang sama. */
+    public static synchronized Bitmap load(File f) {
         if (!f.exists()) return null;
         try {
-            return BitmapFactory.decodeFile(f.getAbsolutePath());
+            Object[] e = loaded.get(f.getPath());
+            long mt = f.lastModified() ^ f.length();
+            if (e != null && (Long) e[0] == mt) return (Bitmap) e[1];
+            Bitmap b = BitmapFactory.decodeFile(f.getAbsolutePath());
+            loaded.put(f.getPath(), new Object[]{mt, b});
+            return b;
         } catch (Throwable t) {
             return null;
         }

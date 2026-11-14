@@ -25,6 +25,8 @@ final class VolumePanel {
     private Level level;
     private final Runnable autoHide = this::hide;
     private long lastShot;
+    /** Salinan tangkapan skrin & kabur dibuat di latar (bukan thread UI) supaya tiada sangkut. */
+    private static final java.util.concurrent.Executor SHOT = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     VolumePanel(PillService s) { this.s = s; }
 
@@ -89,12 +91,12 @@ final class VolumePanel {
         pill.setAlpha(0f);
         pill.setTranslationX(dp(40));
         pill.setScaleY(0.9f);
-        pill.animate().alpha(1f).translationX(0).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(480).start();
+        pill.animate().alpha(1f).translationX(0).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(420).withLayer().start();
         // biasan latar: tangkap skrin sekali (dihadkan)
         if (System.currentTimeMillis() - lastShot > 1500) {
             lastShot = System.currentTimeMillis();
             try {
-                s.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, s.getMainExecutor(),
+                s.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, SHOT,
                         new AccessibilityService.TakeScreenshotCallback() {
                             @Override
                             public void onSuccess(AccessibilityService.ScreenshotResult r) {
@@ -108,7 +110,7 @@ final class VolumePanel {
                                 }
                                 final Bitmap src = sw;
                                 if (src == null) return;
-                                new Thread(() -> {
+                                {
                                     final LiquidGlass.Backdrop nb = new LiquidGlass.Backdrop();
                                     nb.set(src, s.screenW, s.screenH);
                                     s.h.post(() -> {
@@ -117,9 +119,10 @@ final class VolumePanel {
                                         bd.screenW = nb.screenW;
                                         bd.screenH = nb.screenH;
                                         bd.luminance = nb.luminance;
-                                        if (root != null) LiquidGlass.invalidateTree(root);
+                                        // jangan lukis semula ketika sedang animasi keluar
+                                        if (root != null && !hiding) LiquidGlass.invalidateTree(root);
                                     });
-                                }, "gk-vol").start();
+                                }
                             }
 
                             @Override
@@ -130,16 +133,24 @@ final class VolumePanel {
         }
     }
 
+    private boolean hiding;
+
     void hide() {
         final FrameLayout r = root;
         root = null;
         if (r == null) return;
+        if (level != null) level.stop();
+        hiding = true;
         View pill = r.getChildAt(0);
         pill.animate().cancel();
-        pill.animate().translationX(dp(40)).alpha(0f).scaleY(0.92f).setInterpolator(null).setDuration(200)
+        pill.animate().translationX(dp(28)).alpha(0f).scaleY(0.96f)
+                .setInterpolator(new android.view.animation.PathInterpolator(0.3f, 0f, 0.2f, 1f)).setDuration(260)
+                .withLayer()
                 .withEndAction(() -> {
+                    hiding = false;
                     r.setVisibility(View.GONE);
-                    try { s.wm.removeViewImmediate(r); } catch (Exception ignored) {}
+                    // buang tetingkap pada bingkai seterusnya, bukan di tengah lukisan
+                    s.h.post(() -> { try { s.wm.removeView(r); } catch (Exception ignored) {} });
                 }).start();
     }
 
@@ -149,15 +160,25 @@ final class VolumePanel {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Icon ic = new Icon(s, Icon.SPEAKER, Color.WHITE);
 
+        private final android.graphics.LinearGradient grad;
+
         Level() {
             super(s);
-            setLayerType(LAYER_TYPE_SOFTWARE, null);
+            grad = new android.graphics.LinearGradient(0, 0, 0, dp(190),
+                    Color.WHITE, Color.argb(255, 228, 232, 240), android.graphics.Shader.TileMode.CLAMP);
         }
+
+        private android.animation.ValueAnimator anim;
+
+        void stop() { if (anim != null) anim.cancel(); }
 
         void animateTo(float t) {
             v = t;
+            if (anim != null) anim.cancel();
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(shown, t);
-            a.setDuration(220);
+            anim = a;
+            a.setInterpolator(new android.view.animation.DecelerateInterpolator());
+            a.setDuration(160);
             a.addUpdateListener(x -> {
                 shown = (float) x.getAnimatedValue();
                 invalidate();
@@ -169,8 +190,7 @@ final class VolumePanel {
         protected void onDraw(Canvas c) {
             float w = getWidth(), h = getHeight();
             float top = h * (1 - shown);
-            p.setShader(new android.graphics.LinearGradient(0, top, 0, h,
-                    Color.WHITE, Color.argb(255, 228, 232, 240), android.graphics.Shader.TileMode.CLAMP));
+            p.setShader(grad);
             c.drawRect(0, top, w, h, p);
             p.setShader(null);
             int is = dp(22);

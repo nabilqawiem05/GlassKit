@@ -167,17 +167,19 @@ public class PillService extends AccessibilityService
                 case Intent.ACTION_SCREEN_ON:
                     if (patch != null) patch.screenOn();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
-                        h.postDelayed(() -> {
-                            KeyguardManager km = getSystemService(KeyguardManager.class);
-                            if (km != null && km.isKeyguardLocked() && !LockActivity.visible) showLock();
-                        }, 350);
+                        // cuba serta-merta, kemudian ulang jika sistem lambat (elak lock screen stock terpapar)
+                        for (int d : new int[]{0, 220, 600, 1300}) h.postDelayed(ensureLock, d);
                     }
                     updateStatusBar();
                     break;
                 case Intent.ACTION_SCREEN_OFF:
                     if (patch != null) patch.hide(false);
                     if (panels != null) panels.close();
-                    if (prefs.getBoolean(Prefs.LOCK_ON, false)) h.postDelayed(PillService.this::showLock, 250);
+                    if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
+                        h.removeCallbacks(ensureLock);
+                        h.post(PillService.this::showLock);
+                        h.postDelayed(ensureLock, 450);
+                    }
                     break;
                 case Intent.ACTION_USER_PRESENT:
                     if (patch != null) patch.hide(true);
@@ -964,11 +966,16 @@ public class PillService extends AccessibilityService
         GlassWidget.updateAll(this, StepsWidget.class);
     }
 
+    private final Runnable ensureLock = () -> {
+        KeyguardManager km = getSystemService(KeyguardManager.class);
+        if (km != null && km.isKeyguardLocked() && !LockActivity.visible) showLock();
+    };
+
     void showLock() {
         try {
             Intent i = new Intent(this, LockActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION
-                    | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
+                    | Intent.FLAG_ACTIVITY_NO_USER_ACTION | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
             ActivityOptions o = ActivityOptions.makeBasic();
             if (Build.VERSION.SDK_INT >= 34) {
                 o.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);

@@ -209,7 +209,7 @@ final class Cards {
         // kilauan & bayang dalam untuk rasa timbul
         Paint gl = new Paint(Paint.ANTI_ALIAS_FLAG);
         gl.setShader(new LinearGradient(0, r.top, 0, r.bottom,
-                new int[]{Color.argb(70, 255, 255, 255), Color.argb(0, 255, 255, 255), Color.argb(0, 0, 0, 0), Color.argb(120, 0, 0, 0)},
+                new int[]{Color.argb(70, 255, 255, 255), Color.argb(0, 255, 255, 255), Color.argb(0, 0, 0, 0), Color.argb(45, 0, 0, 0)},
                 new float[]{0f, 0.25f, 0.6f, 1f}, Shader.TileMode.CLAMP));
         cv.drawPath(p, gl);
         Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -218,7 +218,6 @@ final class Cards {
         rim.setShader(new LinearGradient(r.left, r.top, r.right, r.bottom,
                 Color.argb(160, 255, 255, 255), Color.argb(20, 255, 255, 255), Shader.TileMode.CLAMP));
         cv.drawPath(p, rim);
-        Draw3D.text(cv, fmt("d MMMM yyyy"), r.left + rad * 0.6f, r.bottom - rad * 0.5f, r.height() * 0.075f, 700, W, Draw3D.LEFT);
     }
 
     // ---------------- Langkah ----------------
