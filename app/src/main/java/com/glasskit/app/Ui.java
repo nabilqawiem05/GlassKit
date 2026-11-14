@@ -218,17 +218,29 @@ final class Ui {
     }
 
     /** Spring lembut ala iOS. */
-    static final Interpolator SPRING = t -> (float) (1 - Math.exp(-6.5 * t) * Math.cos(9.5 * t));
+    /** Tempoh seragam untuk animasi spring (ms). */
+    static final int SPRING_MS = 580;
+    /** Interpolator dari fizik spring yang sama (Spring.UI_*), dinormalkan kepada SPRING_MS. */
+    static final Interpolator SPRING = t -> {
+        if (t >= 1f) return 1f;
+        double w = 2 * Math.PI / Spring.UI_RESPONSE, z = Spring.UI_DAMP, wd = w * Math.sqrt(1 - z * z);
+        double x = t * SPRING_MS / 1000.0;
+        return (float) (1 - Math.exp(-z * w * x) * (Math.cos(wd * x) + z * w / wd * Math.sin(wd * x)));
+    };
+    /** Keluar: cepat dan tegas (tanpa lantunan). */
+    static final Interpolator EXIT = new android.view.animation.PathInterpolator(0.4f, 0f, 1f, 1f);
+    /** Masuk lembut tanpa lantunan. */
+    static final Interpolator EASE = new android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f);
 
     static void press(View v) {
         v.setOnTouchListener((view, e) -> {
             switch (e.getActionMasked()) {
                 case android.view.MotionEvent.ACTION_DOWN:
-                    view.animate().scaleX(0.93f).scaleY(0.93f).setDuration(90).start();
+                    view.animate().scaleX(0.94f).scaleY(0.94f).setInterpolator(EASE).setDuration(110).start();
                     break;
                 case android.view.MotionEvent.ACTION_UP:
                 case android.view.MotionEvent.ACTION_CANCEL:
-                    view.animate().scaleX(1f).scaleY(1f).setInterpolator(SPRING).setDuration(380).start();
+                    view.animate().scaleX(1f).scaleY(1f).setInterpolator(SPRING).setDuration(SPRING_MS).start();
                     break;
             }
             return false;

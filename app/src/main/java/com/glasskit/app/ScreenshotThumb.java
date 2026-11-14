@@ -93,7 +93,7 @@ final class ScreenshotThumb {
                             v.animate().translationX(dx > 0 ? s.screenW : -s.screenW).alpha(0f).setDuration(220)
                                     .withEndAction(() -> dismiss(false)).start();
                         } else {
-                            v.animate().translationX(0).setInterpolator(Ui.SPRING).setDuration(350).start();
+                            v.animate().translationX(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
                             s.h.postDelayed(auto, 6000);
                         }
                         return true;
@@ -129,7 +129,7 @@ final class ScreenshotThumb {
         card.setTranslationX(s.screenW / 2f - dp(16) - w * 0.075f);
         card.setTranslationY(-dp(50));
         card.animate().scaleX(1f).scaleY(1f).alpha(1f).translationX(0).translationY(0)
-                .setInterpolator(Ui.SPRING).setDuration(650).start();
+                .setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
         s.h.postDelayed(auto, 6000);
     }
 

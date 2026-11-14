@@ -93,7 +93,7 @@ public class MainActivity extends Activity {
                 p.setVisibility(View.VISIBLE);
                 p.setAlpha(0f);
                 p.setTranslationY(dp(18));
-                p.animate().alpha(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(480).start();
+                p.animate().alpha(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
             } else {
                 p.setVisibility(View.GONE);
             }

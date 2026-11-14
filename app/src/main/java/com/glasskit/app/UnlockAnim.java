@@ -63,7 +63,7 @@ class UnlockAnim extends View {
                     state = OPEN;
                     t = 0f;
                     ValueAnimator b = ValueAnimator.ofFloat(0f, 1f);
-                    b.setDuration(380);
+                    b.setDuration(Ui.SPRING_MS);
                     b.setInterpolator(Ui.SPRING);
                     b.addUpdateListener(x -> {
                         t = (float) x.getAnimatedValue();

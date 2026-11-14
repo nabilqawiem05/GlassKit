@@ -376,9 +376,9 @@ final class CallOverlay {
         root.animate().alpha(1f).setDuration(260).start();
         av.setScaleX(0.6f);
         av.setScaleY(0.6f);
-        av.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(700).start();
+        av.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
         col.setTranslationY(dp(40));
-        col.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(700).start();
+        col.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
     }
 
     // ======================= Kad kaca terapung =======================
@@ -509,7 +509,7 @@ final class CallOverlay {
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
                         if (e.getRawY() - y0 < -dp(60)) minimize();
-                        else v.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(400).start();
+                        else v.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
                         return true;
                 }
                 return false;
@@ -540,7 +540,7 @@ final class CallOverlay {
         c.setScaleX(0.85f);
         c.setScaleY(0.85f);
         c.setTranslationY(-dp(50));
-        c.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(600).start();
+        c.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
         refractFromScreen();
     }
 
@@ -672,7 +672,7 @@ final class CallOverlay {
                     if (v.getTranslationX() > max * 0.8f) {
                         v.animate().translationX(max).setDuration(120).withEndAction(() -> act(true)).start();
                     } else {
-                        v.animate().translationX(0).setInterpolator(Ui.SPRING).setDuration(500).start();
+                        v.animate().translationX(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
                         label.animate().alpha(1f).setDuration(300).start();
                     }
                     return true;

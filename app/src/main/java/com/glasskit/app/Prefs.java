@@ -71,7 +71,20 @@ public final class Prefs {
 
     private Prefs() {}
 
+    public static final String PERF = "perfMode";
+    public static final String FPS_METER = "fpsMeter";
+    public static final String TILE_ORDER = "tileOrder";
+    public static final String TILE_HIDDEN = "tileHidden";
+    private static volatile Boolean perf;
+
     public static SharedPreferences get(Context c) {
-        return c.getApplicationContext().getSharedPreferences(NAME, Context.MODE_PRIVATE);
+        SharedPreferences p = c.getApplicationContext().getSharedPreferences(NAME, Context.MODE_PRIVATE);
+        if (perf == null) perf = p.getBoolean(PERF, true);
+        return p;
     }
+
+    /** Mod prestasi (kabur GPU resolusi rendah, kesan berat dikurangkan). */
+    static boolean perf() { return perf == null || perf; }
+
+    static void setPerf(boolean on) { perf = on; }
 }

@@ -28,6 +28,7 @@ import java.util.Set;
 
 /** Tab "Alatan": tweak sistem melalui Shizuku. Semuanya boleh dipulihkan. */
 final class ToolsPage {
+    private static final String TUNER = "com.zacharee1.systemuituner";
     private final MainActivity a;
     private final SharedPreferences p;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -109,6 +110,13 @@ final class ToolsPage {
             else if (p.getInt(Prefs.FOCUS, 0) == Focus.SLEEP) Tweaks.grayscale(true);
         });
 
+        // ---------- Prestasi ----------
+        LinearLayout pf = a.card(box, R.string.tl_perf, Icon.BOLT, 0xFF30D158);
+        a.toggle(pf, R.string.tl_perf_mode, Prefs.PERF, true);
+        a.note(pf, a.getString(R.string.tl_perf_note));
+        a.toggle(pf, R.string.tl_fps, Prefs.FPS_METER, false);
+        a.note(pf, a.getString(R.string.tl_fps_note));
+
         // ---------- Notifikasi & status ----------
         LinearLayout n = a.card(box, R.string.tl_notifs, Icon.BELL, 0xFFFF375F);
         a.toggle(n, R.string.tl_promo, Prefs.PROMO_ON, true);
@@ -120,6 +128,8 @@ final class ToolsPage {
             Tweaks.stockLockNotifs(a, !on);
             a.toast(a.getString(R.string.t_done));
         });
+        a.button(n, a.getString(R.string.tl_sbicons), false, v -> pickSbIcons());
+        a.note(n, a.getString(R.string.tl_sbicons_note));
 
         // ---------- Bateri ----------
         LinearLayout b = a.card(box, R.string.tl_battery, Icon.BATTERY, 0xFF30D158);
@@ -154,6 +164,32 @@ final class ToolsPage {
         a.button(au, a.getString(R.string.auto_add), true, v -> addRule());
 
         // ---------- Lain-lain ----------
+        LinearLayout tu = a.card(box, R.string.tl_tuner, Icon.GEAR, 0xFF64D2FF);
+        a.note(tu, a.getString(R.string.tl_tuner_note));
+        LinearLayout tr = new LinearLayout(a);
+        tu.addView(tr);
+        a.addPair(tr, a.button(null, a.getString(R.string.tuner_get), false, v -> {
+                    Intent i = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=" + TUNER));
+                    try {
+                        a.startActivity(i);
+                    } catch (Exception e) {
+                        a.startActivity(new Intent(Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://play.google.com/store/apps/details?id=" + TUNER)));
+                    }
+                }),
+                a.button(null, a.getString(R.string.tuner_grant), true, v -> {
+                    if (!needShell()) return;
+                    try {
+                        a.getPackageManager().getPackageInfo(TUNER, 0);
+                    } catch (Exception e) {
+                        a.toast(a.getString(R.string.tuner_missing));
+                        return;
+                    }
+                    Shell.run("pm grant " + TUNER + " android.permission.WRITE_SECURE_SETTINGS; pm grant " + TUNER
+                            + " android.permission.DUMP; pm grant " + TUNER + " android.permission.PACKAGE_USAGE_STATS; true",
+                            (ok, out) -> a.toast(a.getString(ok ? R.string.tuner_ok : R.string.t_fail)));
+                }));
+
         LinearLayout o = a.card(box, R.string.tl_more, Icon.GEAR, 0xFF8E8E93);
         a.button(o, a.getString(R.string.tl_log), false, v -> errorLog());
         a.button(o, a.getString(R.string.tl_restore), true, v -> new AlertDialog.Builder(a)
@@ -258,6 +294,27 @@ final class ToolsPage {
             dlg.setOnShowListener(x -> h.postDelayed(tick, 1000));
             dlg.show();
         });
+    }
+
+    // ======================= Ikon bar status stock =======================
+
+    private void pickSbIcons() {
+        if (!needShell()) return;
+        Set<String> cur = Tweaks.sbHidden(a);
+        String[] names = new String[Tweaks.SB_KEYS.length];
+        boolean[] on = new boolean[names.length];
+        for (int i = 0; i < names.length; i++) {
+            names[i] = a.getString(Tweaks.SB_NAMES[i]);
+            on[i] = cur.contains(Tweaks.SB_KEYS[i]);
+        }
+        new AlertDialog.Builder(a).setTitle(R.string.tl_sbicons)
+                .setMultiChoiceItems(names, on, (x, w, c) -> on[w] = c)
+                .setPositiveButton(android.R.string.ok, (x, y) -> {
+                    Set<String> now = new java.util.LinkedHashSet<>();
+                    for (int i = 0; i < on.length; i++) if (on[i]) now.add(Tweaks.SB_KEYS[i]);
+                    Tweaks.setSbHidden(a, now, done());
+                })
+                .setNegativeButton(android.R.string.cancel, null).show();
     }
 
     // ======================= Pemilih app =======================

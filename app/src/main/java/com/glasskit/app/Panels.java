@@ -95,6 +95,92 @@ final class Panels {
     private LinearLayout ncList;
     private LiquidGlass.Backdrop bd = new LiquidGlass.Backdrop();
 
+    // ===================== Panel ikut jari =====================
+    private float prog = 1f;            // 0 tertutup .. 1 terbuka (>1 = regang)
+    private boolean dragging;
+    private int pendingTarget = -1;
+    private float pendingVel;
+    private final Spring progSpring = Spring.panel((v, vel) -> applyProg(v)).range(1f);
+
+    private static float clamp01(float v) { return Math.max(0f, Math.min(1f, v)); }
+
+    private float dragRange() { return open == QS ? dp(360) : s.screenH * 0.5f; }
+
+    private static float rubber(float over) { return 0.18f * (1f - 1f / (over * 1.8f + 1f)); }
+
+    /** Lukis panel pada kemajuan p (0..1, >1 = regang dengan rintangan). */
+    private void applyProg(float p) {
+        prog = p;
+        if (root == null || !root.isAttachedToWindow()) return;
+        root.setAlpha(clamp01(p * 1.8f));
+        if (liquid != null && open == QS) {
+            liquid.setProgress(p);
+        } else if (content != null) {
+            content.setTranslationY(-(1f - p) * dp(240));
+            content.setAlpha(clamp01(p * 1.4f));
+        }
+    }
+
+    /** Jari mula menarik dari tepi atas. */
+    void dragBegin(boolean left) {
+        if (isOpen()) return;
+        progSpring.stop();
+        dragging = true;
+        pendingTarget = -1;
+        prog = 0f;
+        if (left) openNotifications(); else openControl();
+        if (!isOpen()) dragging = false;
+    }
+
+    void dragMove(float dy) {
+        if (!dragging) return;
+        float p = Math.max(0f, dy / dragRange());
+        if (p > 1f) p = 1f + rubber(p - 1f);
+        applyProg(p);
+    }
+
+    void dragEnd(float vy) {
+        if (!dragging) return;
+        dragging = false;
+        float v = vy / dragRange();
+        boolean openIt = v > 0.8f || (v > -0.8f && prog > 0.33f);
+        if (root != null && root.isAttachedToWindow()) {
+            settle(openIt, v);
+        } else {
+            pendingTarget = openIt ? 1 : 0;
+            pendingVel = v;
+        }
+    }
+
+    private void settle(boolean openIt, float v) {
+        progSpring.value = prog;
+        if (openIt) {
+            progSpring.to(1f, v, () -> {
+                if (liquid != null && open == QS) liquid.settle();
+            });
+        } else {
+            progSpring.to(0f, Math.min(v, 0f), this::removeNow);
+        }
+    }
+
+    /** Buang panel serta-merta (selepas animasi tutup ikut jari). */
+    private void removeNow() {
+        progSpring.stop();
+        final PanelRoot r = root;
+        if (r == null) return;
+        closing = true;
+        try { wm.removeViewImmediate(r); } catch (Exception ignored) {}
+        if (liquid != null) liquid.stopTilt();
+        root = null;
+        open = NONE;
+        closing = false;
+        prog = 1f;
+        stopTorchWatch();
+        mediaCard = null;
+        liquid = null;
+        s.onPanelChanged();
+    }
+
     Panels(PillService s) {
         this.s = s;
         this.wm = s.wm;
@@ -147,8 +233,23 @@ final class Panels {
         lp.setTitle(left ? "GlassKitEdgeL" : "GlassKitEdgeR");
         final float[] y0 = new float[1];
         final boolean[] fired = new boolean[1];
+        final android.view.VelocityTracker[] vt = new android.view.VelocityTracker[1];
         v.setOnTouchListener((view, e) -> {
-            switch (e.getActionMasked()) {
+            if (vt[0] == null) vt[0] = android.view.VelocityTracker.obtain();
+            MotionEvent me = MotionEvent.obtain(e);
+            me.setLocation(e.getRawX(), e.getRawY());
+            vt[0].addMovement(me);
+            me.recycle();
+            int act = e.getActionMasked();
+            if ((act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL) && fired[0]) {
+                vt[0].computeCurrentVelocity(1000);
+                dragEnd(vt[0].getYVelocity());
+            }
+            if (act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL) {
+                vt[0].recycle();
+                vt[0] = null;
+            }
+            switch (act) {
                 case MotionEvent.ACTION_DOWN:
                     y0[0] = e.getRawY();
                     fired[0] = false;
@@ -166,10 +267,12 @@ final class Panels {
                     }
                     break;
                 case MotionEvent.ACTION_MOVE:
-                    if (!fired[0] && e.getRawY() - y0[0] > dp(14)) {
+                    if (!fired[0] && e.getRawY() - y0[0] > dp(10)) {
                         fired[0] = true;
-                        if (left) openNotifications(); else openControl();
+                        y0[0] = e.getRawY();
+                        dragBegin(left);
                     }
+                    if (fired[0]) dragMove(e.getRawY() - y0[0]);
                     break;
             }
             return true;
@@ -186,6 +289,8 @@ final class Panels {
 
     private class PanelRoot extends FrameLayout {
         private float x0, y0;
+        private boolean closeDrag;
+        private android.view.VelocityTracker vt;
 
         PanelRoot(Context c) {
             super(c);
@@ -195,24 +300,39 @@ final class Panels {
         @Override
         public boolean dispatchKeyEvent(KeyEvent e) {
             if (e.getKeyCode() == KeyEvent.KEYCODE_BACK) {
-                if (e.getAction() == KeyEvent.ACTION_UP) close();
+                if (e.getAction() == KeyEvent.ACTION_UP) {
+                    if (sub != null) closeSub(); else close();
+                }
                 return true;
             }
             return super.dispatchKeyEvent(e);
         }
 
+        private void track(MotionEvent e) {
+            if (vt == null) vt = android.view.VelocityTracker.obtain();
+            MotionEvent m = MotionEvent.obtain(e);
+            m.setLocation(e.getRawX(), e.getRawY());
+            vt.addMovement(m);
+            m.recycle();
+        }
+
         @Override
         public boolean onInterceptTouchEvent(MotionEvent e) {
+            track(e);
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     x0 = e.getRawX();
                     y0 = e.getRawY();
+                    closeDrag = false;
                     break;
                 case MotionEvent.ACTION_MOVE:
                     float dy = e.getRawY() - y0, dx = e.getRawX() - x0;
-                    if (dy < -dp(70) && Math.abs(dy) > Math.abs(dx) * 1.5f
+                    if (!closing && sub == null && dy < -dp(14) && Math.abs(dy) > Math.abs(dx) * 1.5f
                             && (scroll == null || !scroll.canScrollVertically(1))) {
-                        close();
+                        // tutup ikut jari
+                        closeDrag = true;
+                        progSpring.stop();
+                        y0 = e.getRawY();
                         return true;
                     }
                     break;
@@ -222,7 +342,27 @@ final class Panels {
 
         @Override
         public boolean onTouchEvent(MotionEvent e) {
-            if (e.getActionMasked() == MotionEvent.ACTION_UP) close();
+            track(e);
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_MOVE:
+                    if (closeDrag) applyProg(Math.max(0f, 1f + (e.getRawY() - y0) / dragRange()));
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (closeDrag) {
+                        closeDrag = false;
+                        vt.computeCurrentVelocity(1000);
+                        float v = vt.getYVelocity() / dragRange();
+                        settle(!(v < -0.8f || (v < 0.8f && prog < 0.7f)), v);
+                    } else if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                        close();
+                    }
+                    if (vt != null) {
+                        vt.recycle();
+                        vt = null;
+                    }
+                    break;
+            }
             return true;
         }
     }
@@ -268,19 +408,23 @@ final class Panels {
                     new AccessibilityService.TakeScreenshotCallback() {
                         @Override
                         public void onSuccess(AccessibilityService.ScreenshotResult res) {
-                            Bitmap blurred = null;
-                            try {
-                                Bitmap hw = Bitmap.wrapHardwareBuffer(res.getHardwareBuffer(), res.getColorSpace());
-                                if (hw != null) {
-                                    Bitmap sw = hw.copy(Bitmap.Config.ARGB_8888, false);
-                                    blurred = GlassArt.blur(sw, 200, 9);
-                                    bd.set(sw, s.screenW, s.screenH);
+                            // kerja kabur di benang latar (GPU, resolusi rendah): panel muncul tanpa tersekat
+                            final LiquidGlass.Backdrop b0 = bd;
+                            GpuBlur.bg().post(() -> {
+                                Bitmap blurred = null;
+                                try {
+                                    Bitmap hw = Bitmap.wrapHardwareBuffer(res.getHardwareBuffer(), res.getColorSpace());
+                                    if (hw != null) {
+                                        blurred = GpuBlur.blurOrCpu(hw, 200, 9);
+                                        b0.set(hw, s.screenW, s.screenH);
+                                    }
+                                } catch (Throwable ignored) {
+                                } finally {
+                                    try { res.getHardwareBuffer().close(); } catch (Throwable ignored) {}
                                 }
-                            } catch (Throwable ignored) {
-                            } finally {
-                                try { res.getHardwareBuffer().close(); } catch (Throwable ignored) {}
-                            }
-                            attach(token, r, bgImg, blurred);
+                                final Bitmap fb = blurred;
+                                s.h.post(() -> attach(token, r, bgImg, fb));
+                            });
                         }
 
                         @Override
@@ -321,6 +465,19 @@ final class Panels {
         }
         r.requestFocus();
         LiquidGlass.invalidateTree(r);
+        if (dragging || pendingTarget >= 0) {
+            r.setAlpha(0f);
+            r.post(() -> {
+                applyProg(prog);
+                if (pendingTarget >= 0) {
+                    boolean o = pendingTarget == 1;
+                    pendingTarget = -1;
+                    settle(o, pendingVel);
+                }
+            });
+            return;
+        }
+        prog = 1f;
         r.setAlpha(0f);
         r.animate().alpha(1f).setDuration(180).start();
         if (liquid != null && open == QS) {
@@ -329,11 +486,20 @@ final class Panels {
             return;
         }
         content.setTranslationY(-dp(48));
-        content.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(560).start();
+        content.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
     }
 
     void close() {
         if (root == null || closing) return;
+        progSpring.stop();
+        dragging = false;
+        pendingTarget = -1;
+        if (prog < 0.999f) {
+            // sedang ditarik/dilepaskan: tutup dengan spring yang sama
+            progSpring.value = prog;
+            progSpring.to(0f, 0f, this::removeNow);
+            return;
+        }
         closing = true;
         final PanelRoot r = root;
         if (!r.isAttachedToWindow()) {
@@ -390,11 +556,14 @@ final class Panels {
         final TextView label, sub;
         final int rOffDp, rOnPx;
         boolean round;
-        int onColor;
+        int onColor, kind;
+        String name;
         FrameLayout disc;
 
         /** Tile bulat berwarna (gaya Island Cecair): bulatan + label kecil di bawah. */
         Tile(int kind, String text, int onColor, View.OnClickListener tap, Intent detail) {
+            this.kind = kind;
+            this.name = text;
             this.round = true;
             this.onColor = onColor;
             rOffDp = 0;
@@ -757,6 +926,8 @@ final class Panels {
         private final android.graphics.Path path = new android.graphics.Path();
         private android.hardware.SensorManager sm;
         private final float rad = dp(38);
+        private float shW, shH;
+        private android.graphics.Shader shBody, shGlint, shRim;
 
         LiquidSheet() {
             super(s);
@@ -793,19 +964,26 @@ final class Panels {
             }
             path.quadTo(0, hh, 0, base);
             path.close();
+            // shader dicipta sekali bagi setiap saiz (bukan setiap bingkai)
+            if (shW != w || shH != h) {
+                shW = w;
+                shH = h;
+                shBody = new android.graphics.LinearGradient(0, 0, 0, h, Color.argb(246, 6, 6, 8), Color.argb(236, 14, 14, 18),
+                        android.graphics.Shader.TileMode.CLAMP);
+                shGlint = new android.graphics.RadialGradient(w * 0.3f, h * 0.15f, Math.max(w, h) * 0.75f,
+                        Color.argb(38, 255, 255, 255), Color.argb(0, 255, 255, 255), android.graphics.Shader.TileMode.CLAMP);
+                shRim = new android.graphics.LinearGradient(0, 0, w, h,
+                        new int[]{Color.argb(120, 255, 255, 255), Color.argb(20, 255, 255, 255), Color.argb(70, 255, 255, 255)},
+                        null, android.graphics.Shader.TileMode.CLAMP);
+            }
             // badan kaca hitam
-            p.setShader(new android.graphics.LinearGradient(0, 0, 0, hh, Color.argb(246, 6, 6, 8), Color.argb(236, 14, 14, 18),
-                    android.graphics.Shader.TileMode.CLAMP));
+            p.setShader(shBody);
             c.drawPath(path, p);
-            // kilauan yang bergerak ikut condongan (L)
-            float gx = w * (0.3f + 0.25f * tx), gy = hh * (0.15f + 0.2f * ty);
-            p.setShader(new android.graphics.RadialGradient(gx, gy, Math.max(w, hh) * 0.75f,
-                    Color.argb(38, 255, 255, 255), Color.argb(0, 255, 255, 255), android.graphics.Shader.TileMode.CLAMP));
+            // kilauan
+            p.setShader(shGlint);
             c.drawPath(path, p);
             // bingkai kaca
-            p.setShader(new android.graphics.LinearGradient(0, 0, w, hh,
-                    new int[]{Color.argb(120, 255, 255, 255), Color.argb(20, 255, 255, 255), Color.argb(70, 255, 255, 255)},
-                    null, android.graphics.Shader.TileMode.CLAMP));
+            p.setShader(shRim);
             p.setStyle(android.graphics.Paint.Style.STROKE);
             p.setStrokeWidth(Math.max(1f, dp(1f)));
             c.drawPath(path, p);
@@ -815,6 +993,26 @@ final class Panels {
             c.clipRect(0, 0, w, hh + Math.abs(amp));
             super.dispatchDraw(c);
             c.restore();
+        }
+
+        /** Kemajuan ikut jari: 0 = sebesar island, 1 = penuh, >1 = regang. */
+        void setProgress(float p) {
+            float q = clamp01(p);
+            setPivotX(getWidth() / 2f);
+            setPivotY(0);
+            melt = Math.max(0f, Math.min(1.15f, p));
+            wobble = p > 1f ? -(p - 1f) * 2.2f : 0f;
+            setScaleX(0.35f + 0.65f * clamp01(p * 1.5f));
+            body.setAlpha(clamp01((p - 0.2f) / 0.45f));
+            for (int i = 0; i < drops.size(); i++) {
+                View d = drops.get(i);
+                float t = clamp01((q - 0.28f - i * 0.012f) / 0.45f);
+                d.setAlpha(t);
+                d.setScaleX(0.5f + 0.5f * t);
+                d.setScaleY(0.5f + 0.5f * t);
+                d.setTranslationY(-dp(26) * (1f - t));
+            }
+            invalidate();
         }
 
         void enter() {
@@ -829,10 +1027,10 @@ final class Panels {
                 d.setTranslationY(-dp(36));
             }
             setScaleX(0.35f);
-            animate().scaleX(1f).setInterpolator(Ui.SPRING).setDuration(520).start();
+            animate().scaleX(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
             a.setDuration(620);
-            a.setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f));
+            a.setInterpolator(Ui.EASE);
             a.addUpdateListener(x -> {
                 melt = (float) x.getAnimatedValue();
                 wobble = (float) Math.sin(melt * Math.PI) * 0.9f;
@@ -849,13 +1047,13 @@ final class Panels {
             for (int i = 0; i < drops.size(); i++) {
                 View d = drops.get(i);
                 d.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0)
-                        .setInterpolator(new android.view.animation.OvershootInterpolator(2.2f))
-                        .setStartDelay(180 + i * 28L).setDuration(460).start();
+                        .setInterpolator(Ui.SPRING)
+                        .setStartDelay(180 + i * 28L).setDuration(Ui.SPRING_MS).start();
             }
         }
 
         /** Tepi bawah berayun sekejap sebelum tenang, macam cecair mendap. */
-        private void settle() {
+        void settle() {
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
             a.setDuration(700);
             a.addUpdateListener(x -> {
@@ -870,14 +1068,14 @@ final class Panels {
             for (int i = 0; i < drops.size(); i++) {
                 View d = drops.get(drops.size() - 1 - i);
                 d.animate().alpha(0f).scaleX(0.3f).scaleY(0.3f).translationY(-dp(30))
-                        .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                        .setInterpolator(Ui.EXIT)
                         .setStartDelay(i * 12L).setDuration(200).start();
             }
             body.animate().alpha(0f).setStartDelay(120).setDuration(180).start();
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(1f, 0f);
             a.setStartDelay(120);
             a.setDuration(340);
-            a.setInterpolator(new android.view.animation.AccelerateInterpolator(1.4f));
+            a.setInterpolator(Ui.EXIT);
             a.addUpdateListener(x -> {
                 melt = (float) x.getAnimatedValue();
                 wobble = -(float) Math.sin(melt * Math.PI) * 0.5f;
@@ -952,6 +1150,18 @@ final class Panels {
         col.addView(sheet, new LinearLayout.LayoutParams(w, -2));
         LinearLayout b = sheet.body;
 
+        fillLiquid(sheet, gap);
+
+        LiquidGlass.current = null;
+        show(QS, sv, sv);
+        refreshControl();
+        startTorchWatch();
+        fetchSsid();
+    }
+
+    /** Isi badan panel cecair (boleh dibina semula selepas sunting tile). */
+    private void fillLiquid(LiquidSheet sheet, int gap) {
+        LinearLayout b = sheet.body;
         // kepala: jam, tarikh, cuaca, bateri
         View hd = header();
         b.addView(hd, new LinearLayout.LayoutParams(-1, -2));
@@ -997,7 +1207,41 @@ final class Panels {
             Toast.makeText(s, s.keepAwake() ? R.string.awake_on : R.string.awake_off, Toast.LENGTH_SHORT).show();
         }, null);
         awk[0].set(s.keepAwake(), null);
-        Tile[] all = {tWifi, tBt, tData, tDnd, tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc, shot, rec, awk[0], cam, lock, set};
+        java.util.LinkedHashMap<String, Tile> map = new java.util.LinkedHashMap<>();
+        map.put("wifi", tWifi);
+        map.put("bt", tBt);
+        map.put("data", tData);
+        map.put("dnd", tDnd);
+        map.put("plane", tPlane);
+        map.put("torch", tTorch);
+        map.put("dark", tDark);
+        map.put("rotate", tRotate);
+        map.put("saver", tSaver);
+        map.put("loc", tLoc);
+        map.put("nfc", tNfc);
+        map.put("shot", shot);
+        map.put("rec", rec);
+        map.put("awake", awk[0]);
+        map.put("cam", cam);
+        map.put("lock", lock);
+        map.put("set", set);
+        tileMap = map;
+        // tekan lama Wi-Fi / Bluetooth: senarai terus dalam panel
+        tWifi.disc.setOnLongClickListener(x -> {
+            x.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            showWifiList();
+            return true;
+        });
+        tBt.disc.setOnLongClickListener(x -> {
+            x.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            showBtList();
+            return true;
+        });
+        List<String> keys = tileKeys(map.keySet());
+        java.util.Set<String> hiddenT = hiddenTiles();
+        List<Tile> shown = new ArrayList<>();
+        for (String k : keys) if (!hiddenT.contains(k)) shown.add(map.get(k));
+        int nGrid = Math.min(9, shown.size());
 
         LinearLayout mid = new LinearLayout(s);
         mid.setClipChildren(false);
@@ -1005,12 +1249,17 @@ final class Panels {
         grid.setOrientation(LinearLayout.VERTICAL);
         grid.setClipChildren(false);
         int cols = 3;
-        for (int i = 0; i < 9; i += cols) {
+        int gridRows = Math.max(1, (nGrid + cols - 1) / cols);
+        for (int i = 0; i < nGrid; i += cols) {
             LinearLayout row = new LinearLayout(s);
             row.setClipChildren(false);
             for (int j = 0; j < cols; j++) {
-                row.addView(all[i + j].v, new LinearLayout.LayoutParams(0, -2, 1f));
-                sheet.drops.add(all[i + j].v);
+                if (i + j < nGrid) {
+                    row.addView(shown.get(i + j).v, new LinearLayout.LayoutParams(0, -2, 1f));
+                    sheet.drops.add(shown.get(i + j).v);
+                } else {
+                    row.addView(new View(s), new LinearLayout.LayoutParams(0, 1, 1f));
+                }
             }
             LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
             rl.topMargin = dp(14);
@@ -1023,7 +1272,7 @@ final class Panels {
             int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC);
             am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Math.round(v * max), 0);
         });
-        int sliderH = 3 * (dp(58) + dp(22) + dp(14)) - dp(14);
+        int sliderH = Math.max(2, gridRows) * (dp(58) + dp(22) + dp(14)) - dp(14);
         LinearLayout.LayoutParams vl = new LinearLayout.LayoutParams(dp(60), sliderH);
         vl.leftMargin = dp(8);
         vl.topMargin = dp(14);
@@ -1044,21 +1293,27 @@ final class Panels {
         sheet.drops.add(media);
 
         // tile lain: barisan ikon kecil tanpa label (tekan lama untuk nama / tetapan)
-        LinearLayout row2 = new LinearLayout(s);
-        row2.setGravity(Gravity.CENTER_VERTICAL);
-        for (int i = 9; i < all.length; i++) {
-            Tile t = all[i];
-            if (t.label != null) t.label.setVisibility(View.GONE);
-            ViewGroup.LayoutParams dl = t.disc.getLayoutParams();
-            dl.width = dp(46);
-            dl.height = dp(46);
-            t.disc.setLayoutParams(dl);
-            row2.addView(t.v, new LinearLayout.LayoutParams(0, -2, 1f));
-            sheet.drops.add(t.v);
+        for (int i = nGrid; i < shown.size(); i += 8) {
+            LinearLayout row2 = new LinearLayout(s);
+            row2.setGravity(Gravity.CENTER_VERTICAL);
+            for (int j = i; j < i + 8; j++) {
+                if (j >= shown.size()) {
+                    row2.addView(new View(s), new LinearLayout.LayoutParams(0, 1, 1f));
+                    continue;
+                }
+                Tile t = shown.get(j);
+                if (t.label != null) t.label.setVisibility(View.GONE);
+                ViewGroup.LayoutParams dl = t.disc.getLayoutParams();
+                dl.width = dp(46);
+                dl.height = dp(46);
+                t.disc.setLayoutParams(dl);
+                row2.addView(t.v, new LinearLayout.LayoutParams(0, -2, 1f));
+                sheet.drops.add(t.v);
+            }
+            LinearLayout.LayoutParams r2 = new LinearLayout.LayoutParams(-1, -2);
+            r2.topMargin = dp(18);
+            b.addView(row2, r2);
         }
-        LinearLayout.LayoutParams r2 = new LinearLayout.LayoutParams(-1, -2);
-        r2.topMargin = dp(18);
-        b.addView(row2, r2);
 
         LinearLayout foot = new LinearLayout(s);
         foot.addView(chip(s.getString(R.string.system_panel), v -> {
@@ -1068,16 +1323,498 @@ final class Panels {
         LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(0, dp(42), 1f);
         fl.leftMargin = gap;
         foot.addView(chip(s.getString(R.string.cc_settings), v -> launch(new Intent(s, MainActivity.class))), fl);
+        LinearLayout.LayoutParams fe = new LinearLayout.LayoutParams(dp(84), dp(42));
+        fe.leftMargin = gap;
+        foot.addView(chip(s.getString(R.string.tile_edit), v -> showTileEditor()), fe);
         LinearLayout.LayoutParams fll = new LinearLayout.LayoutParams(-1, -2);
         fll.topMargin = dp(16);
         b.addView(foot, fll);
         sheet.drops.add(foot);
 
+    }
+
+    // ===================== Susunan tile =====================
+
+    private java.util.Map<String, Tile> tileMap;
+
+    private List<String> tileKeys(java.util.Set<String> all) {
+        List<String> out = new ArrayList<>();
+        String csv = s.prefs.getString(Prefs.TILE_ORDER, "");
+        for (String k : csv.split(",")) if (all.contains(k) && !out.contains(k)) out.add(k);
+        for (String k : all) if (!out.contains(k)) out.add(k);
+        return out;
+    }
+
+    private java.util.Set<String> hiddenTiles() {
+        java.util.Set<String> h = new java.util.HashSet<>();
+        for (String k : s.prefs.getString(Prefs.TILE_HIDDEN, "").split(",")) if (!k.isEmpty()) h.add(k);
+        return h;
+    }
+
+    // ===================== Lapisan senarai di atas panel =====================
+
+    private FrameLayout sub;
+
+    private void showSub(String title, View body, View headerExtra) {
+        if (root == null) return;
+        if (sub != null) {
+            try { root.removeView(sub); } catch (Exception ignored) {}
+            sub = null;
+        }
+        final FrameLayout ov = new FrameLayout(s);
+        ov.setBackgroundColor(Color.argb(120, 0, 0, 0));
+        ov.setClickable(true);
+        ov.setOnClickListener(v -> closeSub());
+        LinearLayout card = new LinearLayout(s);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(Ui.round(Color.argb(246, 20, 20, 24), dp(30)));
+        card.setPadding(dp(18), dp(16), dp(18), dp(16));
+        card.setClickable(true);
+        card.setElevation(dp(12));
+        LinearLayout hd = new LinearLayout(s);
+        hd.setGravity(Gravity.CENTER_VERTICAL);
+        TextView t = Ui.line(s, 18, 700, Color.WHITE);
+        t.setText(title);
+        hd.addView(t, new LinearLayout.LayoutParams(0, -2, 1f));
+        if (headerExtra != null) hd.addView(headerExtra);
+        ImageView x = new ImageView(s);
+        x.setImageDrawable(Ui.iconDrawable(s, Icon.CLOSE, Color.WHITE, Color.argb(60, 255, 255, 255), dp(30)));
+        x.setOnClickListener(v -> closeSub());
+        LinearLayout.LayoutParams xl = new LinearLayout.LayoutParams(dp(30), dp(30));
+        xl.leftMargin = dp(10);
+        hd.addView(x, xl);
+        card.addView(hd, new LinearLayout.LayoutParams(-1, -2));
+        final int maxH = Math.round(s.screenH * 0.62f);
+        ScrollView sc = new ScrollView(s) {
+            @Override
+            protected void onMeasure(int w, int h) {
+                super.onMeasure(w, MeasureSpec.makeMeasureSpec(maxH, MeasureSpec.AT_MOST));
+            }
+        };
+        sc.setVerticalScrollBarEnabled(false);
+        sc.addView(body, new ScrollView.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
+        sl.topMargin = dp(10);
+        card.addView(sc, sl);
+        ov.addView(card, new FrameLayout.LayoutParams(Math.min(s.screenW - dp(28), dp(440)), -2, Gravity.CENTER));
+        root.addView(ov, new FrameLayout.LayoutParams(-1, -1));
+        sub = ov;
+        ov.setAlpha(0f);
+        ov.animate().alpha(1f).setInterpolator(Ui.EASE).setDuration(200).start();
+        card.setScaleX(0.9f);
+        card.setScaleY(0.9f);
+        card.setTranslationY(dp(24));
+        card.animate().scaleX(1f).scaleY(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+    }
+
+    private void closeSub() {
+        final FrameLayout ov = sub;
+        if (ov == null) return;
+        sub = null;
+        ov.animate().alpha(0f).setInterpolator(Ui.EXIT).setDuration(160).withEndAction(() -> {
+            ViewGroup p = (ViewGroup) ov.getParent();
+            if (p != null) p.removeView(ov);
+        }).start();
+    }
+
+    private View subRow(int icon, int iconBg, String title, String subtitle, View right, View.OnClickListener tap) {
+        LinearLayout r = new LinearLayout(s);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(4), dp(9), dp(4), dp(9));
+        if (icon != 0) {
+            ImageView iv = new ImageView(s);
+            iv.setImageDrawable(Ui.iconDrawable(s, icon, Color.WHITE, iconBg, dp(36)));
+            r.addView(iv, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        }
+        LinearLayout col = new LinearLayout(s);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(dp(12), 0, dp(8), 0);
+        TextView a = Ui.line(s, 15, 600, Color.WHITE);
+        a.setText(title);
+        col.addView(a);
+        if (subtitle != null) {
+            TextView b = Ui.line(s, 12, 500, Color.argb(150, 235, 235, 245));
+            b.setText(subtitle);
+            col.addView(b);
+        }
+        r.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
+        if (right != null) r.addView(right);
+        if (tap != null) {
+            r.setOnClickListener(tap);
+            r.setBackground(Ui.round(Color.TRANSPARENT, dp(14)));
+            Ui.press(r);
+        }
+        return r;
+    }
+
+    private TextView subNote(String txt) {
+        TextView t = Ui.text(s, 13, 500, Color.argb(160, 235, 235, 245));
+        t.setText(txt);
+        t.setPadding(dp(4), dp(8), dp(4), dp(8));
+        return t;
+    }
+
+    // ===================== Sunting tile =====================
+
+    private void showTileEditor() {
+        if (tileMap == null) return;
+        final List<String> order = tileKeys(tileMap.keySet());
+        final java.util.Set<String> hid = hiddenTiles();
+        final LinearLayout list = new LinearLayout(s);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.addView(subNote(s.getString(R.string.tile_edit_note)));
+        final LinearLayout rows = new LinearLayout(s);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        rows.setClipChildren(false);
+        for (String k : order) rows.addView(editRow(k, rows, order, hid), new LinearLayout.LayoutParams(-1, dp(58)));
+        list.addView(rows);
+        TextView done = Ui.line(s, 15, 700, 0xFF0B0B10);
+        done.setText(R.string.done);
+        done.setGravity(Gravity.CENTER);
+        done.setBackground(Ui.round(Color.WHITE, dp(23)));
+        Ui.press(done);
+        done.setOnClickListener(v -> {
+            s.prefs.edit().putString(Prefs.TILE_ORDER, String.join(",", order))
+                    .putString(Prefs.TILE_HIDDEN, String.join(",", hid)).apply();
+            closeSub();
+            rebuildLiquid();
+        });
+        LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(-1, dp(46));
+        dl.topMargin = dp(12);
+        list.addView(done, dl);
+        TextView reset = Ui.line(s, 13, 600, Color.argb(170, 235, 235, 245));
+        reset.setText(R.string.tile_reset);
+        reset.setGravity(Gravity.CENTER);
+        reset.setPadding(0, dp(12), 0, dp(2));
+        reset.setOnClickListener(v -> {
+            s.prefs.edit().remove(Prefs.TILE_ORDER).remove(Prefs.TILE_HIDDEN).apply();
+            closeSub();
+            rebuildLiquid();
+        });
+        list.addView(reset, new LinearLayout.LayoutParams(-1, -2));
+        showSub(s.getString(R.string.tile_edit_title), list, null);
+    }
+
+    private View editRow(final String key, final LinearLayout rows, final List<String> order, final java.util.Set<String> hid) {
+        Tile t = tileMap.get(key);
+        final LinearLayout r = new LinearLayout(s);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setBackground(Ui.round(Color.argb(255, 28, 28, 33), dp(16)));
+        r.setPadding(dp(6), 0, dp(10), 0);
+        final TextView hnd = Ui.line(s, 22, 500, Color.argb(170, 235, 235, 245));
+        hnd.setText("≡");
+        hnd.setGravity(Gravity.CENTER);
+        r.addView(hnd, new LinearLayout.LayoutParams(dp(40), -1));
+        ImageView iv = new ImageView(s);
+        iv.setImageDrawable(Ui.iconDrawable(s, t.kind, t.onColor == Color.WHITE ? 0xFF111114 : Color.WHITE,
+                t.onColor, dp(32)));
+        r.addView(iv, new LinearLayout.LayoutParams(dp(32), dp(32)));
+        TextView n = Ui.line(s, 15, 600, Color.WHITE);
+        n.setText(t.name);
+        n.setPadding(dp(12), 0, 0, 0);
+        r.addView(n, new LinearLayout.LayoutParams(0, -2, 1f));
+        android.widget.Switch sw = new android.widget.Switch(s);
+        sw.setChecked(!hid.contains(key));
+        sw.setOnCheckedChangeListener((b, on) -> {
+            if (on) hid.remove(key); else hid.add(key);
+            r.animate().alpha(on ? 1f : 0.55f).setDuration(150).start();
+        });
+        r.setAlpha(hid.contains(key) ? 0.55f : 1f);
+        r.addView(sw);
+        // seret pemegang untuk susun semula
+        final float[] y0 = new float[1];
+        hnd.setOnTouchListener((v, e) -> {
+            int idx = rows.indexOfChild(r);
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    y0[0] = e.getRawY();
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                    r.setElevation(dp(10));
+                    r.animate().scaleX(1.03f).scaleY(1.03f).setInterpolator(Ui.EASE).setDuration(120).start();
+                    r.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float dy = e.getRawY() - y0[0];
+                    int rh = r.getHeight();
+                    if (rh > 0 && dy > rh * 0.55f && idx < rows.getChildCount() - 1) {
+                        View nb = rows.getChildAt(idx + 1);
+                        rows.removeView(nb);
+                        rows.addView(nb, idx);
+                        java.util.Collections.swap(order, idx, idx + 1);
+                        y0[0] += rh;
+                        dy -= rh;
+                        nb.setTranslationY(rh);
+                        nb.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                        r.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+                    } else if (rh > 0 && dy < -rh * 0.55f && idx > 0) {
+                        View nb = rows.getChildAt(idx - 1);
+                        rows.removeView(nb);
+                        rows.addView(nb, idx);
+                        java.util.Collections.swap(order, idx, idx - 1);
+                        y0[0] -= rh;
+                        dy += rh;
+                        nb.setTranslationY(-rh);
+                        nb.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                        r.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+                    }
+                    r.setTranslationY(dy);
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    r.setElevation(0);
+                    r.animate().translationY(0).scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                    return true;
+            }
+            return true;
+        });
+        return r;
+    }
+
+    /** Bina semula isi panel di tempat (tanpa tutup / tangkap skrin semula). */
+    private void rebuildLiquid() {
+        if (liquid == null || open != QS) return;
+        LiquidSheet sh = liquid;
+        sh.body.removeAllViews();
+        sh.drops.clear();
+        LiquidGlass.current = bd;
+        fillLiquid(sh, dp(8));
         LiquidGlass.current = null;
-        show(QS, sv, sv);
         refreshControl();
-        startTorchWatch();
-        fetchSsid();
+        sh.setProgress(1f);
+        if (root != null) LiquidGlass.invalidateTree(root);
+    }
+
+    // ===================== Senarai Wi-Fi =====================
+
+    private static String q(String v) { return "'" + v.replace("'", "'\\''") + "'"; }
+
+    private static final class Net {
+        String ssid, sec;
+        int rssi = -127;
+        boolean saved, current;
+    }
+
+    private void showWifiList() {
+        final LinearLayout list = new LinearLayout(s);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.addView(subNote(s.getString(R.string.wifi_scanning)));
+        View settingsBtn = chip(s.getString(R.string.cc_settings), v -> launch(new Intent(Settings.Panel.ACTION_WIFI)));
+        settingsBtn.setPadding(dp(14), dp(7), dp(14), dp(7));
+        showSub(s.getString(R.string.tg_wifi), list, settingsBtn);
+        if (!Shell.granted()) {
+            list.removeAllViews();
+            list.addView(subNote(s.getString(R.string.need_shizuku)));
+            return;
+        }
+        final FrameLayout mySub = sub;
+        Shell.run("cmd wifi start-scan >/dev/null 2>&1; sleep 2; cmd wifi list-scan-results; echo '@@@'; cmd wifi list-networks; echo '@@@'; cmd wifi status",
+                (ok, out) -> {
+                    if (sub != mySub || out == null) return;
+                    fillWifi(list, out);
+                });
+    }
+
+    private void fillWifi(LinearLayout list, String out) {
+        String[] parts = out.split("@@@");
+        java.util.Map<String, Net> nets = new java.util.LinkedHashMap<>();
+        java.util.regex.Pattern row = java.util.regex.Pattern.compile(
+                "^\\s*([0-9a-fA-F:]{17})\\s+(\\d+)\\s+(-?\\d+)\\s+(\\S+)\\s+(.*?)\\s*(\\[.*\\])?\\s*$");
+        for (String l : parts[0].split("\n")) {
+            Matcher m = row.matcher(l);
+            if (!m.find()) continue;
+            String ssid = m.group(5).trim();
+            if (ssid.isEmpty()) continue;
+            int rssi = Integer.parseInt(m.group(3));
+            String fl = m.group(6) == null ? "" : m.group(6);
+            Net n = nets.get(ssid);
+            if (n == null) {
+                n = new Net();
+                n.ssid = ssid;
+                nets.put(ssid, n);
+            }
+            if (rssi > n.rssi) n.rssi = rssi;
+            n.sec = fl.contains("EAP") ? "eap" : fl.contains("PSK") ? "wpa2" : fl.contains("SAE") ? "wpa3"
+                    : fl.contains("OWE") ? "owe" : fl.contains("WEP") ? "wep" : "open";
+        }
+        if (parts.length > 1) {
+            java.util.regex.Pattern sv = java.util.regex.Pattern.compile("^\\s*\\d+\\s+(.+?)\\s{2,}\\S+.*$");
+            for (String l : parts[1].split("\n")) {
+                Matcher m = sv.matcher(l);
+                if (m.find() && nets.containsKey(m.group(1).trim())) nets.get(m.group(1).trim()).saved = true;
+            }
+        }
+        String cur = null;
+        if (parts.length > 2) {
+            Matcher m = Pattern.compile("SSID: \"([^\"]+)\"").matcher(parts[2]);
+            if (m.find()) cur = m.group(1);
+            else {
+                Matcher m2 = Pattern.compile("connected to \"([^\"]+)\"").matcher(parts[2]);
+                if (m2.find()) cur = m2.group(1);
+            }
+        }
+        if (cur != null && nets.containsKey(cur)) nets.get(cur).current = true;
+        List<Net> l = new ArrayList<>(nets.values());
+        l.sort((a, b) -> a.current != b.current ? (a.current ? -1 : 1) : a.saved != b.saved ? (a.saved ? -1 : 1) : b.rssi - a.rssi);
+        list.removeAllViews();
+        if (l.isEmpty()) {
+            list.addView(subNote(s.getString(R.string.wifi_none)));
+            return;
+        }
+        for (final Net n : l) {
+            int bars = n.rssi >= -55 ? 4 : n.rssi >= -66 ? 3 : n.rssi >= -77 ? 2 : 1;
+            String st = n.current ? s.getString(R.string.wifi_connected) : n.saved ? s.getString(R.string.wifi_saved)
+                    : n.sec.equals("open") || n.sec.equals("owe") ? s.getString(R.string.wifi_open) : s.getString(R.string.wifi_secured);
+            st += " · " + bars + "/4";
+            list.addView(subRow(Icon.WIFI, n.current ? 0xFF0A84FF : Color.argb(60, 255, 255, 255), n.ssid, st, null, v -> {
+                if (n.current) {
+                    closeSub();
+                } else if (n.saved || n.sec.equals("eap") || n.sec.equals("wep")) {
+                    // rangkaian disimpan: Android tak benarkan sambung terus tanpa kata laluan
+                    Toast.makeText(s, R.string.wifi_saved_hint, Toast.LENGTH_LONG).show();
+                    launch(new Intent(Settings.Panel.ACTION_WIFI));
+                } else if (n.sec.equals("open") || n.sec.equals("owe")) {
+                    connectWifi(n.ssid, n.sec, null);
+                } else {
+                    askWifiPass(list, n);
+                }
+            }));
+        }
+    }
+
+    private void askWifiPass(LinearLayout list, Net n) {
+        list.removeAllViews();
+        list.addView(subNote(s.getString(R.string.wifi_pass_for, n.ssid)));
+        final android.widget.EditText e = new android.widget.EditText(s);
+        e.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        e.setTextColor(Color.WHITE);
+        e.setHintTextColor(Color.argb(120, 255, 255, 255));
+        e.setHint(R.string.wifi_pass);
+        e.setSingleLine(true);
+        e.setBackground(Ui.round(Color.argb(40, 255, 255, 255), dp(14)));
+        e.setPadding(dp(14), dp(12), dp(14), dp(12));
+        list.addView(e, new LinearLayout.LayoutParams(-1, -2));
+        TextView go = Ui.line(s, 15, 700, 0xFF0B0B10);
+        go.setText(R.string.wifi_join);
+        go.setGravity(Gravity.CENTER);
+        go.setBackground(Ui.round(Color.WHITE, dp(23)));
+        Ui.press(go);
+        go.setOnClickListener(v -> {
+            String p = e.getText().toString();
+            if (p.length() < 8) {
+                e.setError(s.getString(R.string.wifi_pass_short));
+                return;
+            }
+            connectWifi(n.ssid, n.sec, p);
+        });
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(-1, dp(46));
+        gl.topMargin = dp(12);
+        list.addView(go, gl);
+        e.requestFocus();
+        e.postDelayed(() -> {
+            android.view.inputmethod.InputMethodManager im = s.getSystemService(android.view.inputmethod.InputMethodManager.class);
+            if (im != null) im.showSoftInput(e, 0);
+        }, 200);
+    }
+
+    private void connectWifi(final String ssid, String sec, String pass) {
+        Toast.makeText(s, s.getString(R.string.wifi_joining, ssid), Toast.LENGTH_SHORT).show();
+        closeSub();
+        Shell.run("cmd wifi connect-network " + q(ssid) + " " + sec + (pass != null ? " " + q(pass) : ""), (ok, out) ->
+                s.h.postDelayed(() -> Shell.run("cmd wifi status", (ok2, st) -> {
+                    boolean on = st != null && st.contains("\"" + ssid + "\"");
+                    Toast.makeText(s, s.getString(on ? R.string.wifi_joined : R.string.wifi_join_fail, ssid), Toast.LENGTH_SHORT).show();
+                    fetchSsid();
+                }), 7000));
+    }
+
+    // ===================== Senarai Bluetooth =====================
+
+    private void showBtList() {
+        final LinearLayout list = new LinearLayout(s);
+        list.setOrientation(LinearLayout.VERTICAL);
+        View settingsBtn = chip(s.getString(R.string.cc_settings), v -> launch(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)));
+        settingsBtn.setPadding(dp(14), dp(7), dp(14), dp(7));
+        showSub(s.getString(R.string.tg_bt), list, settingsBtn);
+        final FrameLayout mySub = sub;
+        android.bluetooth.BluetoothManager bm = s.getSystemService(android.bluetooth.BluetoothManager.class);
+        final android.bluetooth.BluetoothAdapter ad = bm == null ? null : bm.getAdapter();
+        if (ad == null) {
+            list.addView(subNote(s.getString(R.string.bt_none)));
+            return;
+        }
+        if (!ad.isEnabled()) {
+            list.addView(subRow(Icon.BT, Color.argb(60, 255, 255, 255), s.getString(R.string.bt_off), s.getString(R.string.bt_tap_on), null, v -> {
+                toggleBt();
+                closeSub();
+            }));
+            return;
+        }
+        final java.util.Set<String> connected = new java.util.HashSet<>();
+        final int[] pending = {0};
+        final Runnable render = () -> {
+            if (sub != mySub) return;
+            list.removeAllViews();
+            java.util.Set<android.bluetooth.BluetoothDevice> bonded;
+            try {
+                bonded = ad.getBondedDevices();
+            } catch (SecurityException e) {
+                list.addView(subNote(s.getString(R.string.bt_perm)));
+                return;
+            }
+            if (bonded == null || bonded.isEmpty()) {
+                list.addView(subNote(s.getString(R.string.bt_none)));
+                return;
+            }
+            List<android.bluetooth.BluetoothDevice> ds = new ArrayList<>(bonded);
+            ds.sort((a, b) -> Boolean.compare(connected.contains(b.getAddress()), connected.contains(a.getAddress())));
+            for (android.bluetooth.BluetoothDevice d : ds) {
+                String nm;
+                try {
+                    nm = d.getAlias() != null ? d.getAlias() : d.getName();
+                } catch (SecurityException e) {
+                    nm = d.getAddress();
+                }
+                boolean on = connected.contains(d.getAddress());
+                int major = 0;
+                try {
+                    android.bluetooth.BluetoothClass bc = d.getBluetoothClass();
+                    if (bc != null) major = bc.getMajorDeviceClass();
+                } catch (SecurityException ignored) {
+                }
+                int icon = major == android.bluetooth.BluetoothClass.Device.Major.AUDIO_VIDEO ? Icon.SPEAKER : Icon.BT;
+                list.addView(subRow(icon, on ? 0xFF0A84FF : Color.argb(60, 255, 255, 255), nm == null ? d.getAddress() : nm,
+                        s.getString(on ? R.string.wifi_connected : R.string.bt_paired), null,
+                        v -> {
+                            Toast.makeText(s, R.string.bt_hint, Toast.LENGTH_LONG).show();
+                            launch(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));
+                        }));
+            }
+        };
+        int[] profiles = {android.bluetooth.BluetoothProfile.A2DP, android.bluetooth.BluetoothProfile.HEADSET, 22 /* LE_AUDIO */};
+        for (int pf : profiles) {
+            try {
+                boolean okp = ad.getProfileProxy(s, new android.bluetooth.BluetoothProfile.ServiceListener() {
+                    @Override
+                    public void onServiceConnected(int profile, android.bluetooth.BluetoothProfile proxy) {
+                        try {
+                            for (android.bluetooth.BluetoothDevice d : proxy.getConnectedDevices()) connected.add(d.getAddress());
+                        } catch (SecurityException ignored) {
+                        }
+                        try { ad.closeProfileProxy(profile, proxy); } catch (Exception ignored) {}
+                        if (--pending[0] == 0) s.h.post(render);
+                    }
+
+                    @Override
+                    public void onServiceDisconnected(int profile) { }
+                }, pf);
+                if (okp) pending[0]++;
+            } catch (Exception ignored) {
+            }
+        }
+        list.addView(subNote(s.getString(R.string.wifi_scanning)));
+        if (pending[0] == 0) render.run();
+        else s.h.postDelayed(render, 900); // jaga-jaga jika profil lambat
     }
 
     private LinearLayout pair(int w, int gap, int bw, int bh, View a, View b, int top) {
@@ -1736,7 +2473,7 @@ final class Panels {
                                         if (p != null) p.removeView(whole);
                                     }).start();
                         } else {
-                            whole.animate().translationX(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(420).start();
+                            whole.animate().translationX(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
                         }
                     } else if (Math.abs(dx) < dp(10) && Math.abs(dy) < dp(10)) {
                         view.performClick();
@@ -1957,7 +2694,7 @@ final class Panels {
         iv.setScaleX(0.85f);
         iv.setScaleY(0.85f);
         f.animate().alpha(1f).setDuration(200).start();
-        iv.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(450).start();
+        iv.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
     }
 
     private void addActions(LinearLayout ex, StatusBarNotification sbn, Notification n) {
@@ -2085,7 +2822,7 @@ final class Panels {
                                         if (p != null) p.removeView(view);
                                     }).start();
                         } else {
-                            view.animate().translationX(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(420).start();
+                            view.animate().translationX(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
                         }
                     } else if (Math.abs(dx) < dp(10) && Math.abs(dy) < dp(10)) {
                         view.performClick();

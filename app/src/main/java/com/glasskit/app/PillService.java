@@ -112,7 +112,7 @@ public class PillService extends AccessibilityService
     private int mode = IDLE;
     private int curW, curH, compactW, compactH, topY, xOff;
     int screenW, screenH, statusH;
-    private ValueAnimator anim;
+    private boolean wasNotiShown, missedTick;
 
     // ---- media (dikongsi dengan Pusat Kawalan) ----
     private MediaSessionManager msm;
@@ -142,6 +142,19 @@ public class PillService extends AccessibilityService
     boolean keepAwake() { return awakeTile; }
 
     void onProfileChanged() { applyAwake(); }
+
+    FpsMeter fps;
+
+    private void applyFps() {
+        boolean want = prefs != null && prefs.getBoolean(Prefs.FPS_METER, false) && screenOn();
+        if (fps == null) fps = new FpsMeter(this);
+        if (want) fps.start(); else fps.stop();
+    }
+
+    private boolean screenOn() {
+        PowerManager pm = getSystemService(PowerManager.class);
+        return pm == null || pm.isInteractive();
+    }
 
     private void applyAwake() {
         boolean want = awakeTile || (profiles != null && profiles.keepAwake());
@@ -279,6 +292,7 @@ public class PillService extends AccessibilityService
     private final Runnable sbarTick = new Runnable() {
         @Override
         public void run() {
+            if (!screenOn()) return; // disambung semula oleh SCREEN_ON
             if (sbar != null && sbarShown) sbar.refresh();
             h.postDelayed(this, 30_000);
         }
@@ -305,6 +319,15 @@ public class PillService extends AccessibilityService
                 case Intent.ACTION_SCREEN_ON:
                     if (lockCover != null) lockCover.onScreenOn();
                     h.post(netTick);
+                    // sambung semula paparan yang dihentikan & kemas kini widget yang tertinggal
+                    h.removeCallbacks(sbarTick);
+                    h.postDelayed(sbarTick, 30_000);
+                    if (missedTick) {
+                        missedTick = false;
+                        GlassWidget.tick(PillService.this);
+                    }
+                    applyFps();
+                    h.post(PillService.this::refresh);
                     if (patch != null) patch.screenOn();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
                         // cuba serta-merta, kemudian ulang jika sistem lambat (elak lock screen stock terpapar)
@@ -316,7 +339,15 @@ public class PillService extends AccessibilityService
                     break;
                 case Intent.ACTION_SCREEN_OFF:
                     AppTools.rehideAll(PillService.this);
+                    // jimat bateri: hentikan semua pemasa yang hanya untuk paparan
                     h.removeCallbacks(netTick);
+                    h.removeCallbacks(sbarTick);
+                    h.removeCallbacks(progTick);
+                    h.removeCallbacks(liveTick);
+                    if (fps != null) fps.stop();
+                    if (cWave != null) cWave.setRunning(false);
+                    if (mWave != null) mWave.setRunning(false);
+                    if (kWave != null) kWave.setRunning(false);
                     if (patch != null) patch.hide(false);
                     if (panels != null) panels.close();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false) && !islandCallActive()) {
@@ -356,6 +387,11 @@ public class PillService extends AccessibilityService
                 case Intent.ACTION_TIME_TICK:
                     prayerTick();
                     Automation.tick(PillService.this);
+                    if (!screenOn()) {
+                        // skrin mati: tiada siapa nampak; widget dikemas kini bila skrin hidup semula
+                        missedTick = true;
+                        break;
+                    }
                     if (patch != null) patch.tick();
                     if (sbar != null && sbarShown) sbar.refresh();
                     GlassWidget.tick(PillService.this);
@@ -449,6 +485,7 @@ public class PillService extends AccessibilityService
         volume = new VolumePanel(this);
         extras = new IslandExtras(this);
         profiles = new AppTools.ProfileRunner(this);
+        h.postDelayed(this::applyFps, 1500);
         h.postDelayed(() -> Tweaks.reapply(this), 3000);
         try {
             android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
@@ -596,6 +633,8 @@ public class PillService extends AccessibilityService
             h.post(this::prayerTick);
         }
         if (Prefs.LIVE_ON.equals(key)) h.post(this::refresh);
+        if (Prefs.PERF.equals(key)) Prefs.setPerf(sp.getBoolean(Prefs.PERF, true));
+        if (Prefs.FPS_METER.equals(key)) h.post(this::applyFps);
         if (Prefs.NET_SPEED.equals(key)) h.post(netTick);
         if (Prefs.LOCK_ON.equals(key) && !sp.getBoolean(Prefs.LOCK_ON, false) && lockCover != null) {
             lockCover.destroy();
@@ -1182,10 +1221,81 @@ public class PillService extends AccessibilityService
 
     private void detach() {
         if (!attached) return;
-        if (anim != null) anim.cancel();
+        springW.stop();
+        springH.stop();
         try { wm.removeViewImmediate(root); } catch (Exception ignored) {}
         attached = false;
+        winW = winH = 0;
         curW = curH = 0;
+    }
+
+    // ================= Island morph (spring fizik, saiz tetingkap tetap semasa bergerak) =================
+    private int tgtW, tgtH, winW, winH;
+    private final Spring springW = Spring.bouncy((v, vel) -> onMorph()).range(400f);
+    private final Spring springH = Spring.bouncy((v, vel) -> onMorph()).range(200f);
+
+    private void onMorph() {
+        setSize(Math.round(springW.value), Math.round(springH.value));
+        if (!springW.running() && !springH.running()) onMorphEnd();
+    }
+
+    /** Selepas bergerak: kecilkan tetingkap kepada saiz island sebenar (sentuhan di luar tembus). */
+    private void onMorphEnd() {
+        if (mode == IDLE) {
+            detach();
+            return;
+        }
+        fitWindow(curW, curH, true);
+    }
+
+    /** Tetingkap dibesarkan sekali sahaja untuk seluruh animasi, bukan setiap bingkai (elak sangkut). */
+    private void fitWindow(int w, int hh, boolean exact) {
+        if (!attached || lp == null) return;
+        int ww = exact ? w : Math.max(w, winW), wh = exact ? hh : Math.max(hh, winH);
+        if (ww == winW && wh == winH) return;
+        winW = ww;
+        winH = wh;
+        lp.width = ww;
+        lp.height = wh;
+        try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
+    }
+
+    /** Getaran halus seiring lantunan island. */
+    private void bump() {
+        try {
+            android.os.Vibrator vb = getSystemService(android.os.Vibrator.class);
+            if (vb == null || !vb.hasVibrator()) return;
+            android.os.VibrationEffect e;
+            if (vb.areAllPrimitivesSupported(android.os.VibrationEffect.Composition.PRIMITIVE_TICK)) {
+                e = android.os.VibrationEffect.startComposition()
+                        .addPrimitive(android.os.VibrationEffect.Composition.PRIMITIVE_TICK, 0.7f)
+                        .addPrimitive(android.os.VibrationEffect.Composition.PRIMITIVE_TICK, 0.35f, 150)
+                        .compose();
+            } else {
+                e = android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK);
+            }
+            vb.vibrate(e);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Sorok kandungan dengan pudar (bukan hilang serta-merta) supaya peralihan tak berkelip. */
+    private void vis(View v, boolean show) {
+        if (v == null) return;
+        if (show) {
+            if (v.getVisibility() != View.VISIBLE || v.getAlpha() < 0.99f) {
+                v.setVisibility(View.VISIBLE);
+                fadeIn(v);
+            }
+        } else if (v.getVisibility() == View.VISIBLE) {
+            if (!attached) {
+                v.animate().cancel();
+                v.setVisibility(View.GONE);
+                return;
+            }
+            v.animate().alpha(0f).scaleX(0.94f).scaleY(0.94f).setStartDelay(0).setDuration(130)
+                    .setInterpolator(Ui.EXIT).withEndAction(() -> v.setVisibility(View.GONE)).start();
+        }
     }
 
     private void setSize(int w, int hgt) {
@@ -1207,24 +1317,33 @@ public class PillService extends AccessibilityService
     }
 
     private void animateTo(final int tw, final int th, boolean grow) {
-        if (anim != null) anim.cancel();
-        final int sw = curW, sh = curH;
-        if (sw == tw && sh == th) return;
-        anim = ValueAnimator.ofFloat(0f, 1f);
-        anim.setDuration(grow ? 560 : 380);
-        anim.setInterpolator(grow ? Ui.SPRING : new DecelerateInterpolator(2.2f));
-        anim.addUpdateListener(a -> {
-            float f = (float) a.getAnimatedValue();
-            setSize(Math.round(sw + (tw - sw) * f), Math.round(sh + (th - sh) * f));
-        });
-        anim.start();
+        if (tw == tgtW && th == tgtH && (springW.running() || springH.running() || (curW == tw && curH == th))) return;
+        tgtW = tw;
+        tgtH = th;
+        if (curW == tw && curH == th) {
+            onMorphEnd();
+            return;
+        }
+        // kembang: melantun; mengecut: lebih tenang
+        float resp = grow ? Spring.BOUNCY_RESPONSE : Spring.UI_RESPONSE * 0.8f;
+        float damp = grow ? Spring.BOUNCY_DAMP : 0.86f;
+        springW.set(resp, damp);
+        springH.set(resp, damp);
+        if (!springW.running()) springW.value = curW;
+        if (!springH.running()) springH.value = curH;
+        // ruang tetingkap: muat saiz sekarang, sasaran & lajakan lantunan
+        fitWindow(Math.max(curW, tw) + dp(24), Math.max(curH, th) + dp(24), false);
+        springW.to(tw);
+        springH.to(th);
     }
 
     private void fadeIn(View v) {
+        v.animate().cancel();
         v.setAlpha(0f);
-        v.setScaleX(0.96f);
-        v.setScaleY(0.96f);
-        v.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(110).setDuration(260).start();
+        v.setScaleX(0.94f);
+        v.setScaleY(0.94f);
+        v.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(90).setDuration(Ui.SPRING_MS)
+                .setInterpolator(Ui.SPRING).start();
     }
 
     private void refresh() {
@@ -1246,38 +1365,38 @@ public class PillService extends AccessibilityService
         }
         if (newMode == IDLE && on && !land && extras != null && extras.privacy() != 0
                 && (panels == null || !panels.isOpen())) newMode = PRIV;
-        boolean wasExpanded = compact.getVisibility() == View.GONE && attached;
+        int prevMode = mode;
         mode = newMode;
         if (mode == IDLE) {
             if (sbar != null && sbarShown) sbar.setGeometry(topY + compactH / 2f, screenW / 2f + xOff, compactH / 2f + dp(4));
             expanded = false;
             cWave.setRunning(false);
             mWave.setRunning(false);
-            detach();
+            if (!attached) return;
+            // mengecut ke lubang kamera, kemudian hilang
+            for (View v : new View[]{compact, expMusic, expNoti, expCall, expLive}) vis(v, false);
+            animateTo(compactH, compactH, false);
             return;
         }
         attach();
 
-        compact.setVisibility(expanded ? View.GONE : View.VISIBLE);
+        vis(compact, !expanded);
         boolean showMusic = expanded && mode == MUSIC;
         boolean showNoti = expanded && mode == NOTI;
         boolean showCall = expanded && mode == CALL;
         onPrivacy();
         boolean showLive = expanded && mode == LIVE;
-        if (showLive && expLive.getVisibility() != View.VISIBLE) fadeIn(expLive);
-        expLive.setVisibility(showLive ? View.VISIBLE : View.GONE);
+        vis(expLive, showLive);
         if (mode != LIVE) {
             cRing.setVisibility(View.GONE);
             h.removeCallbacks(liveTick);
             liveShown = null;
         }
-        if (showMusic && expMusic.getVisibility() != View.VISIBLE) fadeIn(expMusic);
-        if (showNoti && expNoti.getVisibility() != View.VISIBLE) fadeIn(expNoti);
-        if (showCall && expCall.getVisibility() != View.VISIBLE) fadeIn(expCall);
-        if (!expanded && wasExpanded) fadeIn(compact);
-        expMusic.setVisibility(showMusic ? View.VISIBLE : View.GONE);
-        expNoti.setVisibility(showNoti ? View.VISIBLE : View.GONE);
-        expCall.setVisibility(showCall ? View.VISIBLE : View.GONE);
+        vis(expMusic, showMusic);
+        vis(expNoti, showNoti);
+        vis(expCall, showCall);
+        if (showNoti && (prevMode != NOTI || !wasNotiShown)) bump();
+        wasNotiShown = showNoti;
         kWave.setRunning(showCall && !callRinging);
 
         if (mode == PRIV) {
@@ -1319,9 +1438,9 @@ public class PillService extends AccessibilityService
             else kLabel.setTextColor(Color.argb(150, 235, 235, 245));
         } else if (mode == REC) {
             expanded = false;
-            compact.setVisibility(View.VISIBLE);
-            expMusic.setVisibility(View.GONE);
-            expNoti.setVisibility(View.GONE);
+            vis(compact, true);
+            vis(expMusic, false);
+            vis(expNoti, false);
             cArt.setVisibility(View.GONE);
             cAppIcon.setVisibility(View.VISIBLE);
             cAppIcon.setImageDrawable(Ui.circle(0xFFFF3B30));
@@ -2047,7 +2166,7 @@ public class PillService extends AccessibilityService
         }
         banner = win;
         card.setTranslationY(-dp(170));
-        card.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(560).start();
+        card.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
         h.removeCallbacks(bannerHide);
         h.postDelayed(bannerHide, 6500);
         if (LockActivity.inst != null) h.postDelayed(() -> { if (LockActivity.inst != null) LockActivity.inst.refreshNotifs(); }, 200);

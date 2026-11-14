@@ -47,8 +47,8 @@ final class LiquidGlass {
                 return;
             }
             try {
-                Bitmap sh2 = GlassArt.blur(screen, 540, 1);
-                Bitmap so = GlassArt.blur(screen, 220, 7);
+                Bitmap sh2 = GpuBlur.blurOrCpu(screen, 540, 1);
+                Bitmap so = GpuBlur.blurOrCpu(screen, 220, 7);
                 sharp = sh2;
                 soft = so;
                 luminance = lum(so);

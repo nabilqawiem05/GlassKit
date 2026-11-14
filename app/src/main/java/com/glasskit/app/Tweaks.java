@@ -129,6 +129,29 @@ final class Tweaks {
         p(c).edit().putBoolean(Prefs.T_HIDE_STOCK_NOTIF, !show).apply();
     }
 
+    // ======================= Ikon bar status stock (icon_blacklist, macam SystemUI Tuner) =======================
+
+    static final String[] SB_KEYS = {"bluetooth", "wifi", "mobile", "airplane", "location", "alarm_clock", "zen", "volume",
+            "rotate", "hotspot", "nfc", "cast", "vpn", "data_saver", "managed_profile", "headset", "screen_record", "clock", "battery"};
+    static final int[] SB_NAMES = {R.string.sb_bt, R.string.sb_wifi, R.string.sb_mobile, R.string.sb_plane, R.string.sb_loc,
+            R.string.sb_alarm, R.string.sb_dnd, R.string.sb_volume, R.string.sb_rotate, R.string.sb_hotspot, R.string.sb_nfc,
+            R.string.sb_cast, R.string.sb_vpn, R.string.sb_saver, R.string.sb_work, R.string.sb_headset, R.string.sb_rec,
+            R.string.sb_clock, R.string.sb_battery};
+
+    static java.util.Set<String> sbHidden(Context c) {
+        java.util.Set<String> s = new java.util.LinkedHashSet<>();
+        for (String k : p(c).getString("sbHidden", "").split(",")) if (!k.isEmpty()) s.add(k);
+        return s;
+    }
+
+    static void setSbHidden(Context c, java.util.Set<String> keys, Done d) {
+        p(c).edit().putString("sbHidden", String.join(",", keys)).apply();
+        String cmd = keys.isEmpty() ? restoreCmd(c, "secure", "icon_blacklist") + "true"
+                : "settings put secure icon_blacklist '" + String.join(",", keys) + "'";
+        if (keys.isEmpty()) Shell.run(cmd, (ok, o) -> { if (d != null) d.on(ok, o); });
+        else saveThen(c, "secure", "icon_blacklist", cmd, d);
+    }
+
     // ======================= Pulihkan semua =======================
 
     static void restoreAll(Context c, Done d) {
@@ -137,13 +160,14 @@ final class Tweaks {
                 + restoreCmd(c, "global", "window_animation_scale")
                 + "settings put global transition_animation_scale 1; settings put global animator_duration_scale 1; "
                 + restoreCmd(c, "secure", "lock_screen_show_notifications")
+                + restoreCmd(c, "secure", "icon_blacklist")
                 + "settings put secure accessibility_display_daltonizer_enabled 0; setprop debug.hwui.force_dark false; wm density reset; ";
         StringBuilder un = new StringBuilder(cmd);
         for (String pkg : AppTools.restricted(c)) un.append("cmd appops set ").append(pkg).append(" RUN_ANY_IN_BACKGROUND allow; ");
         for (String pkg : AppTools.hidden(c)) un.append("pm enable ").append(pkg).append("; ");
         p(c).edit().putInt(Prefs.SYS_COLOR, 0).putBoolean(Prefs.T_120, false).putInt(Prefs.T_ANIM, 2)
                 .putBoolean(Prefs.T_FORCE_DARK, false).putBoolean(Prefs.T_HIDE_STOCK_NOTIF, false)
-                .putString("restrictedApps", "").putString("hiddenApps", "").apply();
+                .putString("restrictedApps", "").putString("hiddenApps", "").putString("sbHidden", "").apply();
         Shell.run(un.toString() + "true", (ok, o) -> { if (d != null) d.on(ok, o); });
     }
 

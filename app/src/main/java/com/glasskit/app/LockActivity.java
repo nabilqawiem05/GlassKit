@@ -136,6 +136,7 @@ public class LockActivity extends Activity {
     private boolean leaving, soundPlayed;
     private long lastSensorTouch;
     private int hintRes;
+    private long hintHold;
     final LiquidGlass.Backdrop bd = new LiquidGlass.Backdrop();
 
     private final BroadcastReceiver rx = new BroadcastReceiver() {
@@ -173,7 +174,7 @@ public class LockActivity extends Activity {
                 soundPlayed = false;
             }
             int want = locked ? R.string.swipe_open : R.string.unlocked_swipe;
-            if (hintRes != want) {
+            if (hintRes != want && System.currentTimeMillis() > hintHold) {
                 hintRes = want;
                 hint.setText(want);
             }
@@ -281,12 +282,13 @@ public class LockActivity extends Activity {
 
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.addView(circle(Icon.TORCH, v -> toggleTorch()), new LinearLayout.LayoutParams(dp(54), dp(54)));
+        torchBtn = holdCircle(Icon.TORCH, this::toggleTorch);
+        bar.addView(torchBtn, new LinearLayout.LayoutParams(dp(54), dp(54)));
         hint = Ui.text(this, 14, 600, Color.WHITE);
         hint.setGravity(Gravity.CENTER);
         hint.setShadowLayer(dp(4), 0, dp(1), Color.argb(130, 0, 0, 0));
         bar.addView(hint, new LinearLayout.LayoutParams(0, -2, 1f));
-        bar.addView(circle(Icon.CAMERA, v -> {
+        bar.addView(holdCircle(Icon.CAMERA, () -> {
             Intent i = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             holdUntil = System.currentTimeMillis() + 10 * 60_000L;
@@ -447,12 +449,12 @@ public class LockActivity extends Activity {
         faceLabel.setAlpha(1f);
         faceLabel.setScaleX(0.8f);
         faceLabel.setScaleY(0.8f);
-        faceLabel.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(400).start();
+        faceLabel.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
         wall.animate().alpha(0.35f).translationX(dir < 0 ? dp(30) : -dp(30)).setDuration(180).start();
         Faces.switchTo(this, next, () -> h.post(() -> {
             render();
             wall.setTranslationX(dir < 0 ? -dp(30) : dp(30));
-            wall.animate().alpha(1f).translationX(0).setInterpolator(Ui.SPRING).setDuration(500).start();
+            wall.animate().alpha(1f).translationX(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
             faceLabel.animate().alpha(0f).setStartDelay(700).setDuration(400).start();
         }));
     }
@@ -651,6 +653,59 @@ public class LockActivity extends Activity {
         }
     }
 
+    private FrameLayout torchBtn;
+
+    /**
+     * Butang gaya iPhone: perlu ditekan lama (≈0.35 s). Membesar perlahan semasa ditekan,
+     * bergetar dan "pop" bila aktif. Ketik biasa hanya tunjuk petunjuk.
+     */
+    private FrameLayout holdCircle(int icon, Runnable action) {
+        final FrameLayout f = new FrameLayout(this);
+        f.setBackground(GlassEngine.drawable(this, 27, true, 30));
+        final Icon ic = new Icon(this, icon, Color.WHITE);
+        f.addView(ic, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+        final boolean[] fired = new boolean[1];
+        final Runnable fire = () -> {
+            fired[0] = true;
+            f.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            f.animate().scaleX(1.32f).scaleY(1.32f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+            action.run();
+            if (icon == Icon.TORCH) h.postDelayed(this::paintTorch, 120);
+        };
+        f.setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    fired[0] = false;
+                    f.animate().scaleX(1.12f).scaleY(1.12f).setInterpolator(Ui.EASE).setDuration(350).start();
+                    h.postDelayed(fire, 350);
+                    return true;
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    h.removeCallbacks(fire);
+                    f.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                    if (!fired[0] && e.getActionMasked() == android.view.MotionEvent.ACTION_UP) {
+                        f.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+                        if (hint != null) {
+                            hint.setText(R.string.hold_hint);
+                            hintRes = R.string.hold_hint;
+                            hintHold = System.currentTimeMillis() + 1800;
+                        }
+                    }
+                    return true;
+            }
+            return true;
+        });
+        return f;
+    }
+
+    /** Butang lampu suluh putih bila menyala (macam iPhone). */
+    private void paintTorch() {
+        if (torchBtn == null) return;
+        torchBtn.setBackground(torchOn ? Ui.round(Color.WHITE, dp(27)) : GlassEngine.drawable(this, 27, true, 30));
+        View ic = torchBtn.getChildAt(0);
+        if (ic instanceof Icon) ((Icon) ic).setColor(torchOn ? 0xFF111114 : Color.WHITE);
+    }
+
     private View circle(int icon, View.OnClickListener l) {
         FrameLayout f = new FrameLayout(this);
         f.setBackground(GlassEngine.drawable(this, 27, true, 30));
@@ -699,14 +754,33 @@ public class LockActivity extends Activity {
         list.sort((a, b) -> Long.compare(b.getPostTime(), a.getPostTime()));
         clearAll.setVisibility(list.isEmpty() ? View.GONE : View.VISIBLE);
         fitNotifs();
+        boolean bumped = false;
+        java.util.Set<String> now = new java.util.HashSet<>();
         for (StatusBarNotification sbn : list) {
             View card = card(sbn);
             if (card == null) continue;
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
             p.topMargin = dp(8);
             notifList.addView(card, p);
+            now.add(sbn.getKey());
+            if (seenNotifs != null && !seenNotifs.contains(sbn.getKey())) {
+                // notifikasi baru: jatuh masuk dengan lantunan + getaran seiring
+                card.setAlpha(0f);
+                card.setTranslationY(-dp(26));
+                card.setScaleX(0.92f);
+                card.setScaleY(0.92f);
+                card.animate().alpha(1f).translationY(0).scaleX(1f).scaleY(1f)
+                        .setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                if (!bumped) {
+                    bumped = true;
+                    card.postDelayed(() -> card.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM), 90);
+                }
+            }
         }
+        seenNotifs = now;
     }
+
+    private java.util.Set<String> seenNotifs;
 
     private String appName(String pkg) {
         try {
@@ -950,7 +1024,7 @@ public class LockActivity extends Activity {
                                         if (p != null) p.removeView(view);
                                     }).start();
                         } else {
-                            view.animate().translationX(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(420).start();
+                            view.animate().translationX(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
                         }
                     } else if (Math.abs(dx) < dp(10) && Math.abs(dy) < dp(10)) {
                         view.performClick();
@@ -1062,7 +1136,10 @@ public class LockActivity extends Activity {
             torchCb = new CameraManager.TorchCallback() {
                 @Override
                 public void onTorchModeChanged(String cameraId, boolean enabled) {
-                    if (cameraId.equals(torchId)) torchOn = enabled;
+                    if (cameraId.equals(torchId)) {
+                        torchOn = enabled;
+                        paintTorch();
+                    }
                 }
             };
             cm.registerTorchCallback(torchCb, h);
@@ -1127,7 +1204,7 @@ public class LockActivity extends Activity {
 
     private void springBack() {
         afterUnlock = null;
-        ui.animate().translationY(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(500).start();
+        ui.animate().translationY(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
         wall.animate().translationY(0).setDuration(300).start();
     }
 

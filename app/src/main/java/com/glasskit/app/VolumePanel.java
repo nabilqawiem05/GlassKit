@@ -91,7 +91,7 @@ final class VolumePanel {
         pill.setAlpha(0f);
         pill.setTranslationX(dp(40));
         pill.setScaleY(0.9f);
-        pill.animate().alpha(1f).translationX(0).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(420).withLayer().start();
+        pill.animate().alpha(1f).translationX(0).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).withLayer().start();
         // biasan latar: tangkap skrin sekali (dihadkan)
         if (System.currentTimeMillis() - lastShot > 1500) {
             lastShot = System.currentTimeMillis();
@@ -144,7 +144,7 @@ final class VolumePanel {
         View pill = r.getChildAt(0);
         pill.animate().cancel();
         pill.animate().translationX(dp(28)).alpha(0f).scaleY(0.96f)
-                .setInterpolator(new android.view.animation.PathInterpolator(0.3f, 0f, 0.2f, 1f)).setDuration(260)
+                .setInterpolator(Ui.EASE).setDuration(260)
                 .withLayer()
                 .withEndAction(() -> {
                     hiding = false;

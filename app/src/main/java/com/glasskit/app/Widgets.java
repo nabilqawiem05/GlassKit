@@ -111,7 +111,7 @@ final class Widgets {
                     return true;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
-                    animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(420).start();
+                    animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
                     if (cb != null) cb.on(value, true);
                     return true;
             }
