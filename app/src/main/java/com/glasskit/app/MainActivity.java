@@ -162,8 +162,7 @@ public class MainActivity extends Activity {
         segmented(pan, new int[]{R.string.glass_clear, R.string.glass_dark},
                 prefs.getBoolean(Prefs.GLASS_DARK, false) ? 1 : 0, i -> {
                     prefs.edit().putBoolean(Prefs.GLASS_DARK, i == 1).apply();
-                    ClockWidget.updateAll(this);
-                    MusicWidget.push(this);
+                    GlassWidget.refreshAll(this);
                 });
         note(pan, getString(R.string.panels_hint));
         LinearLayout pr = new LinearLayout(this);
@@ -255,6 +254,8 @@ public class MainActivity extends Activity {
         toggle(clk, R.string.hide_stock, Prefs.HIDE_STOCK, false);
         label(clk, R.string.lbl_hide_h);
         slider(clk, 60, 260, prefs.getInt(Prefs.HIDE_H, 130), val -> prefs.edit().putInt(Prefs.HIDE_H, val).apply());
+        label(clk, R.string.lbl_patch_dim);
+        slider(clk, 0, 70, prefs.getInt(Prefs.PATCH_DIM, 22), val -> prefs.edit().putInt(Prefs.PATCH_DIM, val).apply());
         note(clk, getString(R.string.hide_stock_note));
 
         toggle(clk, R.string.lock_only, Prefs.LOCK_ONLY, true);
@@ -263,7 +264,9 @@ public class MainActivity extends Activity {
 
         LinearLayout wg = card(box, R.string.sec_widgets, Icon.NOTE, Ui.PURPLE);
         note(wg, getString(R.string.widgets_hint));
+        button(wg, getString(R.string.btn_refresh_widgets), false, v -> GlassWidget.refreshAll(this));
         note(wg, getString(R.string.themed_hint));
+        button(wg, getString(R.string.btn_open_icons), true, v -> startActivity(new Intent(this, IconsActivity.class)));
 
         prefs.registerOnSharedPreferenceChangeListener(prefL);
         try { Shizuku.addRequestPermissionResultListener(shizukuL); } catch (Throwable ignored) {}

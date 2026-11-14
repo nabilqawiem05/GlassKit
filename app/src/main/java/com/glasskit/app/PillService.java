@@ -93,6 +93,7 @@ public class PillService extends AccessibilityService
     private long holdMusicUntil, duration;
 
     private LockPatch patch;
+    private int lastBat = -2, lastPlug = -2;
     private StatusBar sbar;
     private boolean sbarShown;
     private final Runnable sbarTick = new Runnable() {
@@ -134,8 +135,19 @@ public class PillService extends AccessibilityService
                 case Intent.ACTION_TIME_TICK:
                     if (patch != null) patch.tick();
                     if (sbar != null && sbarShown) sbar.refresh();
+                    GlassWidget.tick(PillService.this);
                     break;
-                case Intent.ACTION_BATTERY_CHANGED:
+                case Intent.ACTION_BATTERY_CHANGED: {
+                    int lv = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
+                    int pl = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0);
+                    if (lv != lastBat || pl != lastPlug) {
+                        lastBat = lv;
+                        lastPlug = pl;
+                        GlassWidget.updateAll(PillService.this, BatteryWidget.class);
+                    }
+                    if (sbar != null && sbarShown) sbar.refresh();
+                    break;
+                }
                 case Intent.ACTION_AIRPLANE_MODE_CHANGED:
                 case android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED:
                     if (sbar != null && sbarShown) sbar.refresh();
@@ -822,12 +834,27 @@ public class PillService extends AccessibilityService
             if (dismissed || v != null || !prefs.getBoolean(Prefs.HIDE_STOCK, false) || !onLock()) return;
             render();
             if (frame == null) return;
-            final int top = statusH;
-            int hgt = dp(prefs.getInt(Prefs.HIDE_H, 130));
+            final int hgt = statusH + dp(prefs.getInt(Prefs.HIDE_H, 130));
+            final int dimA = Math.round(255 * prefs.getInt(Prefs.PATCH_DIM, 22) / 100f);
+            final int feather = dp(44);
             v = new View(PillService.this) {
+                final android.graphics.Paint mask = new android.graphics.Paint();
+                final android.graphics.Paint dimP = new android.graphics.Paint();
+
                 @Override
                 protected void onDraw(Canvas c) {
-                    if (frame != null) c.drawBitmap(frame, 0, -top, null);
+                    if (frame == null) return;
+                    int w = getWidth(), hh = getHeight();
+                    int sc = c.saveLayer(0, 0, w, hh, null);
+                    c.drawBitmap(frame, 0, 0, null);
+                    dimP.setColor(Color.argb(dimA, 0, 0, 0));
+                    c.drawRect(0, 0, w, hh, dimP);
+                    // pudarkan tepi bawah supaya tiada garisan
+                    mask.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
+                    mask.setShader(new android.graphics.LinearGradient(0, hh - feather, 0, hh,
+                            Color.BLACK, Color.TRANSPARENT, android.graphics.Shader.TileMode.CLAMP));
+                    c.drawRect(0, hh - feather, w, hh, mask);
+                    c.restoreToCount(sc);
                 }
             };
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(
@@ -841,7 +868,7 @@ public class PillService extends AccessibilityService
                     PixelFormat.TRANSLUCENT);
             p.gravity = Gravity.TOP | Gravity.LEFT;
             p.x = 0;
-            p.y = top;
+            p.y = 0;
             p.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
             p.setTitle("GlassKitLockPatch");
             v.setOnTouchListener((x, e) -> {
@@ -853,6 +880,13 @@ public class PillService extends AccessibilityService
             });
             try {
                 wm.addView(v, p);
+                // status bar & island mesti di atas tampalan
+                if (sbarShown) {
+                    hideStatusBar();
+                    updateStatusBar();
+                }
+                detach();
+                refresh();
             } catch (Exception e) {
                 v = null;
             }

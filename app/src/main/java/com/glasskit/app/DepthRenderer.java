@@ -63,10 +63,7 @@ public final class DepthRenderer {
 
     private static synchronized Bitmap blurred(Bitmap bg) {
         if (bg == blurSrc && blurOut != null) return blurOut;
-        int sw = Math.max(2, bg.getWidth() / 28), sh = Math.max(2, bg.getHeight() / 28);
-        Bitmap tiny = Bitmap.createScaledBitmap(bg, sw, sh, true);
-        Bitmap mid = Bitmap.createScaledBitmap(tiny, sw * 3, sh * 3, true);
-        blurOut = Bitmap.createScaledBitmap(mid, Math.max(2, bg.getWidth() / 4), Math.max(2, bg.getHeight() / 4), true);
+        blurOut = GlassArt.blur(bg, 260, 7);
         blurSrc = bg;
         return blurOut;
     }
@@ -126,50 +123,7 @@ public final class DepthRenderer {
             c.drawText(date, w / 2f, b.top - size * 0.1f, dp);
 
             if (glass) {
-                // 1) bayang lembut
-                Paint sh = new Paint(Paint.ANTI_ALIAS_FLAG);
-                sh.setColor(Color.argb(dark ? 90 : 55, 0, 0, 0));
-                sh.setMaskFilter(new BlurMaskFilter(Math.max(2f, size * 0.05f), BlurMaskFilter.Blur.NORMAL));
-                c.save();
-                c.translate(0, size * 0.02f);
-                c.drawPath(path, sh);
-                c.restore();
-
-                // 2) isi kaca: wallpaper kabur & dicerahkan
-                c.save();
-                c.clipPath(path);
-                if (bg != null) {
-                    Paint fp = new Paint(Paint.FILTER_BITMAP_FLAG);
-                    ColorMatrix cm = new ColorMatrix();
-                    float k = dark ? 0.75f : 1.12f, t = dark ? -10 : 38;
-                    cm.set(new float[]{k, 0, 0, 0, t, 0, k, 0, 0, t, 0, 0, k, 0, t, 0, 0, 0, 1, 0});
-                    ColorMatrix sat = new ColorMatrix();
-                    sat.setSaturation(1.25f);
-                    cm.postConcat(sat);
-                    fp.setColorFilter(new ColorMatrixColorFilter(cm));
-                    c.drawBitmap(blurred(bg), null, bgRect, fp);
-                }
-                int tint = (color & 0x00FFFFFF) | ((dark ? 70 : 85) << 24);
-                c.drawColor(tint);
-                c.restore();
-
-                // 3) kilauan dalam
-                Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
-                sheen.setShader(new LinearGradient(0, b.top, 0, b.bottom,
-                        new int[]{Color.argb(120, 255, 255, 255), Color.argb(0, 255, 255, 255),
-                                Color.argb(0, 255, 255, 255), Color.argb(60, 255, 255, 255)},
-                        new float[]{0f, 0.42f, 0.72f, 1f}, Shader.TileMode.CLAMP));
-                c.drawPath(path, sheen);
-
-                // 4) bingkai cahaya (specular rim)
-                Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
-                rim.setStyle(Paint.Style.STROKE);
-                rim.setStrokeWidth(Math.max(1.5f, size * 0.014f));
-                rim.setShader(new LinearGradient(b.left, b.top, b.right, b.bottom,
-                        new int[]{Color.argb(235, 255, 255, 255), Color.argb(60, 255, 255, 255),
-                                Color.argb(40, 255, 255, 255), Color.argb(190, 255, 255, 255)},
-                        new float[]{0f, 0.4f, 0.65f, 1f}, Shader.TileMode.CLAMP));
-                c.drawPath(path, rim);
+                GlassArt.draw(c, path, size, color, dark, bg != null ? blurred(bg) : null, bgRect);
             } else {
                 Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
                 fp.setColor(color);

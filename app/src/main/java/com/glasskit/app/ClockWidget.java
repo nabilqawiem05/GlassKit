@@ -1,52 +1,37 @@
 package com.glasskit.app;
 
-import android.app.PendingIntent;
-import android.appwidget.AppWidgetManager;
-import android.appwidget.AppWidgetProvider;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Bundle;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Path;
+import android.graphics.RectF;
 import android.provider.AlarmClock;
-import android.util.TypedValue;
-import android.widget.RemoteViews;
 
-/** Widget jam kaca: ikut warna wallpaper, saiz huruf ikut saiz widget. */
-public class ClockWidget extends AppWidgetProvider {
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
+/** Jam kaca besar + tarikh. */
+public class ClockWidget extends GlassWidget {
+    @Override
+    void render(Context c, Canvas cv, int w, int h, float d) {
+        boolean showDate = h > 70 * d;
+        float size = Math.min(h * (showDate ? 0.62f : 0.82f), w * 0.31f);
+        Path p = textPath(time(c), DepthRenderer.font(Prefs.get(c).getInt(Prefs.CLOCK_FONT, 0)), size, w / 2f, 0);
+        centerPath(p, showDate ? h * 0.44f : h / 2f);
+        GlassArt.draw(cv, p, size, GlassArt.tint(c), dark(c), null, null);
+        if (showDate) {
+            RectF b = new RectF();
+            p.computeBounds(b, true);
+            String date = new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(new Date());
+            label(cv, date, Math.max(11 * d, size * 0.17f), 600, w / 2f, b.bottom + size * 0.3f, Color.WHITE);
+        }
+    }
 
     @Override
-    public void onUpdate(Context c, AppWidgetManager m, int[] ids) {
-        for (int id : ids) update(c, m, id);
-    }
+    Intent clickIntent(Context c) { return new Intent(AlarmClock.ACTION_SHOW_ALARMS); }
 
-    @Override
-    public void onAppWidgetOptionsChanged(Context c, AppWidgetManager m, int id, Bundle options) {
-        update(c, m, id);
-    }
-
-    static void updateAll(Context c) {
-        AppWidgetManager m = AppWidgetManager.getInstance(c);
-        for (int id : m.getAppWidgetIds(new ComponentName(c, ClockWidget.class))) update(c, m, id);
-    }
-
-    static void update(Context c, AppWidgetManager m, int id) {
-        RemoteViews v = new RemoteViews(c.getPackageName(), R.layout.widget_clock);
-        boolean dark = Prefs.get(c).getBoolean(Prefs.GLASS_DARK, false);
-        v.setInt(R.id.w_root, "setBackgroundResource", dark ? R.drawable.widget_glass_dark : R.drawable.widget_glass_clear);
-
-        Bundle o = m.getAppWidgetOptions(id);
-        int w = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0);
-        int h = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0);
-        if (w <= 0) w = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 220);
-        if (h <= 0) h = 110;
-        float size = Math.max(22f, Math.min(h * 0.52f, w * 0.27f));
-        v.setTextViewTextSize(R.id.w_time, TypedValue.COMPLEX_UNIT_DIP, size);
-        v.setTextViewTextSize(R.id.w_date, TypedValue.COMPLEX_UNIT_DIP, Math.max(11f, Math.min(18f, size * 0.24f)));
-
-        Intent open = new Intent(AlarmClock.ACTION_SHOW_ALARMS);
-        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        v.setOnClickPendingIntent(R.id.w_root, PendingIntent.getActivity(c, 1, open,
-                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
-        m.updateAppWidget(id, v);
-    }
+    /** Untuk keserasian dengan panggilan lama. */
+    static void updateAll(Context c) { GlassWidget.refreshAll(c); }
 }

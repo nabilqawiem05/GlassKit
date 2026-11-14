@@ -103,7 +103,7 @@
     <string name="widgets_hint">Long-press your home screen, tap Widgets, then GlassKit. The widgets follow your wallpaper colors and the glass style. Resize them to change width and height.</string>
     <string name="themed_hint">For app icons that follow your wallpaper, turn on Themed icons in Wallpaper and style. The GlassKit icon supports it.</string>
     <string name="widget_clock_name">Glass clock</string>
-    <string name="widget_clock_desc">Liquid glass clock in your wallpaper colors</string>
+    <string name="widget_clock_desc">Frameless liquid glass clock</string>
     <string name="widget_music_name">Glass music</string>
     <string name="widget_music_desc">Now playing with controls</string>
     <string name="st_connected">Connected</string>
@@ -126,4 +126,20 @@
     <string name="btn_restore_sys">Restore system status bar</string>
     <string name="sbar_note">Hiding uses Shizuku and removes the stock clock, battery, Wi-Fi and signal icons. App notification icons from the system can\'t be hidden without root. Full-screen portrait apps may still show this bar.</string>
     <string name="done">Done</string>
+    <string name="widget_stack_name">Glass stacked clock</string>
+    <string name="widget_stack_desc">Hours over minutes in liquid glass</string>
+    <string name="widget_analog_name">Glass analog clock</string>
+    <string name="widget_analog_desc">Glass dial with hands</string>
+    <string name="widget_date_name">Glass date</string>
+    <string name="widget_date_desc">Big day number in liquid glass</string>
+    <string name="widget_battery_name">Glass battery</string>
+    <string name="widget_battery_desc">Battery ring with percentage</string>
+    <string name="lbl_patch_dim">Patch darkness (match your lock screen)</string>
+    <string name="sec_icons">Glass icons</string>
+    <string name="icons_hint">Pick an app to put a liquid glass version of its icon on your home screen, in your wallpaper colors. Then remove the original icon. The launcher may show a small GlassKit badge on these icons.</string>
+    <string name="btn_open_icons">Make glass icons</string>
+    <string name="icon_style_tint">Wallpaper</string>
+    <string name="icon_added">Tap Add on the next screen</string>
+    <string name="icon_pin_fail">Your launcher doesn\'t allow adding icons</string>
+    <string name="btn_refresh_widgets">Refresh widgets</string>
 </resources>

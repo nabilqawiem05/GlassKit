@@ -47,8 +47,6 @@ public class MusicWidget extends AppWidgetProvider {
             if (ids == null || ids.length == 0) return;
             PillService s = PillService.inst;
             RemoteViews v = new RemoteViews(c.getPackageName(), R.layout.widget_music);
-            boolean dark = Prefs.get(c).getBoolean(Prefs.GLASS_DARK, false);
-            v.setInt(R.id.w_root, "setBackgroundResource", dark ? R.drawable.widget_glass_dark : R.drawable.widget_glass_clear);
             boolean has = s != null && s.mc != null && (s.title != null || s.playing);
             v.setTextViewText(R.id.w_title, has && s.title != null ? s.title : c.getString(R.string.not_playing));
             v.setTextViewText(R.id.w_artist, has && s.artist != null ? s.artist : "");

@@ -10,7 +10,10 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Outline;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.ColorDrawable;
@@ -65,12 +68,10 @@ final class Panels {
     private View edgeL, edgeR;
     private PanelRoot root;
     private WindowManager.LayoutParams plp;
-    private ColorDrawable dim;
     private View content;
     private ScrollView scroll;
     private int open = NONE;
     private boolean closing, blurOk, dark;
-    private ValueAnimator anim;
 
     private Tile tWifi, tBt, tData, tDnd, tPlane, tTorch, tDark, tRotate, tSaver, tLoc, tNfc;
     private Widgets.HSlider sBright;
@@ -211,27 +212,28 @@ final class Panels {
         }
     }
 
+    private int showToken;
+
     private void show(int which, View c, ScrollView sv) {
         if (root != null) {
             try { wm.removeViewImmediate(root); } catch (Exception ignored) {}
             root = null;
         }
-        if (anim != null) anim.cancel();
         open = which;
         closing = false;
         content = c;
         scroll = sv;
         s.onPanelChanged();
 
-        blurOk = wm.isCrossWindowBlurEnabled();
         root = new PanelRoot(s);
-        int dimColor = blurOk
-                ? (dark ? Color.argb(150, 0, 0, 0) : Color.argb(45, 0, 0, 0))
-                : (dark ? Color.argb(232, 12, 12, 16) : Color.argb(215, 52, 54, 64));
-        dim = new ColorDrawable(dimColor);
-        dim.setAlpha(0);
-        root.setBackground(dim);
-        root.addView(c, new FrameLayout.LayoutParams(-1, -1));
+        final PanelRoot r = root;
+        final ImageView bgImg = new ImageView(s);
+        bgImg.setScaleType(ImageView.ScaleType.FIT_XY);
+        r.addView(bgImg, new FrameLayout.LayoutParams(-1, -1));
+        View dimV = new View(s);
+        dimV.setBackgroundColor(dark ? Color.argb(160, 6, 6, 10) : Color.argb(70, 10, 12, 18));
+        r.addView(dimV, new FrameLayout.LayoutParams(-1, -1));
+        r.addView(c, new FrameLayout.LayoutParams(-1, -1));
 
         plp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -242,56 +244,84 @@ final class Panels {
                 PixelFormat.TRANSLUCENT);
         plp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         plp.setTitle("GlassKitPanel");
-        if (blurOk) {
-            plp.flags |= WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
-            plp.setBlurBehindRadius(1);
+
+        final int token = ++showToken;
+        // Ambil gambar skrin dan kaburkan sendiri: kaca sentiasa kabur walaupun blur sistem tak jalan
+        try {
+            s.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, s.getMainExecutor(),
+                    new AccessibilityService.TakeScreenshotCallback() {
+                        @Override
+                        public void onSuccess(AccessibilityService.ScreenshotResult res) {
+                            Bitmap blurred = null;
+                            try {
+                                Bitmap hw = Bitmap.wrapHardwareBuffer(res.getHardwareBuffer(), res.getColorSpace());
+                                if (hw != null) {
+                                    Bitmap sw = hw.copy(Bitmap.Config.ARGB_8888, false);
+                                    blurred = GlassArt.blur(sw, 200, 9);
+                                }
+                            } catch (Throwable ignored) {
+                            } finally {
+                                try { res.getHardwareBuffer().close(); } catch (Throwable ignored) {}
+                            }
+                            attach(token, r, bgImg, blurred);
+                        }
+
+                        @Override
+                        public void onFailure(int errorCode) {
+                            attach(token, r, bgImg, null);
+                        }
+                    });
+        } catch (Throwable t) {
+            attach(token, r, bgImg, null);
+        }
+    }
+
+    private void attach(int token, PanelRoot r, ImageView bgImg, Bitmap blurred) {
+        if (token != showToken || root != r || closing) return;
+        if (blurred != null) {
+            bgImg.setImageBitmap(blurred);
+            if (!dark) {
+                ColorMatrix cm = new ColorMatrix();
+                cm.setSaturation(1.25f);
+                bgImg.setColorFilter(new ColorMatrixColorFilter(cm));
+            }
+        } else {
+            blurOk = wm.isCrossWindowBlurEnabled();
+            if (blurOk) {
+                plp.flags |= WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
+                plp.setBlurBehindRadius(dp(dark ? 44 : 36));
+            } else {
+                bgImg.setImageDrawable(new ColorDrawable(dark ? Color.argb(235, 12, 12, 16) : Color.argb(225, 52, 54, 64)));
+            }
         }
         try {
-            wm.addView(root, plp);
+            wm.addView(r, plp);
         } catch (Exception e) {
             root = null;
             open = NONE;
+            s.onPanelChanged();
             return;
         }
-        root.requestFocus();
-
-        c.setAlpha(0f);
-        c.setTranslationY(-dp(48));
-        final int maxBlur = dp(dark ? 40 : 30);
-        anim = ValueAnimator.ofFloat(0f, 1f);
-        anim.setDuration(380);
-        anim.setInterpolator(new DecelerateInterpolator(2.2f));
-        anim.addUpdateListener(a -> {
-            float f = (float) a.getAnimatedValue();
-            dim.setAlpha(Math.round(255 * f));
-            if (blurOk && root != null) {
-                plp.setBlurBehindRadius(Math.max(1, Math.round(maxBlur * f)));
-                try { wm.updateViewLayout(root, plp); } catch (Exception ignored) {}
-            }
-        });
-        anim.start();
-        c.animate().alpha(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(560).start();
+        r.requestFocus();
+        r.setAlpha(0f);
+        r.animate().alpha(1f).setDuration(180).start();
+        content.setTranslationY(-dp(48));
+        content.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(560).start();
     }
 
     void close() {
         if (root == null || closing) return;
         closing = true;
         final PanelRoot r = root;
-        if (anim != null) anim.cancel();
-        final int from = blurOk ? dp(dark ? 40 : 30) : 0;
-        anim = ValueAnimator.ofFloat(1f, 0f);
-        anim.setDuration(240);
-        anim.setInterpolator(new DecelerateInterpolator());
-        anim.addUpdateListener(a -> {
-            float f = (float) a.getAnimatedValue();
-            dim.setAlpha(Math.round(255 * f));
-            if (blurOk) {
-                plp.setBlurBehindRadius(Math.max(1, Math.round(from * f)));
-                try { wm.updateViewLayout(r, plp); } catch (Exception ignored) {}
-            }
-        });
-        anim.start();
-        content.animate().alpha(0f).translationY(-dp(56)).setDuration(220).withEndAction(() -> {
+        if (!r.isAttachedToWindow()) {
+            root = null;
+            open = NONE;
+            closing = false;
+            s.onPanelChanged();
+            return;
+        }
+        content.animate().translationY(-dp(56)).setDuration(220).start();
+        r.animate().alpha(0f).setDuration(220).withEndAction(() -> {
             try { wm.removeViewImmediate(r); } catch (Exception ignored) {}
             if (root == r) {
                 root = null;
