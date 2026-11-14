@@ -91,6 +91,10 @@ final class CallOverlay {
     void onCallNotification(StatusBarNotification sbn) {
         if (!s.prefs.getBoolean(Prefs.CALL_ON, true)) return;
         Notification n = sbn.getNotification();
+        if (s.prefs.getInt(Prefs.CALL_STYLE, 0) == 0) {
+            islandRoute(sbn, n);
+            return;
+        }
         if (!resolve(n)) {
             // panggilan sudah dijawab / sedang berlangsung
             if (sbn.getKey().equals(key)) hide(true);
@@ -128,6 +132,52 @@ final class CallOverlay {
 
     void onRemoved(String k) {
         if (k.equals(key)) hide(true);
+        s.islandCallEnded(k);
+    }
+
+    /** Hantar panggilan ke Dynamic Island (masuk: jawab/tolak, berlangsung: pemasa + tamatkan). */
+    @SuppressWarnings("deprecation")
+    private void islandRoute(StatusBarNotification sbn, Notification n) {
+        Bundle ex = n.extras;
+        boolean ringing = resolve(n);
+        PendingIntent hang = pi(ex, Notification.EXTRA_HANG_UP_INTENT);
+        if (hang == null && n.actions != null) {
+            for (Notification.Action a : n.actions) {
+                if (a == null || a.title == null || a.actionIntent == null) continue;
+                String t = a.title.toString().toLowerCase(java.util.Locale.ROOT);
+                if (t.contains("hang") || t.contains("end") || t.contains("tamat") || t.contains("letak") || t.contains("putus")) {
+                    hang = a.actionIntent;
+                    break;
+                }
+            }
+        }
+        if (!ringing && hang == null) {
+            s.islandCallEnded(sbn.getKey());
+            return;
+        }
+        CharSequence name = null;
+        Drawable photo = null;
+        try {
+            Object po = ex.getParcelable(Notification.EXTRA_CALL_PERSON);
+            if (po instanceof Person) {
+                Person p = (Person) po;
+                name = p.getName();
+                if (p.getIcon() != null) photo = p.getIcon().loadDrawable(s);
+            }
+        } catch (Exception ignored) {
+        }
+        if (TextUtils.isEmpty(name)) name = ex.getCharSequence(Notification.EXTRA_TITLE);
+        if (photo == null && n.getLargeIcon() != null) {
+            try { photo = n.getLargeIcon().loadDrawable(s); } catch (Exception ignored) {}
+        }
+        String label = appName(sbn.getPackageName());
+        if ("com.google.android.dialer".equals(sbn.getPackageName()) || "com.android.server.telecom".equals(sbn.getPackageName())) {
+            CharSequence sub = ex.getCharSequence(Notification.EXTRA_TEXT);
+            label = TextUtils.isEmpty(sub) ? s.getString(R.string.incoming_call) : sub.toString();
+        }
+        long when = n.when;
+        s.islandCall(sbn.getKey(), name, label, photo, answer, decline != null ? decline : hang, hang,
+                n.contentIntent, ringing, ringing ? 0 : when);
     }
 
     private String appName(String pkg) {

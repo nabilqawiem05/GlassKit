@@ -262,4 +262,7 @@
     <string name="widget_world_name">World clock</string>
     <string name="widget_world_desc">Times in other cities</string>
     <string name="widgets_hint">Long-press your home screen, tap Widgets and find GlassKit. Every widget adapts to small, medium and large sizes. Tap the clock for alarms, the calendar for events, the weather for the forecast and the battery for battery details.</string>
+    <string name="call_style">Incoming call style</string>
+    <string name="call_style_island">Dynamic Island</string>
+    <string name="call_style_full">Full screen</string>
 </resources>

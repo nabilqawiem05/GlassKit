@@ -255,4 +255,7 @@
     <string name="widget_world_name">Jam dunia</string>
     <string name="widget_world_desc">Waktu di bandar lain</string>
     <string name="widgets_hint">Tekan lama home screen, pilih Widget dan cari GlassKit. Setiap widget menyesuaikan diri dengan saiz kecil, sederhana dan besar. Tekan jam untuk penggera, kalendar untuk acara, cuaca untuk ramalan dan bateri untuk butiran bateri.</string>
+    <string name="call_style">Gaya panggilan masuk</string>
+    <string name="call_style_island">Dynamic Island</string>
+    <string name="call_style_full">Skrin penuh</string>
 </resources>

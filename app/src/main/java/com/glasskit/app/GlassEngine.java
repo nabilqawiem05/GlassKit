@@ -85,9 +85,8 @@ final class GlassEngine {
 
     static int size(float wPx, float hPx, float d) {
         float w = wPx / d, h = hPx / d;
-        if (w >= 300 && h >= 300) return XL;
-        if (h >= 220) return LARGE;
-        if (w >= 220) return MEDIUM;
+        if (h >= 220 && w >= 220) return LARGE;
+        if (w >= 220 && w >= h * 1.55f) return MEDIUM; // sederhana hanya bila jelas lebar
         return SMALL;
     }
 

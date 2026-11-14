@@ -37,6 +37,7 @@ public final class Prefs {
     public static final String VOLUME_ON = "volumeOn";
     public static final String REC_AUDIO = "recAudio";
     public static final String CALL_ON = "callOn";
+    public static final String CALL_STYLE = "callStyle"; // 0 island, 1 skrin penuh
     public static final String SOUND_UNLOCK = "soundUnlock";
     public static final String SBAR_ON = "sbarOn";
     public static final String SBAR_STYLE = "sbarStyle";

@@ -58,7 +58,7 @@ public class PillService extends AccessibilityService
 
     static PillService inst;
 
-    private static final int IDLE = 0, MUSIC = 1, NOTI = 2, REC = 3;
+    private static final int IDLE = 0, MUSIC = 1, NOTI = 2, REC = 3, CALL = 4;
 
     final Handler h = new Handler(Looper.getMainLooper());
     WindowManager wm;
@@ -69,7 +69,36 @@ public class PillService extends AccessibilityService
     private FrameLayout root, pill;
     private GradientDrawable pillBg;
     private FrameLayout compact;
-    private LinearLayout expMusic, expNoti;
+    private LinearLayout expMusic, expNoti, expCall, nActions;
+    // ---- panggilan dalam island ----
+    private String callKey;
+    private boolean callRinging;
+    private long callStart;
+    private CharSequence callName;
+    private String callLabel;
+    private PendingIntent callAnswer, callDecline, callHang;
+    private ImageView kAvatar;
+    private TextView kLabel, kName;
+    private Widgets.Wave kWave;
+    private FrameLayout kDecline, kAccept;
+    private final Runnable callTick = new Runnable() {
+        @Override
+        public void run() {
+            if (callKey == null || callRinging) return;
+            String t = Ui.mmss(System.currentTimeMillis() - callStart);
+            if (mode == CALL) {
+                cText.setText(t);
+                kLabel.setText(t);
+            }
+            h.postDelayed(this, 1000);
+        }
+    };
+    private final Runnable callCollapse = () -> {
+        if (mode == CALL && !callRinging && expanded) {
+            expanded = false;
+            refresh();
+        }
+    };
     private ImageView cArt, cAppIcon, mArt, nIcon;
     private TextView cText, mTitle, mArtist, mElapsed, mRemain, nTitle, nText;
     private Widgets.Wave cWave, mWave;
@@ -298,7 +327,7 @@ public class PillService extends AccessibilityService
         int k = e.getKeyCode();
         if (volume == null || prefs == null || !prefs.getBoolean(Prefs.VOLUME_ON, true)) return false;
         if (k != android.view.KeyEvent.KEYCODE_VOLUME_UP && k != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return false;
-        if (call != null && call.showing()) return false;
+        if ((call != null && call.showing()) || islandCallActive()) return false;
         boolean up = k == android.view.KeyEvent.KEYCODE_VOLUME_UP;
         if (e.getAction() == android.view.KeyEvent.ACTION_DOWN) {
             if (e.getRepeatCount() > 0) return true; // ulangan dikawal sendiri
@@ -490,6 +519,17 @@ public class PillService extends AccessibilityService
         mElapsed = Ui.text(this, 11, 500, Color.argb(150, 235, 235, 245));
         mRemain = Ui.text(this, 11, 500, Color.argb(150, 235, 235, 245));
         mBar = new Widgets.Bar(this);
+        mBar.setOnTouchListener((v, e) -> {
+            if (mc == null || duration <= 0) return false;
+            float f = Math.max(0f, Math.min(1f, e.getX() / v.getWidth()));
+            mBar.setValue(f);
+            if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                mc.getTransportControls().seekTo((long) (f * duration));
+                h.removeCallbacks(autoCollapse);
+                h.postDelayed(autoCollapse, 7000);
+            }
+            return true;
+        });
         prog.addView(mElapsed);
         LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(0, dp(5), 1f);
         bl.leftMargin = dp(10);
@@ -548,8 +588,68 @@ public class PillService extends AccessibilityService
         expNoti.addView(now);
         pill.addView(expNoti, new FrameLayout.LayoutParams(-1, -1));
 
+        // tindakan notifikasi (contoh: Tandai dibaca)
+        nActions = new LinearLayout(this);
+        nActions.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout notiWrap = new LinearLayout(this);
+        notiWrap.setOrientation(LinearLayout.VERTICAL);
+        pill.removeView(expNoti);
+        notiWrap.addView(expNoti, new LinearLayout.LayoutParams(-1, dp(76)));
+        LinearLayout.LayoutParams nal = new LinearLayout.LayoutParams(-1, dp(40));
+        nal.leftMargin = dp(14);
+        nal.rightMargin = dp(14);
+        notiWrap.addView(nActions, nal);
+        expNoti = notiWrap;
+        pill.addView(expNoti, new FrameLayout.LayoutParams(-1, -1));
+
+        // ---- panggilan ----
+        expCall = new LinearLayout(this);
+        expCall.setGravity(Gravity.CENTER_VERTICAL);
+        expCall.setPadding(dp(12), dp(10), dp(12), dp(10));
+        kAvatar = new ImageView(this);
+        kAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        roundClip(kAvatar, dp(24));
+        expCall.addView(kAvatar, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout kcol = new LinearLayout(this);
+        kcol.setOrientation(LinearLayout.VERTICAL);
+        kcol.setPadding(dp(12), 0, dp(6), 0);
+        kLabel = Ui.line(this, 12, 500, Color.argb(150, 235, 235, 245));
+        kName = Ui.line(this, 16, 650, Color.WHITE);
+        kcol.addView(kLabel);
+        kcol.addView(kName);
+        expCall.addView(kcol, new LinearLayout.LayoutParams(0, -2, 1f));
+        kWave = new Widgets.Wave(this);
+        kWave.setColor(0xFF30D158);
+        LinearLayout.LayoutParams kwl = new LinearLayout.LayoutParams(dp(26), dp(16));
+        kwl.rightMargin = dp(10);
+        expCall.addView(kWave, kwl);
+        kDecline = callBtn(0xFFFF3B30, true, v -> callAct(false));
+        kAccept = callBtn(0xFF30D158, false, v -> callAct(true));
+        expCall.addView(kDecline, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout.LayoutParams kal = new LinearLayout.LayoutParams(dp(48), dp(48));
+        kal.leftMargin = dp(12);
+        expCall.addView(kAccept, kal);
+        expCall.setOnClickListener(v -> {
+            // tekan kawasan nama: buka skrin panggilan app
+            if (!callRinging) sendIntent(callHangOpen);
+        });
+        pill.addView(expCall, new FrameLayout.LayoutParams(-1, -1));
+
         // ---- sentuhan ----
         pill.setOnClickListener(v -> onPillTap());
+        pill.setOnTouchListener(new View.OnTouchListener() {
+            float y0;
+            @Override
+            public boolean onTouch(View v, MotionEvent e) {
+                if (e.getActionMasked() == MotionEvent.ACTION_DOWN) y0 = e.getRawY();
+                if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                    float dy = e.getRawY() - y0;
+                    if (dy < -dp(18)) { onPillSwipe(false); return true; }
+                    if (dy > dp(18)) { onPillSwipe(true); return true; }
+                }
+                return false;
+            }
+        });
         pill.setOnLongClickListener(v -> {
             if (mode == MUSIC) {
                 openMusicApp();
@@ -565,6 +665,114 @@ public class PillService extends AccessibilityService
             }
             return false;
         });
+    }
+
+    private PendingIntent callHangOpen;
+
+    private FrameLayout callBtn(int color, boolean hang, View.OnClickListener l) {
+        FrameLayout f = new FrameLayout(this);
+        f.setBackground(Ui.circle(color));
+        com.glasskit.app.Icon ic = new com.glasskit.app.Icon(this, com.glasskit.app.Icon.PHONE, Color.WHITE);
+        if (hang) ic.setRotation(135);
+        f.addView(ic, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+        f.setOnClickListener(l);
+        Ui.press(f);
+        return f;
+    }
+
+    /** Panggilan masuk / sedang berlangsung dipaparkan dalam island. */
+    void islandCall(String key, CharSequence name, String label, Drawable photo, PendingIntent answer,
+                    PendingIntent decline, PendingIntent hang, PendingIntent open, boolean ringing, long when) {
+        if (pill == null) return;
+        boolean isNew = !key.equals(callKey);
+        boolean wasRinging = callRinging;
+        callKey = key;
+        callName = name;
+        callLabel = label;
+        callAnswer = answer;
+        callDecline = decline;
+        callHang = hang;
+        callHangOpen = open;
+        callRinging = ringing;
+        if (photo != null) kAvatar.setImageDrawable(photo);
+        else kAvatar.setImageDrawable(Ui.iconDrawable(this, com.glasskit.app.Icon.PHONE, Color.WHITE, 0xFF636366, dp(48)));
+        cAppIcon.setImageDrawable(kAvatar.getDrawable());
+        kName.setText(name);
+        if (ringing) {
+            kLabel.setText(label);
+            expanded = true;
+            pulse(kAccept);
+        } else {
+            if (isNew || wasRinging || callStart == 0) callStart = when > 0 && when < System.currentTimeMillis() ? when : System.currentTimeMillis();
+            if (wasRinging) expanded = false; // selepas dijawab: kecilkan
+            h.removeCallbacks(callTick);
+            h.post(callTick);
+        }
+        refresh();
+    }
+
+    void islandCallEnded(String key) {
+        if (key == null || !key.equals(callKey)) return;
+        callKey = null;
+        callRinging = false;
+        callStart = 0;
+        h.removeCallbacks(callTick);
+        expanded = false;
+        refresh();
+    }
+
+    boolean islandCallActive() { return callKey != null; }
+
+    private void pulse(View v) {
+        v.animate().cancel();
+        v.setScaleX(1f);
+        v.setScaleY(1f);
+        v.animate().scaleX(1.12f).scaleY(1.12f).setDuration(520).withEndAction(() ->
+                v.animate().scaleX(1f).scaleY(1f).setDuration(520).withEndAction(() -> {
+                    if (callRinging && callKey != null) pulse(v);
+                }).start()).start();
+    }
+
+    private void callAct(boolean accept) {
+        PendingIntent pi = callRinging ? (accept ? callAnswer : callDecline) : callHang;
+        sendIntent(pi);
+        if (callRinging && accept) {
+            callRinging = false;
+            callStart = System.currentTimeMillis();
+            expanded = false;
+            h.removeCallbacks(callTick);
+            h.post(callTick);
+            refresh();
+        } else {
+            String k = callKey;
+            islandCallEnded(k);
+        }
+    }
+
+    private void onPillSwipe(boolean down) {
+        if (down) {
+            if (!expanded && (mode == MUSIC || mode == CALL)) {
+                expanded = true;
+                refresh();
+                h.removeCallbacks(autoCollapse);
+                h.postDelayed(autoCollapse, 7000);
+                if (mode == CALL) {
+                    h.removeCallbacks(callCollapse);
+                    h.postDelayed(callCollapse, 6000);
+                }
+            }
+            return;
+        }
+        if (mode == CALL && callRinging) return; // jangan sorok panggilan masuk
+        if (mode == NOTI) {
+            h.removeCallbacks(endNoti);
+            endNoti.run();
+            return;
+        }
+        if (expanded) {
+            expanded = false;
+            refresh();
+        }
     }
 
     private void attach() {
@@ -647,7 +855,9 @@ public class PillService extends AccessibilityService
                 && (playing || SystemClock.uptimeMillis() < holdMusicUntil);
 
         int newMode = IDLE;
-        if (Recorder.recording() && !land && (panels == null || !panels.isOpen())) {
+        if (callKey != null && (panels == null || !panels.isOpen())) {
+            newMode = CALL;
+        } else if (Recorder.recording() && !land && (panels == null || !panels.isOpen())) {
             newMode = REC;
         } else if (on && !land && (panels == null || !panels.isOpen())) {
             if (notiActive) newMode = NOTI;
@@ -668,13 +878,30 @@ public class PillService extends AccessibilityService
         compact.setVisibility(expanded ? View.GONE : View.VISIBLE);
         boolean showMusic = expanded && mode == MUSIC;
         boolean showNoti = expanded && mode == NOTI;
+        boolean showCall = expanded && mode == CALL;
         if (showMusic && expMusic.getVisibility() != View.VISIBLE) fadeIn(expMusic);
         if (showNoti && expNoti.getVisibility() != View.VISIBLE) fadeIn(expNoti);
+        if (showCall && expCall.getVisibility() != View.VISIBLE) fadeIn(expCall);
         if (!expanded && wasExpanded) fadeIn(compact);
         expMusic.setVisibility(showMusic ? View.VISIBLE : View.GONE);
         expNoti.setVisibility(showNoti ? View.VISIBLE : View.GONE);
+        expCall.setVisibility(showCall ? View.VISIBLE : View.GONE);
+        kWave.setRunning(showCall && !callRinging);
 
-        if (mode == REC) {
+        if (mode == CALL) {
+            cArt.setVisibility(View.GONE);
+            cAppIcon.setVisibility(View.VISIBLE);
+            cText.setVisibility(View.VISIBLE);
+            cText.setTextColor(0xFF30D158);
+            if (!callRinging) cText.setText(Ui.mmss(System.currentTimeMillis() - callStart));
+            cWave.setVisibility(View.GONE);
+            cWave.setRunning(false);
+            mWave.setRunning(false);
+            kAccept.setVisibility(callRinging ? View.VISIBLE : View.GONE);
+            kWave.setVisibility(callRinging ? View.GONE : View.VISIBLE);
+            if (!callRinging) kLabel.setTextColor(0xFF30D158);
+            else kLabel.setTextColor(Color.argb(150, 235, 235, 245));
+        } else if (mode == REC) {
             expanded = false;
             compact.setVisibility(View.VISIBLE);
             expMusic.setVisibility(View.GONE);
@@ -711,7 +938,8 @@ public class PillService extends AccessibilityService
         }
 
         int tw = expanded ? Math.min(screenW - dp(44), dp(400)) : compactW;
-        int th = expanded ? (mode == MUSIC ? dp(172) : dp(76)) : compactH;
+        int th = expanded ? (mode == MUSIC ? dp(172)
+                : mode == NOTI && nActions.getChildCount() > 0 ? dp(122) : dp(76)) : compactH;
         animateTo(tw, th, tw >= curW);
 
         h.removeCallbacks(progTick);
@@ -720,6 +948,17 @@ public class PillService extends AccessibilityService
     }
 
     private void onPillTap() {
+        if (mode == CALL) {
+            if (!expanded) {
+                expanded = true;
+                refresh();
+                h.removeCallbacks(callCollapse);
+                h.postDelayed(callCollapse, 6000);
+            } else if (!callRinging) {
+                sendIntent(callHangOpen);
+            }
+            return;
+        }
         if (mode == REC) {
             Recorder.stop(this);
             return;
@@ -785,6 +1024,35 @@ public class PillService extends AccessibilityService
             try { big = li.loadDrawable(this); } catch (Exception ignored) {}
         }
         show(appIcon, big != null ? big : appIcon, t, body, n.contentIntent);
+        // butang tindakan (tanpa input teks), maksimum 2
+        nActions.removeAllViews();
+        if (n.actions != null) {
+            int added = 0;
+            for (Notification.Action a : n.actions) {
+                if (added >= 2 || a == null || a.actionIntent == null || a.title == null) continue;
+                if (a.getRemoteInputs() != null && a.getRemoteInputs().length > 0) continue;
+                TextView b = Ui.line(this, 13, 600, Color.WHITE);
+                b.setText(a.title);
+                b.setGravity(Gravity.CENTER);
+                b.setBackground(Ui.round(Color.argb(46, 255, 255, 255), dp(17)));
+                final PendingIntent ai = a.actionIntent;
+                b.setOnClickListener(v -> {
+                    sendIntent(ai);
+                    h.removeCallbacks(endNoti);
+                    endNoti.run();
+                });
+                Ui.press(b);
+                LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(0, dp(34), 1f);
+                if (added > 0) bl.leftMargin = dp(8);
+                nActions.addView(b, bl);
+                added++;
+            }
+        }
+        if (nActions.getChildCount() > 0) {
+            refresh();
+            h.removeCallbacks(endNoti);
+            h.postDelayed(endNoti, 6500);
+        }
     }
 
     Drawable appIcon(String pkg) {
@@ -799,6 +1067,7 @@ public class PillService extends AccessibilityService
         nTitle.setText(t);
         nText.setText(body);
         notiIntent = pi;
+        if (nActions != null) nActions.removeAllViews();
         notiActive = true;
         expanded = true;
         refresh();
@@ -1013,7 +1282,7 @@ public class PillService extends AccessibilityService
         if (System.currentTimeMillis() < LockActivity.holdUntil) return false;
         KeyguardManager km = getSystemService(KeyguardManager.class);
         if (km == null || !km.isKeyguardLocked()) return false;
-        if (call != null && call.showing()) return false;
+        if ((call != null && call.showing()) || islandCallActive()) return false;
         android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
         if (am != null) {
             int m = am.getMode();

@@ -68,7 +68,7 @@ public class MusicWidget extends AppWidgetProvider {
         Bitmap bg = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         android.graphics.Canvas cv = new android.graphics.Canvas(bg);
         float mg = GlassEngine.shadowPad(sc);
-        GlassEngine.card(cv, new android.graphics.RectF(mg, mg * 0.7f, w - mg, h - mg * 1.3f), t, sc);
+        GlassEngine.card(cv, new android.graphics.RectF(mg, mg, w - mg, h - mg), t, sc);
         v.setImageViewBitmap(R.id.w_bg, bg);
 
         v.setTextViewText(R.id.w_title, has && s.title != null ? s.title : c.getString(R.string.not_playing));

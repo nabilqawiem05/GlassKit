@@ -104,7 +104,7 @@ public abstract class GlassWidget extends AppWidgetProvider {
         tune(c, t);
         GlassEngine.cur = t;
         float m = GlassEngine.shadowPad(d);
-        RectF card = new RectF(m, m * 0.7f, w - m, h - m * 1.3f);
+        RectF card = new RectF(m, m, w - m, h - m);
         GlassEngine.card(cv, card, t, d);
         float pad = Math.min(15 * d, Math.min(card.width(), card.height()) * 0.12f);
         RectF in = new RectF(card.left + pad, card.top + pad, card.right - pad, card.bottom - pad);
