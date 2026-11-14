@@ -93,10 +93,13 @@ public class PillService extends AccessibilityService
             h.postDelayed(this, 1000);
         }
     };
-    private final Runnable callCollapse = () -> {
-        if (mode == CALL && !callRinging && expanded) {
-            expanded = false;
-            refresh();
+    private final Runnable callCollapse = new Runnable() {
+        @Override
+        public void run() {
+            if (mode == CALL && !callRinging && expanded) {
+                expanded = false;
+                refresh();
+            }
         }
     };
     private ImageView cArt, cAppIcon, mArt, nIcon;
