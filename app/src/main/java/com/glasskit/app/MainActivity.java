@@ -133,6 +133,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        CrashLog.install(this);
         prefs = Prefs.get(this);
         getWindow().setStatusBarColor(0xFF07080F);
         getWindow().setNavigationBarColor(0xFF0B1424);
@@ -228,6 +229,24 @@ public class MainActivity extends Activity {
             cm.setPrimaryClip(ClipData.newPlainText("aShell", Shell.grantAll(getPackageName())));
             toast(getString(R.string.copied));
         });
+
+        final String crash = CrashLog.read(this);
+        if (crash != null) {
+            LinearLayout cr0 = card(pHome, R.string.sec_crash, Icon.CLOSE, 0xFFFF453A);
+            TextView ct = note(cr0, crash.length() > 900 ? crash.substring(0, 900) + "…" : crash);
+            ct.setTypeface(android.graphics.Typeface.MONOSPACE);
+            ct.setTextSize(11);
+            LinearLayout crr = new LinearLayout(this);
+            cr0.addView(crr);
+            addPair(crr, button(null, getString(R.string.btn_copy_crash), true, v -> {
+                        getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("GlassKit", crash));
+                        toast(getString(R.string.copied));
+                    }),
+                    button(null, getString(R.string.btn_clear_crash), false, v -> {
+                        CrashLog.file(this).delete();
+                        cr0.setVisibility(View.GONE);
+                    }));
+        }
 
         LinearLayout sys = card(pHome, R.string.sec_system, Icon.PHONE, 0xFF34C759);
         toggle(sys, R.string.call_on, Prefs.CALL_ON, true);

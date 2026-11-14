@@ -60,6 +60,7 @@ import java.util.Set;
  */
 public class LockActivity extends Activity {
     static LockActivity inst;
+    static boolean visible;
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private SharedPreferences prefs;
@@ -135,6 +136,7 @@ public class LockActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        CrashLog.install(this);
         inst = this;
         prefs = Prefs.get(this);
         km = getSystemService(KeyguardManager.class);
@@ -243,8 +245,14 @@ public class LockActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        visible = true;
         hideBars();
-        resetUi();
+        try {
+            resetUi();
+        } catch (Throwable t) {
+            CrashLog.write(this, t);
+        }
+        if (PillService.inst != null) PillService.inst.updateStatusBar();
         h.removeCallbacks(lockPoll);
         h.post(lockPoll);
     }
@@ -252,7 +260,9 @@ public class LockActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        visible = false;
         h.removeCallbacks(lockPoll);
+        if (PillService.inst != null) PillService.inst.updateStatusBar();
     }
 
     @Override
@@ -338,6 +348,14 @@ public class LockActivity extends Activity {
 
         @Override
         protected void onDraw(Canvas c) {
+            try {
+                drawRow(c);
+            } catch (Throwable t) {
+                CrashLog.write(getContext(), t);
+            }
+        }
+
+        private void drawRow(Canvas c) {
             Context ctx = getContext();
             Draw3D.useWidgetTheme(ctx);
             int[] lc = new int[2];
@@ -403,6 +421,8 @@ public class LockActivity extends Activity {
         LiquidGlass.current = bd;
         try {
             buildNotifs();
+        } catch (Throwable t) {
+            CrashLog.write(this, t);
         } finally {
             LiquidGlass.current = prevBd;
         }
@@ -697,6 +717,8 @@ public class LockActivity extends Activity {
         LiquidGlass.current = bd;
         try {
             buildMusic();
+        } catch (Throwable t) {
+            CrashLog.write(this, t);
         } finally {
             LiquidGlass.current = prevBd;
         }

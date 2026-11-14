@@ -61,27 +61,24 @@ final class VolumePanel {
         level.v = value();
         level.shown = level.v;
         FrameLayout pill = new FrameLayout(s);
-        pill.setBackground(new LiquidGlass.Surface(s, dp(30), false, bd, 0));
-        pill.setElevation(dp(6));
+        pill.setBackground(new LiquidGlass.Surface(s, dp(27), true, bd, 0));
         pill.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline o) {
-                o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(30));
+                o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(27));
             }
         });
         pill.setClipToOutline(true);
         pill.addView(level, new FrameLayout.LayoutParams(-1, -1));
-        FrameLayout.LayoutParams pl = new FrameLayout.LayoutParams(dp(60), dp(210), Gravity.CENTER);
-        root.addView(pill, pl);
-        root.setPadding(dp(8), dp(8), dp(8), dp(8));
+        root.addView(pill, new FrameLayout.LayoutParams(dp(54), dp(190), Gravity.CENTER));
 
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(dp(76), dp(226),
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(dp(70), dp(206),
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
-        lp.x = dp(6);
-        lp.y = -dp(80);
+        lp.x = dp(4);
+        lp.y = -dp(70);
         lp.setTitle("GlassKitVolume");
         try {
             s.wm.addView(root, lp);
@@ -89,8 +86,10 @@ final class VolumePanel {
             root = null;
             return;
         }
-        pill.setTranslationX(dp(90));
-        pill.animate().translationX(0).setInterpolator(Ui.SPRING).setDuration(520).start();
+        pill.setAlpha(0f);
+        pill.setTranslationX(dp(40));
+        pill.setScaleY(0.9f);
+        pill.animate().alpha(1f).translationX(0).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(480).start();
         // biasan latar: tangkap skrin sekali (dihadkan)
         if (System.currentTimeMillis() - lastShot > 1500) {
             lastShot = System.currentTimeMillis();
@@ -122,9 +121,12 @@ final class VolumePanel {
         root = null;
         if (r == null) return;
         View pill = r.getChildAt(0);
-        pill.animate().translationX(dp(90)).alpha(0f).setDuration(220).withEndAction(() -> {
-            try { s.wm.removeViewImmediate(r); } catch (Exception ignored) {}
-        }).start();
+        pill.animate().cancel();
+        pill.animate().translationX(dp(40)).alpha(0f).scaleY(0.92f).setInterpolator(null).setDuration(200)
+                .withEndAction(() -> {
+                    r.setVisibility(View.GONE);
+                    try { s.wm.removeViewImmediate(r); } catch (Exception ignored) {}
+                }).start();
     }
 
     /** Isi aras volume + ikon, boleh diseret. */
@@ -153,19 +155,16 @@ final class VolumePanel {
         protected void onDraw(Canvas c) {
             float w = getWidth(), h = getHeight();
             float top = h * (1 - shown);
-            Path fill = new Path();
-            fill.addRect(0, top, w, h, Path.Direction.CW);
             p.setShader(new android.graphics.LinearGradient(0, top, 0, h,
-                    Color.argb(235, 255, 255, 255), Color.argb(200, 235, 240, 250), android.graphics.Shader.TileMode.CLAMP));
-            c.drawPath(fill, p);
+                    Color.WHITE, Color.argb(255, 228, 232, 240), android.graphics.Shader.TileMode.CLAMP));
+            c.drawRect(0, top, w, h, p);
             p.setShader(null);
-            p.setColor(Color.argb(120, 255, 255, 255));
-            c.drawRect(0, top, w, top + Math.max(1, dp(1)), p);
-            int is = dp(24);
+            int is = dp(22);
+            ic.setKind(shown <= 0.001f ? Icon.CLOSE : Icon.SPEAKER);
             ic.layout(0, 0, is, is);
-            ic.setColor(top < h - dp(14) - is ? Color.rgb(40, 40, 46) : Color.WHITE);
+            ic.setColor(top < h - dp(16) - is ? Color.rgb(36, 36, 42) : Color.WHITE);
             c.save();
-            c.translate((w - is) / 2f, h - is - dp(14));
+            c.translate((w - is) / 2f, h - is - dp(16));
             ic.draw(c);
             c.restore();
         }

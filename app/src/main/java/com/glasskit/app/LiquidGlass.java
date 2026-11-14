@@ -46,9 +46,15 @@ final class LiquidGlass {
                 sharp = soft = null;
                 return;
             }
-            sharp = GlassArt.blur(screen, 540, 1);
-            soft = GlassArt.blur(screen, 220, 7);
-            luminance = lum(soft);
+            try {
+                Bitmap sh2 = GlassArt.blur(screen, 540, 1);
+                Bitmap so = GlassArt.blur(screen, 220, 7);
+                sharp = sh2;
+                soft = so;
+                luminance = lum(so);
+            } catch (Throwable t) {
+                sharp = soft = null;
+            }
         }
 
         boolean ready() { return soft != null; }
@@ -117,6 +123,21 @@ final class LiquidGlass {
 
         @Override
         public void draw(Canvas c) {
+            int sc = c.save();
+            try {
+                drawGlass(c);
+            } catch (Throwable t) {
+                c.restoreToCount(sc);
+                Paint f = new Paint(Paint.ANTI_ALIAS_FLAG);
+                f.setColor(dark ? Color.argb(170, 20, 20, 24) : Color.argb(70, 255, 255, 255));
+                RectF r = new RectF(getBounds());
+                c.drawRoundRect(r, radius, radius, f);
+                return;
+            }
+            c.restoreToCount(sc);
+        }
+
+        private void drawGlass(Canvas c) {
             Rect b = getBounds();
             if (b.isEmpty()) return;
             RectF r = new RectF(b);
@@ -228,6 +249,20 @@ final class LiquidGlass {
      * @param tint    0 = kaca neutral, atau warna
      */
     static void glyph(Canvas c, Path path, float size, Bitmap bg, RectF bgRect, boolean dark, int tint) {
+        int sc = c.save();
+        try {
+            glyphImpl(c, path, size, bg, bgRect, dark, tint);
+        } catch (Throwable t) {
+            c.restoreToCount(sc);
+            Paint f = new Paint(Paint.ANTI_ALIAS_FLAG);
+            f.setColor(dark ? Color.argb(150, 20, 20, 24) : Color.argb(150, 255, 255, 255));
+            c.drawPath(path, f);
+            return;
+        }
+        c.restoreToCount(sc);
+    }
+
+    private static void glyphImpl(Canvas c, Path path, float size, Bitmap bg, RectF bgRect, boolean dark, int tint) {
         RectF b = new RectF();
         path.computeBounds(b, true);
         if (b.isEmpty()) return;

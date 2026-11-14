@@ -156,6 +156,13 @@ public class PillService extends AccessibilityService
             switch (a) {
                 case Intent.ACTION_SCREEN_ON:
                     if (patch != null) patch.screenOn();
+                    if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
+                        h.postDelayed(() -> {
+                            KeyguardManager km = getSystemService(KeyguardManager.class);
+                            if (km != null && km.isKeyguardLocked() && !LockActivity.visible) showLock();
+                        }, 350);
+                    }
+                    updateStatusBar();
                     break;
                 case Intent.ACTION_SCREEN_OFF:
                     if (patch != null) patch.hide(false);
@@ -164,6 +171,7 @@ public class PillService extends AccessibilityService
                     break;
                 case Intent.ACTION_USER_PRESENT:
                     if (patch != null) patch.hide(true);
+                    h.postDelayed(PillService.this::updateStatusBar, 300);
                     if (!prefs.getBoolean(Prefs.LOCK_ON, false)) Sounds.play(PillService.this, Sounds.UNLOCK);
                     break;
                 case Intent.ACTION_TIME_TICK:
@@ -223,6 +231,7 @@ public class PillService extends AccessibilityService
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        CrashLog.install(this);
         inst = this;
         prefs = Prefs.get(this);
         prefs.registerOnSharedPreferenceChangeListener(this);
@@ -1053,9 +1062,12 @@ public class PillService extends AccessibilityService
 
     void updateStatusBar() {
         if (wm == null || prefs == null) return;
+        KeyguardManager kgm = getSystemService(KeyguardManager.class);
+        boolean stockKeyguard = kgm != null && kgm.isKeyguardLocked() && !LockActivity.visible;
         boolean want = prefs.getBoolean(Prefs.SBAR_ON, false)
                 && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE
-                && (panels == null || !panels.isOpen());
+                && (panels == null || !panels.isOpen())
+                && !stockKeyguard;
         if (!want) {
             hideStatusBar();
             return;

@@ -211,4 +211,7 @@
     <string name="call_on">Glass incoming call screen</string>
     <string name="vol_on">Glass volume panel</string>
     <string name="system_note">Works for the Phone app, WhatsApp, Truecaller, Telegram and other calling apps that show a call notification. The volume panel replaces the system one for media; during calls the system panel is used. After updating, tap Grant all with Shizuku again so the new volume key permission is turned on.</string>
+    <string name="sec_crash">Last error</string>
+    <string name="btn_copy_crash">Copy error</string>
+    <string name="btn_clear_crash">Clear</string>
 </resources>
