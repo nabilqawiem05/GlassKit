@@ -129,10 +129,19 @@
     <string name="widget_battery_desc">Cincin bateri dengan peratus</string>
     <string name="lbl_patch_dim">Kegelapan tampalan (ikut lock screen)</string>
     <string name="sec_icons">Ikon kaca</string>
-    <string name="icons_hint">Pilih app untuk letak versi kaca ikonnya di home screen, ikut warna wallpaper. Kemudian buang ikon asal. Launcher mungkin tunjuk lencana kecil GlassKit pada ikon ini.</string>
+    <string name="icons_hint">Pilih app untuk letak versi kaca ikonnya di home screen, ikut warna wallpaper. Kemudian buang ikon asal. Pixel Launcher sentiasa letak lencana kecil GlassKit pada ikon ini; ia tak boleh dibuang tanpa launcher sendiri.</string>
     <string name="btn_open_icons">Buat ikon kaca</string>
     <string name="icon_style_tint">Wallpaper</string>
     <string name="icon_added">Tekan Tambah pada skrin seterusnya</string>
     <string name="icon_pin_fail">Launcher kau tak benarkan tambah ikon</string>
     <string name="btn_refresh_widgets">Muat semula widget</string>
+    <string name="sec_lock">Lock screen</string>
+    <string name="lock_on">Lock screen GlassKit</string>
+    <string name="lock_note">Tunjuk lock screen GlassKit sendiri, bukan yang stock, jadi jam Pixel langsung tak nampak. Buka kunci tetap guna wajah, cap jari atau PIN kau. Tekan Beri semua guna Shizuku sekali lagi lepas hidupkan ini.</string>
+    <string name="btn_preview_lock">Pratonton lock screen</string>
+    <string name="swipe_open">Leret ke atas untuk buka</string>
+    <string name="unlocked_swipe">Dibuka · leret ke atas</string>
+    <string name="more_notifs">+%1$d lagi</string>
+    <string name="widget_dash_name">Papan pemuka kaca XL</string>
+    <string name="widget_dash_desc">Papan pemuka extra-large gaya iOS 27</string>
 </resources>

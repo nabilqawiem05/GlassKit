@@ -4,6 +4,7 @@
     <uses-feature android:name="android.software.live_wallpaper" android:required="false" />
 
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
@@ -25,6 +26,17 @@
             android:exported="true"
             android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <activity
+            android:name=".LockActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:resizeableActivity="false"
+            android:screenOrientation="portrait"
+            android:showWhenLocked="true"
+            android:taskAffinity="com.glasskit.app.lock"
+            android:theme="@style/LockTheme" />
 
         <activity
             android:name=".IconsActivity"
@@ -132,6 +144,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_battery_info" />
+        </receiver>
+
+        <receiver
+            android:name=".DashboardWidget"
+            android:exported="true"
+            android:label="@string/widget_dash_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_dash_info" />
         </receiver>
 
         <receiver

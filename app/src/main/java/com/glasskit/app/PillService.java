@@ -128,6 +128,7 @@ public class PillService extends AccessibilityService
                 case Intent.ACTION_SCREEN_OFF:
                     if (patch != null) patch.hide(false);
                     if (panels != null) panels.close();
+                    if (prefs.getBoolean(Prefs.LOCK_ON, false)) h.postDelayed(PillService.this::showLock, 250);
                     break;
                 case Intent.ACTION_USER_PRESENT:
                     if (patch != null) patch.hide(true);
@@ -502,7 +503,15 @@ public class PillService extends AccessibilityService
         p.width = curW;
         p.height = curH;
         pill.setLayoutParams(p);
-        pillBg.setCornerRadius(Math.min(curH / 2f, dp(44)));
+        pillBg.setCornerRadius(Math.min(curH / 2f, dp(38)));
+        // turun sedikit bila kembang supaya tak rapat ke bingkai phone
+        if (attached && lp != null) {
+            int want = topY + (curH > compactH + dp(8) ? dp(6) : 0);
+            if (lp.y != want) {
+                lp.y = want;
+                try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
+            }
+        }
     }
 
     private void animateTo(final int tw, final int th, boolean grow) {
@@ -579,8 +588,8 @@ public class PillService extends AccessibilityService
             mWave.setRunning(false);
         }
 
-        int tw = expanded ? screenW - dp(16) : compactW;
-        int th = expanded ? (mode == MUSIC ? dp(176) : dp(82)) : compactH;
+        int tw = expanded ? Math.min(screenW - dp(44), dp(400)) : compactW;
+        int th = expanded ? (mode == MUSIC ? dp(172) : dp(76)) : compactH;
         animateTo(tw, th, tw >= curW);
 
         h.removeCallbacks(progTick);
@@ -773,6 +782,8 @@ public class PillService extends AccessibilityService
         }
         if (panels != null) panels.onMediaChanged();
         MusicWidget.push(this);
+        GlassWidget.updateAll(this, DashboardWidget.class);
+        if (LockActivity.inst != null) LockActivity.inst.refreshMusic();
         refresh();
     }
 
@@ -800,6 +811,20 @@ public class PillService extends AccessibilityService
             mBar.setValue(0);
             mElapsed.setText("");
             mRemain.setText("");
+        }
+    }
+
+    void showLock() {
+        try {
+            Intent i = new Intent(this, LockActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
+            ActivityOptions o = ActivityOptions.makeBasic();
+            if (Build.VERSION.SDK_INT >= 34) {
+                o.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+            }
+            startActivity(i, o.toBundle());
+        } catch (Exception ignored) {
         }
     }
 
@@ -831,7 +856,8 @@ public class PillService extends AccessibilityService
         }
 
         void maybeShow() {
-            if (dismissed || v != null || !prefs.getBoolean(Prefs.HIDE_STOCK, false) || !onLock()) return;
+            if (dismissed || v != null || !prefs.getBoolean(Prefs.HIDE_STOCK, false)
+                    || prefs.getBoolean(Prefs.LOCK_ON, false) || !onLock()) return;
             render();
             if (frame == null) return;
             final int hgt = statusH + dp(prefs.getInt(Prefs.HIDE_H, 130));
@@ -933,6 +959,7 @@ public class PillService extends AccessibilityService
     }
 
     void onNotifsChanged() {
+        if (LockActivity.inst != null) h.post(() -> { if (LockActivity.inst != null) LockActivity.inst.refreshNotifs(); });
         if (sbar != null && sbarShown) h.post(() -> { if (sbar != null) sbar.refresh(); });
     }
 

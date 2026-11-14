@@ -136,10 +136,19 @@
     <string name="widget_battery_desc">Battery ring with percentage</string>
     <string name="lbl_patch_dim">Patch darkness (match your lock screen)</string>
     <string name="sec_icons">Glass icons</string>
-    <string name="icons_hint">Pick an app to put a liquid glass version of its icon on your home screen, in your wallpaper colors. Then remove the original icon. The launcher may show a small GlassKit badge on these icons.</string>
+    <string name="icons_hint">Pick an app to put a liquid glass version of its icon on your home screen, in your wallpaper colors. Then remove the original icon. Pixel Launcher always adds a small GlassKit badge to these icons; that can\'t be removed without a custom launcher.</string>
     <string name="btn_open_icons">Make glass icons</string>
     <string name="icon_style_tint">Wallpaper</string>
     <string name="icon_added">Tap Add on the next screen</string>
     <string name="icon_pin_fail">Your launcher doesn\'t allow adding icons</string>
     <string name="btn_refresh_widgets">Refresh widgets</string>
+    <string name="sec_lock">Lock screen</string>
+    <string name="lock_on">GlassKit lock screen</string>
+    <string name="lock_note">Shows GlassKit\'s own lock screen instead of the stock one, so the Pixel clock is never seen. Unlocking still uses your face, fingerprint or PIN. Tap Grant all with Shizuku again after turning this on.</string>
+    <string name="btn_preview_lock">Preview lock screen</string>
+    <string name="swipe_open">Swipe up to open</string>
+    <string name="unlocked_swipe">Unlocked · swipe up</string>
+    <string name="more_notifs">+%1$d more</string>
+    <string name="widget_dash_name">Glass dashboard XL</string>
+    <string name="widget_dash_desc">Extra-large dashboard, iOS 27 style</string>
 </resources>

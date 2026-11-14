@@ -84,6 +84,7 @@ public abstract class GlassWidget extends AppWidgetProvider {
         updateAll(c, ClockWidget.class);
         updateAll(c, StackWidget.class);
         updateAll(c, AnalogWidget.class);
+        updateAll(c, DashboardWidget.class);
         Calendar now = Calendar.getInstance();
         if (now.get(Calendar.HOUR_OF_DAY) == 0 && now.get(Calendar.MINUTE) == 0) updateAll(c, DateWidget.class);
     }

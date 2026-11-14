@@ -78,6 +78,7 @@ final class Shell {
                 + "cmd notification allow_listener " + pkg + "/" + NotifListener.class.getName() + "; "
                 + "cmd notification allow_dnd " + pkg + "; "
                 + "appops set " + pkg + " WRITE_SETTINGS allow; "
+                + "appops set " + pkg + " SYSTEM_ALERT_WINDOW allow; "
                 + "s=$(settings get secure enabled_accessibility_services); "
                 + "case \"$s\" in *" + acc + "*) ;; null|'') settings put secure enabled_accessibility_services " + acc + ";; "
                 + "*) settings put secure enabled_accessibility_services \"$s:" + acc + "\";; esac; "

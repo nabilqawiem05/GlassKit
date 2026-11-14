@@ -120,6 +120,12 @@ public class MainActivity extends Activity {
             else toast(getString(R.string.need_acc));
         });
 
+        // ---------- Lock screen ----------
+        LinearLayout lk = card(box, R.string.sec_lock, Icon.LOCK, 0xFFFF9F0A);
+        toggle(lk, R.string.lock_on, Prefs.LOCK_ON, false);
+        note(lk, getString(R.string.lock_note));
+        button(lk, getString(R.string.btn_preview_lock), false, v -> startActivity(new Intent(this, LockActivity.class)));
+
         // ---------- Status bar ----------
         LinearLayout sb = card(box, R.string.sec_sbar, Icon.BATTERY, 0xFF30D158);
         FrameLayout sbPrev = new FrameLayout(this);
