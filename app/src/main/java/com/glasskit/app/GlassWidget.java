@@ -31,8 +31,18 @@ public abstract class GlassWidget extends AppWidgetProvider {
 
     Intent clickIntent(Context c) { return null; }
 
-    /** Lukis kepingan kaca di belakang kandungan (kecuali tema tanpa bingkai). */
-    boolean slab() { return true; }
+    /** Id widget yang sedang dilukis. */
+    int currentId;
+
+    @Override
+    public void onDeleted(Context c, int[] ids) {
+        for (int id : ids) {
+            java.io.File d = Data.widgetPhotoDir(c, id);
+            java.io.File[] fs = d.listFiles();
+            if (fs != null) for (java.io.File f : fs) f.delete();
+            d.delete();
+        }
+    }
 
     @Override
     public void onUpdate(Context c, AppWidgetManager m, int[] ids) {
@@ -57,26 +67,21 @@ public abstract class GlassWidget extends AppWidgetProvider {
             int w = Math.max(40, Math.round(wdp * scale)), h = Math.max(40, Math.round(hdp * scale));
             Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             Canvas cv = new Canvas(bmp);
-            int theme = Prefs.get(c).getInt(Prefs.WIDGET_THEME, 0);
-            if (theme < 2 && slab()) {
-                float pad = Math.min(w, h) * 0.035f + 2 * scale;
-                android.graphics.RectF r = new android.graphics.RectF(pad, pad, w - pad, h - pad * 1.8f);
-                GlassSlab.draw(c, cv, r, theme == 1);
-                float in = Math.min(r.width(), r.height()) * 0.06f;
-                cv.save();
-                cv.translate(r.left + in, r.top + in);
-                render(c, cv, Math.round(r.width() - 2 * in), Math.round(r.height() - 2 * in), scale);
-                cv.restore();
-            } else {
-                render(c, cv, w, h, scale);
-            }
+            Draw3D.useWidgetTheme(c);
+            currentId = id;
+            float pad = Math.min(w, h) * 0.03f;
+            cv.save();
+            cv.translate(pad, pad);
+            render(c, cv, Math.round(w - 2 * pad), Math.round(h - 2 * pad), scale);
+            cv.restore();
 
             RemoteViews v = new RemoteViews(c.getPackageName(), R.layout.widget_image);
             v.setImageViewBitmap(R.id.w_img, bmp);
             Intent ci = clickIntent(c);
             if (ci != null) {
                 ci.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                v.setOnClickPendingIntent(R.id.w_img, PendingIntent.getActivity(c, getClass().getName().hashCode(), ci,
+                ci.putExtra(MainActivity.EXTRA_WIDGET_ID, id);
+                v.setOnClickPendingIntent(R.id.w_img, PendingIntent.getActivity(c, getClass().getName().hashCode() + id, ci,
                         PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
             }
             m.updateAppWidget(id, v);

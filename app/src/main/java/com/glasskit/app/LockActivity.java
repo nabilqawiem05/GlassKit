@@ -334,6 +334,7 @@ public class LockActivity extends Activity {
         @Override
         protected void onDraw(Canvas c) {
             Context ctx = getContext();
+            Draw3D.useWidgetTheme(ctx);
             float w = getWidth(), cx = w / 2f;
             float u = dp(1);
             // baris 1: acara seterusnya

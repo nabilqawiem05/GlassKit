@@ -45,6 +45,9 @@ import rikka.shizuku.Shizuku;
 public class MainActivity extends Activity {
 
     static final String EXTRA_PICK_PHOTOS = "pickPhotos";
+    static final String EXTRA_WIDGET_ID = "widgetId";
+    private int pickWidgetId = -1;
+    private boolean pickFromWidget;
     private static final int REQ_BG = 1, REQ_FG = 2, REQ_PHOTOS = 3, REQ_PERMS = 77;
     private static final int[] COLORS = {
             Color.WHITE, 0xFF8AB4F8, 0xFFC8B6FF, 0xFFF5D06F, 0xFFFF8A80, 0xFF101418
@@ -412,14 +415,12 @@ public class MainActivity extends Activity {
         LinearLayout pr2 = new LinearLayout(this);
         dc.addView(pr2);
         addPair(pr2, button(null, getString(R.string.btn_pick_photos), false, v -> {
-                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    i.addCategory(Intent.CATEGORY_OPENABLE);
-                    i.setType("image/*");
-                    i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-                    startActivityForResult(i, REQ_PHOTOS);
+                    pickWidgetId = -1;
+                    pickFromWidget = false;
+                    openPhotoPicker();
                 }),
                 button(null, getString(R.string.btn_clear_photos), false, v -> {
-                    File[] fs = Data.photoDir(this).listFiles();
+                    File[] fs = Data.photoDir(this).listFiles(File::isFile);
                     if (fs != null) for (File f : fs) f.delete();
                     GlassWidget.updateAll(this, PhotoWidget.class);
                 }));
@@ -444,12 +445,35 @@ public class MainActivity extends Activity {
     private void handlePick(Intent i) {
         if (i != null && i.getBooleanExtra(EXTRA_PICK_PHOTOS, false)) {
             i.removeExtra(EXTRA_PICK_PHOTOS);
+            pickWidgetId = i.getIntExtra(EXTRA_WIDGET_ID, -1);
+            pickFromWidget = pickWidgetId >= 0;
             selectTab(4);
-            Intent p = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            openPhotoPicker();
+        }
+    }
+
+    /** Pemilih gambar Android (ada tab Album untuk galeri). */
+    private void openPhotoPicker() {
+        Intent p;
+        try {
+            p = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+            p.setType("image/*");
+            int max = Math.min(20, android.provider.MediaStore.getPickImagesMaxLimit());
+            p.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, max);
+        } catch (Throwable t) {
+            p = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             p.addCategory(Intent.CATEGORY_OPENABLE);
             p.setType("image/*");
             p.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        }
+        try {
             startActivityForResult(p, REQ_PHOTOS);
+        } catch (Exception e) {
+            Intent q = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            q.addCategory(Intent.CATEGORY_OPENABLE);
+            q.setType("image/*");
+            q.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            startActivityForResult(q, REQ_PHOTOS);
         }
     }
 
@@ -688,26 +712,35 @@ public class MainActivity extends Activity {
         } else if (data.getData() != null) {
             uris.add(data.getData());
         }
+        File dir = pickWidgetId >= 0 ? Data.widgetPhotoDir(this, pickWidgetId) : Data.photoDir(this);
+        if (pickWidgetId >= 0 && !uris.isEmpty()) {
+            File[] old = dir.listFiles();
+            if (old != null) for (File f : old) f.delete();
+        }
         int n = 0;
         for (Uri u : uris) {
             try {
                 Bitmap b = decode(u);
                 float sc = Math.min(1f, 1200f / Math.max(b.getWidth(), b.getHeight()));
                 if (sc < 1f) b = Bitmap.createScaledBitmap(b, Math.round(b.getWidth() * sc), Math.round(b.getHeight() * sc), true);
-                save(b, new File(Data.photoDir(this), System.currentTimeMillis() + "_" + n + ".jpg"), false);
+                save(b, new File(dir, System.currentTimeMillis() + "_" + n + ".jpg"), false);
                 n++;
             } catch (Exception ignored) {
             }
         }
         toast(getString(R.string.photos_added, n));
         GlassWidget.updateAll(this, PhotoWidget.class);
+        if (pickFromWidget) finish();
+        pickWidgetId = -1;
+        pickFromWidget = false;
     }
 
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
-        if (req == REQ_PHOTOS && res == RESULT_OK && data != null) {
-            addPhotos(data);
+        if (req == REQ_PHOTOS) {
+            if (res == RESULT_OK && data != null) addPhotos(data);
+            else if (pickFromWidget) finish();
             return;
         }
         if (res != RESULT_OK || data == null || data.getData() == null) return;

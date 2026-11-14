@@ -100,7 +100,6 @@
     <string name="hide_stock_note">Covers the Pixel clock with a piece of your wallpaper. It only works when GlassKit Depth Clock is your lock screen wallpaper. Touching the screen brings the stock clock back until the next time the screen turns on.</string>
     <string name="lbl_hide_h">Area to cover</string>
     <string name="sec_widgets">Widgets and icons</string>
-    <string name="widgets_hint">Long-press your home screen, tap Widgets, then GlassKit. The widgets follow your wallpaper colors and the glass style. Resize them to change width and height.</string>
     <string name="themed_hint">For app icons that follow your wallpaper, turn on Themed icons in Wallpaper and style. The GlassKit icon supports it.</string>
     <string name="widget_music_name">Glass music</string>
     <string name="widget_music_desc">Now playing with controls</string>
@@ -178,7 +177,6 @@
     <string name="wx_need">Allow location in GlassKit</string>
     <string name="wx_here">My location</string>
     <string name="steps_unit">steps</string>
-    <string name="photo_pick_hint">Choose photos in GlassKit</string>
     <string name="sec_data">Widget data</string>
     <string name="data_hint">Calendar shows events from Google Calendar on this phone. Weather uses your approximate location. Steps use the phone\'s step sensor and count from when this is allowed.</string>
     <string name="btn_allow_data">Allow calendar, location and steps</string>
@@ -196,12 +194,14 @@
     <string name="sound_unlock">Unlock sound</string>
     <string name="btn_test_sound">Test sounds</string>
     <string name="widget_theme">Widget theme</string>
-    <string name="wtheme_glass">Liquid glass</string>
-    <string name="wtheme_dark">Dark</string>
-    <string name="wtheme_none">No frame</string>
     <string name="tab_home">Home</string>
     <string name="tab_lock">Lock screen</string>
     <string name="tab_island">Island</string>
     <string name="tab_panels">Panels</string>
     <string name="tab_widgets">Widgets</string>
+    <string name="wtheme_glass">Clear glass</string>
+    <string name="wtheme_dark">Dark glass</string>
+    <string name="wtheme_none">Solid 3D</string>
+    <string name="widgets_hint">Long-press your home screen, tap Widgets, then GlassKit. Widgets have no frame: the numbers, words and icons themselves are liquid glass. Tap a Photos widget to choose its own photos from your albums.</string>
+    <string name="photo_pick_hint">Tap to choose photos</string>
 </resources>

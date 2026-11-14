@@ -94,7 +94,6 @@
     <string name="hide_stock_note">Tutup jam Pixel dengan sekeping wallpaper kau sendiri. Hanya berfungsi bila GlassKit Depth Clock jadi wallpaper lock screen. Bila skrin disentuh, jam stock muncul semula sehingga skrin dihidupkan lagi.</string>
     <string name="lbl_hide_h">Kawasan untuk ditutup</string>
     <string name="sec_widgets">Widget dan ikon</string>
-    <string name="widgets_hint">Tekan lama home screen, pilih Widget, kemudian GlassKit. Widget ikut warna wallpaper dan gaya kaca. Ubah saiz widget untuk laras lebar dan tinggi.</string>
     <string name="themed_hint">Untuk ikon app yang ikut wallpaper, hidupkan Ikon bertema dalam Wallpaper dan gaya. Ikon GlassKit menyokongnya.</string>
     <string name="widget_music_name">Muzik kaca</string>
     <string name="widget_music_desc">Lagu semasa dengan kawalan</string>
@@ -171,7 +170,6 @@
     <string name="wx_need">Benarkan lokasi dalam GlassKit</string>
     <string name="wx_here">Lokasi saya</string>
     <string name="steps_unit">langkah</string>
-    <string name="photo_pick_hint">Pilih gambar dalam GlassKit</string>
     <string name="sec_data">Data widget</string>
     <string name="data_hint">Kalendar tunjuk acara Google Calendar dalam phone ini. Cuaca guna lokasi anggaran. Langkah guna sensor langkah phone dan mula dikira bila dibenarkan.</string>
     <string name="btn_allow_data">Benarkan kalendar, lokasi dan langkah</string>
@@ -189,12 +187,14 @@
     <string name="sound_unlock">Bunyi buka kunci</string>
     <string name="btn_test_sound">Uji bunyi</string>
     <string name="widget_theme">Tema widget</string>
-    <string name="wtheme_glass">Liquid glass</string>
-    <string name="wtheme_dark">Gelap</string>
-    <string name="wtheme_none">Tanpa bingkai</string>
     <string name="tab_home">Utama</string>
     <string name="tab_lock">Lock screen</string>
     <string name="tab_island">Island</string>
     <string name="tab_panels">Panel</string>
     <string name="tab_widgets">Widget</string>
+    <string name="wtheme_glass">Kaca jernih</string>
+    <string name="wtheme_dark">Kaca gelap</string>
+    <string name="wtheme_none">3D padu</string>
+    <string name="widgets_hint">Tekan lama home screen, pilih Widget, kemudian GlassKit. Widget tiada bingkai: nombor, perkataan dan ikon itu sendiri jadi liquid glass. Tekan widget Gambar untuk pilih gambarnya sendiri dari album.</string>
+    <string name="photo_pick_hint">Tekan untuk pilih gambar</string>
 </resources>

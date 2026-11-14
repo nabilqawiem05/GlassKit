@@ -176,7 +176,7 @@ final class Cards {
     }
 
     // ---------------- Gambar ----------------
-    static void photo(Context c, Canvas cv, int w, int h) {
+    static void photo(Context c, Canvas cv, int w, int h, int id) {
         float pad = Math.min(w, h) * 0.05f;
         RectF r = new RectF(pad, pad, w - pad, h - pad * 1.6f);
         float rad = Math.min(r.width(), r.height()) * 0.16f;
@@ -189,9 +189,9 @@ final class Cards {
         cv.translate(0, pad * 0.5f);
         cv.drawPath(p, sh);
         cv.restore();
-        Bitmap b = Data.currentPhoto(c);
+        Bitmap b = Data.currentPhoto(c, id);
         if (b == null) {
-            Draw3D.shape(cv, p, r.height() * 0.3f, Color.argb(120, 255, 255, 255));
+            Draw3D.shape(cv, p, r.height() * 0.3f, Color.WHITE);
             Draw3D.icon(c, cv, Icon.CAMERA, r.centerX(), r.centerY() - r.height() * 0.08f, r.height() * 0.24f, W);
             Draw3D.text(cv, c.getString(R.string.photo_pick_hint), r.centerX(), r.centerY() + r.height() * 0.22f,
                     r.height() * 0.08f, 600, W, Draw3D.CENTER);

@@ -250,8 +250,16 @@ final class Data {
         return d;
     }
 
-    static Bitmap currentPhoto(Context c) {
-        File[] fs = photoDir(c).listFiles();
+    static File widgetPhotoDir(Context c, int id) {
+        File d = new File(photoDir(c), "w" + id);
+        if (!d.exists()) d.mkdirs();
+        return d;
+    }
+
+    /** Gambar untuk widget tertentu (jika dipilih), jika tiada guna set umum. */
+    static Bitmap currentPhoto(Context c, int id) {
+        File[] own = widgetPhotoDir(c, id).listFiles();
+        File[] fs = own != null && own.length > 0 ? own : photoDir(c).listFiles(File::isFile);
         if (fs == null || fs.length == 0) return null;
         Arrays.sort(fs);
         long hour = System.currentTimeMillis() / 3600_000L;
