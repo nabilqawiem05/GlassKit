@@ -123,8 +123,6 @@
     <string name="btn_restore_sys">Restore system status bar</string>
     <string name="sbar_note">Hiding uses Shizuku and removes the stock clock, battery, Wi-Fi and signal icons. App notification icons from the system can\'t be hidden without root. Full-screen portrait apps may still show this bar.</string>
     <string name="done">Done</string>
-    <string name="widget_stack_name">Glass stacked clock</string>
-    <string name="widget_stack_desc">Hours over minutes in liquid glass</string>
     <string name="widget_date_name">Glass date</string>
     <string name="widget_date_desc">Big day number in liquid glass</string>
     <string name="lbl_patch_dim">Patch darkness (match your lock screen)</string>
@@ -293,4 +291,7 @@
     <string name="live_on">Live activities</string>
     <string name="live_note">Google Maps navigation, Grab and foodpanda rides and deliveries, downloads, timers and stopwatch show in the island. Tap to expand, tap again to open the app.</string>
     <string name="charge_anim">Charging animation</string>
+    <string name="widget_stack_name">Smart Stack</string>
+    <string name="widget_stack_desc">Swipe through weather, events, music, battery, prayer times and more. Rotates on its own</string>
+    <string name="now_playing">Now playing</string>
 </resources>

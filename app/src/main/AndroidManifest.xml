@@ -111,6 +111,31 @@
             </intent-filter>
         </service>
         <receiver
+            android:name=".SmartStack"
+            android:exported="true"
+            android:label="@string/widget_stack_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_stack_info" />
+        </receiver>
+
+        <service
+            android:name=".SmartStack$Service"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <activity
+            android:name=".SmartStack$Click"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity="com.glasskit.app.click"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <receiver
             android:name=".PrayerWidget"
             android:exported="true"
             android:label="@string/widget_prayer_name">

@@ -724,4 +724,35 @@ final class Cards {
             y += rowH;
         }
     }
+
+    // ======================================================================
+    // MUZIK (untuk Smart Stack)
+    // ======================================================================
+    static void music(Context c, Canvas cv, RectF r, GlassEngine.Theme t, float d, int size) {
+        PillService s = PillService.inst;
+        boolean has = s != null && s.mc != null && (s.title != null || s.playing);
+        float art = Math.min(r.height(), size == SMALL ? r.width() * 0.5f : r.height());
+        RectF ar = new RectF(r.left, r.top, r.left + art, r.top + art);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        Path clip = new Path();
+        clip.addRoundRect(ar, 14 * d, 14 * d, Path.Direction.CW);
+        if (has && s.art != null) {
+            cv.save();
+            cv.clipPath(clip);
+            cv.drawBitmap(s.art, null, ar, p);
+            cv.restore();
+        } else {
+            p.setColor(GlassEngine.a(t.primary, 30));
+            cv.drawPath(clip, p);
+            GlassEngine.icon(c, cv, Icon.NOTE, ar.centerX(), ar.centerY(), art * 0.4f, t.muted);
+        }
+        float x = size == SMALL ? r.left : ar.right + 14 * d;
+        float w = r.right - x;
+        float y = size == SMALL ? ar.bottom + 18 * d : r.top + 18 * d;
+        text(cv, up(c.getString(has && s.playing ? R.string.now_playing : R.string.not_playing)), x, y, 11 * d, 700, t.accent, AL, w);
+        if (has) {
+            text(cv, s.title, x, y + 22 * d, 16 * d, 700, t.primary, AL, w);
+            text(cv, s.artist, x, y + 40 * d, 13 * d, 500, t.secondary, AL, w);
+        }
+    }
 }

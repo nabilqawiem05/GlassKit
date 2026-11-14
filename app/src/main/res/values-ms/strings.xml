@@ -116,8 +116,6 @@
     <string name="btn_restore_sys">Pulihkan status bar sistem</string>
     <string name="sbar_note">Sorok guna Shizuku dan buang jam, bateri, Wi-Fi dan signal stock. Ikon notifikasi app daripada sistem tak boleh disorok tanpa root. App skrin penuh menegak mungkin masih tunjuk bar ini.</string>
     <string name="done">Siap</string>
-    <string name="widget_stack_name">Jam kaca bertindan</string>
-    <string name="widget_stack_desc">Jam di atas minit, gaya liquid glass</string>
     <string name="widget_date_name">Tarikh kaca</string>
     <string name="widget_date_desc">Nombor hari besar gaya liquid glass</string>
     <string name="lbl_patch_dim">Kegelapan tampalan (ikut lock screen)</string>
@@ -286,4 +284,7 @@
     <string name="live_on">Aktiviti langsung</string>
     <string name="live_note">Navigasi Google Maps, perjalanan dan penghantaran Grab serta foodpanda, muat turun, pemasa dan jam randik dipaparkan dalam island. Tekan untuk besarkan, tekan lagi untuk buka app.</string>
     <string name="charge_anim">Animasi cas</string>
+    <string name="widget_stack_name">Smart Stack</string>
+    <string name="widget_stack_desc">Leret antara cuaca, acara, muzik, bateri, waktu solat dan lain-lain. Bertukar sendiri</string>
+    <string name="now_playing">Sedang dimainkan</string>
 </resources>

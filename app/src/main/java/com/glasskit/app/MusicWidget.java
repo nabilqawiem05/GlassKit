@@ -40,7 +40,15 @@ public class MusicWidget extends AppWidgetProvider {
         return PendingIntent.getBroadcast(c, code, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
+    private static Boolean lastPlaying;
+
     static void push(Context c) {
+        PillService ps = PillService.inst;
+        boolean pl = ps != null && ps.playing;
+        if (lastPlaying == null || lastPlaying != pl) {
+            lastPlaying = pl;
+            SmartStack.refresh(c); // muzik mula / henti: susun semula Smart Stack
+        }
         try {
             AppWidgetManager m = AppWidgetManager.getInstance(c);
             int[] ids = m.getAppWidgetIds(new ComponentName(c, MusicWidget.class));

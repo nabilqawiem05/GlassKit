@@ -291,19 +291,19 @@ public class MainActivity extends Activity {
         });
 
         // ---------- Waktu solat ----------
-        LinearLayout pr = card(pIsland, R.string.sec_prayer, Icon.BELL, 0xFF0A84FF);
-        toggle(pr, R.string.prayer_on, Prefs.PRAYER_ON, true);
-        prayerNote = note(pr, prayerSummary());
-        LinearLayout prr = new LinearLayout(this);
-        pr.addView(prr);
-        addPair(prr, button(null, getString(R.string.p_pick_sound), true, v -> {
+        LinearLayout prayCard = card(pIsland, R.string.sec_prayer, Icon.BELL, 0xFF0A84FF);
+        toggle(prayCard, R.string.prayer_on, Prefs.PRAYER_ON, true);
+        prayerNote = note(prayCard, prayerSummary());
+        LinearLayout prayRow1 = new LinearLayout(this);
+        prayCard.addView(prayRow1);
+        addPair(prayRow1, button(null, getString(R.string.p_pick_sound), true, v -> {
                     Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("audio/*");
                     startActivityForResult(i, REQ_AZAN);
                 }),
                 button(null, getString(R.string.p_test), false, v -> Prayer.play(this)));
-        LinearLayout prr2 = new LinearLayout(this);
-        pr.addView(prr2);
-        addPair(prr2, button(null, getString(R.string.p_sound_default), false, v -> {
+        LinearLayout prayRow2 = new LinearLayout(this);
+        prayCard.addView(prayRow2);
+        addPair(prayRow2, button(null, getString(R.string.p_sound_default), false, v -> {
                     prefs.edit().putString(Prefs.PRAYER_SOUND, "default").apply();
                     toast(getString(R.string.p_sound_set));
                 }),

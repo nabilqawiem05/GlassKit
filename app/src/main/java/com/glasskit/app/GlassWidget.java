@@ -143,6 +143,7 @@ public abstract class GlassWidget extends AppWidgetProvider {
         Calendar now = Calendar.getInstance();
         int m = now.get(Calendar.MINUTE);
         updateAll(c, UpNextWidget.class); // kira detik
+        if (m % 5 == 0) SmartStack.refresh(c);
         if (m % 15 == 0) {
             updateAll(c, StepsWidget.class);
         }
@@ -162,6 +163,7 @@ public abstract class GlassWidget extends AppWidgetProvider {
         updateAll(c, BatteryWidget.class);
         updateAll(c, WorldWidget.class);
         updateAll(c, PrayerWidget.class);
+        SmartStack.refresh(c);
         MusicWidget.push(c);
     }
 
