@@ -357,6 +357,45 @@ public class MainActivity extends Activity {
                     toast(getString(R.string.p_sound_set));
                 }));
 
+        // ---------- Mod Solat: senyap automatik ----------
+        LinearLayout sol = card(pIsland, R.string.solat_title, Icon.MOON, 0xFF30D158);
+        note(sol, getString(R.string.solat_note));
+        Switch solSw = new Switch(this);
+        solSw.setText(R.string.solat_on);
+        solSw.setTextSize(16);
+        solSw.setTextColor(Color.WHITE);
+        solSw.setChecked(prefs.getBoolean(Prefs.SOLAT_SILENT, false));
+        solSw.setPadding(0, Ui.dp(this, 12), 0, 0);
+        solSw.setOnCheckedChangeListener((b, on) -> {
+            prefs.edit().putBoolean(Prefs.SOLAT_SILENT, on).apply();
+            if (on && !Prayer.hasLocation(this)) toast(getString(R.string.solat_need_loc));
+            if (on) {
+                // akses "Jangan Ganggu" diperlukan untuk mod Senyap
+                android.app.NotificationManager nmg = getSystemService(android.app.NotificationManager.class);
+                if (!nmg.isNotificationPolicyAccessGranted() && Shell.granted())
+                    Shell.run("cmd notification allow_dnd " + getPackageName());
+            }
+            SolatMode.schedule(this);
+            toast(on ? solatNext() : getString(R.string.t_done));
+        });
+        sol.addView(solSw, new LinearLayout.LayoutParams(-1, -2));
+        label(sol, R.string.solat_mode);
+        segmented(sol, new int[]{R.string.rg_silent, R.string.rg_vibrate}, prefs.getInt(Prefs.SOLAT_MODE, 0),
+                i -> prefs.edit().putInt(Prefs.SOLAT_MODE, i).apply());
+        label(sol, R.string.solat_delay);
+        segmented(sol, new int[]{R.string.solat_d0, R.string.solat_d5, R.string.solat_d10, R.string.solat_d15},
+                idxOf(SolatMode.DELAYS, prefs.getInt(Prefs.SOLAT_DELAY, 5)), i -> {
+                    prefs.edit().putInt(Prefs.SOLAT_DELAY, SolatMode.DELAYS[i]).apply();
+                    SolatMode.schedule(this);
+                });
+        label(sol, R.string.solat_dur);
+        segmented(sol, new int[]{R.string.solat_m15, R.string.solat_m20, R.string.solat_m30, R.string.solat_m45},
+                idxOf(SolatMode.DURS, prefs.getInt(Prefs.SOLAT_DUR, 30)), i -> {
+                    prefs.edit().putInt(Prefs.SOLAT_DUR, SolatMode.DURS[i]).apply();
+                    SolatMode.schedule(this);
+                });
+        note(sol, getString(R.string.solat_note2));
+
         // ---------- Lock screen ----------
         LinearLayout lk = card(pLock, R.string.sec_lock, Icon.LOCK, 0xFFFF9F0A);
         toggle(lk, R.string.lock_on, Prefs.LOCK_ON, false);
@@ -1346,4 +1385,17 @@ public class MainActivity extends Activity {
             toast(getString(R.string.wp_picker_fail));
         }
     }
+
+    private static int idxOf(int[] a, int v) {
+        for (int i = 0; i < a.length; i++) if (a[i] == v) return i;
+        return 0;
+    }
+
+    private String solatNext() {
+        long[] w = SolatMode.window(this);
+        if (w == null) return getString(R.string.solat_need_loc);
+        if (w[0] <= System.currentTimeMillis()) return getString(R.string.solat_now);
+        return getString(R.string.solat_next, getString(Prayer.NAMES[(int) w[2]]), Prayer.fmt(this, w[0]));
+    }
+
 }

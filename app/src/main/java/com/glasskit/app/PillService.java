@@ -1942,6 +1942,7 @@ public class PillService extends AccessibilityService
     /** Setiap minit: kira detik solat dalam island (15 min sebelum), sandaran azan, kira semula harian. */
     void prayerTick() {
         if (prefs == null) return;
+        SolatMode.tick(this);
         boolean on = prefs.getBoolean(Prefs.PRAYER_ON, true);
         if (!on || !Prayer.hasLocation(this)) {
             if (Live.items.remove("gk_prayer") != null) refresh();
@@ -1952,6 +1953,7 @@ public class PillService extends AccessibilityService
             prayDay = day;
             Prayer.fetch(this);
             Prayer.schedule(this);
+            SolatMode.schedule(this);
             Shuffle.daily(this, false);
             Updater.check(this, (info, err) -> {
                 if (info == null) return;

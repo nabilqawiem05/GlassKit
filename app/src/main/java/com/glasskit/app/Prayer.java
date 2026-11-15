@@ -185,9 +185,18 @@ final class Prayer {
                 stopSound();
                 return;
             }
+            if ("solat_on".equals(i.getAction())) {
+                SolatMode.on(c, i.getLongExtra("end", 0), i.getIntExtra("idx", 0));
+                return;
+            }
+            if ("solat_off".equals(i.getAction()) || "solat_end".equals(i.getAction())) {
+                SolatMode.off(c);
+                return;
+            }
             if (Intent.ACTION_BOOT_COMPLETED.equals(i.getAction()) || Intent.ACTION_TIME_CHANGED.equals(i.getAction())
                     || Intent.ACTION_TIMEZONE_CHANGED.equals(i.getAction())) {
                 schedule(c);
+                SolatMode.schedule(c);
                 return;
             }
             fire(c, i.getIntExtra("idx", 0), i.getLongExtra("at", 0));
