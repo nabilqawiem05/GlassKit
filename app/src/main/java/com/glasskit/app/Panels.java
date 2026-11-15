@@ -236,6 +236,8 @@ final class Panels {
         lp.setTitle(left ? "GlassKitEdgeL" : "GlassKitEdgeR");
         final float[] y0 = new float[1];
         final boolean[] fired = new boolean[1];
+        final float[] downY = new float[1];
+        final long[] downT = new long[1];
         final android.view.VelocityTracker[] vt = new android.view.VelocityTracker[1];
         v.setOnTouchListener((view, e) -> {
             if (vt[0] == null) vt[0] = android.view.VelocityTracker.obtain();
@@ -244,7 +246,16 @@ final class Panels {
             vt[0].addMovement(me);
             me.recycle();
             int act = e.getActionMasked();
-            if ((act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL) && fired[0]) {
+            if (act == MotionEvent.ACTION_CANCEL) {
+                // Android 17: SystemUI "merampas" leretan dari atas (pilfer) → kita dapat CANCEL.
+                // Jangan biar panel GlassKit hilang: buka penuh terus.
+                if (fired[0]) {
+                    dragEnd(dp(4000));
+                } else if (e.getRawY() >= downY[0] - dp(4)
+                        && android.os.SystemClock.uptimeMillis() - downT[0] < 700) {
+                    if (left) openNotifications(); else openControl();
+                }
+            } else if (act == MotionEvent.ACTION_UP && fired[0]) {
                 vt[0].computeCurrentVelocity(1000);
                 dragEnd(vt[0].getYVelocity());
             }
@@ -255,6 +266,8 @@ final class Panels {
             switch (act) {
                 case MotionEvent.ACTION_DOWN:
                     y0[0] = e.getRawY();
+                    downY[0] = e.getRawY();
+                    downT[0] = android.os.SystemClock.uptimeMillis();
                     fired[0] = false;
                     break;
                 case MotionEvent.ACTION_UP:
