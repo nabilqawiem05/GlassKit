@@ -170,8 +170,14 @@ final class Tweaks {
     /** Sorok semua ikon stock (digabung dengan senarai sedia ada, tak tulis ganti). */
     static void hideStockBar(Context c, boolean on) { hideStockBar(c, on, false); }
 
+    /** Bendera "disable" StatusBarManager: sorok jam, ikon sistem & notifikasi stock, dan kunci panel stock. */
+    static final String DISABLE_FLAGS = "cmd statusbar send-disable-flag statusbar-expansion system-icons clock notification-icons";
+    static final String ENABLE_FLAGS = "cmd statusbar send-disable-flag none";
+
     static void hideStockBar(Context c, boolean on, boolean force) {
         if (!on || !Shell.granted()) return;
+        // cara paling kuat (tanpa root): sama seperti mod kiosk; kekal sehingga but semula, GlassKit guna semula setiap kali
+        Shell.run(DISABLE_FLAGS + " 2>&1");
         Shell.run("settings get secure icon_blacklist", (ok, out) -> {
             java.util.Set<String> cur = new java.util.LinkedHashSet<>();
             String v = out == null ? "" : out.trim();
@@ -192,7 +198,8 @@ final class Tweaks {
                 + restoreCmd(c, "global", "window_animation_scale")
                 + "settings put global transition_animation_scale 1; settings put global animator_duration_scale 1; "
                 + restoreCmd(c, "secure", "lock_screen_show_notifications")
-                + "settings put secure accessibility_display_daltonizer_enabled 0; setprop debug.hwui.force_dark false; wm density reset; ";
+                + "settings put secure accessibility_display_daltonizer_enabled 0; setprop debug.hwui.force_dark false; wm density reset; "
+                + ENABLE_FLAGS + "; ";
         StringBuilder un = new StringBuilder(cmd);
         for (String pkg : AppTools.restricted(c)) un.append("cmd appops set ").append(pkg).append(" RUN_ANY_IN_BACKGROUND allow; ");
         for (String pkg : AppTools.hidden(c)) un.append("pm enable ").append(pkg).append("; ");

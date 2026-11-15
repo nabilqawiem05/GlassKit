@@ -403,7 +403,7 @@ public class MainActivity extends Activity {
                 }),
                 button(null, getString(R.string.btn_restore_sys), false, v -> {
                     prefs.edit().putBoolean(Prefs.HIDE_SYS_ICONS, false).apply();
-                    runShell("settings delete secure icon_blacklist");
+                    runShell("settings delete secure icon_blacklist; " + Tweaks.ENABLE_FLAGS);
                 }));
         note(sb, getString(R.string.sbar_note));
 
