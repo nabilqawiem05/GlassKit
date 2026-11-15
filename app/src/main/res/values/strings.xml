@@ -634,4 +634,12 @@
     <string name="lock_prayer">Next prayer card on lock screen</string>
     <string name="isl_camring">Light ring around the camera</string>
     <string name="isl_ring_note">Glows in the app colour when a notification arrives, and fills up green when you plug in the charger.</string>
+    <string name="tg_hotspot">Hotspot</string>
+    <string name="disp_title">Display</string>
+    <string name="disp_auto">Auto brightness</string>
+    <string name="disp_auto_sub">Adjusts to the light around you</string>
+    <string name="disp_night">Night Light</string>
+    <string name="disp_night_sub">Yellow screen, easier on the eyes at night</string>
+    <string name="disp_night_str">Warmth</string>
+    <string name="disp_note">Tip: press and hold the brightness slider to open this.</string>
 </resources>

@@ -627,4 +627,12 @@
     <string name="lock_prayer">Kad solat seterusnya di lock screen</string>
     <string name="isl_camring">Cincin cahaya di keliling kamera</string>
     <string name="isl_ring_note">Menyala ikut warna app bila notifikasi masuk, dan terisi hijau bila pengecas dipasang.</string>
+    <string name="tg_hotspot">Hotspot</string>
+    <string name="disp_title">Paparan</string>
+    <string name="disp_auto">Kecerahan auto</string>
+    <string name="disp_auto_sub">Ikut cahaya sekeliling</string>
+    <string name="disp_night">Cahaya Malam</string>
+    <string name="disp_night_sub">Skrin kekuningan, lebih selesa untuk mata waktu malam</string>
+    <string name="disp_night_str">Kekuningan</string>
+    <string name="disp_note">Tip: tekan lama peluncur kecerahan untuk buka ini.</string>
 </resources>

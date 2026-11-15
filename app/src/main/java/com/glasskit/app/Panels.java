@@ -918,11 +918,38 @@ final class Panels {
             c.restore();
         }
 
+        Runnable onLong;
+        private float downY, downV;
+        private boolean longFired;
+        private final Runnable longCheck = () -> {
+            longFired = true;
+            // tekan lama: kembalikan nilai asal, bergetar, buka pilihan
+            setValue(downV);
+            if (cb != null) cb.on(downV, true);
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            animate().scaleX(1.06f).scaleY(1.06f).setDuration(120).withEndAction(() ->
+                    animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start()).start();
+            if (onLong != null) onLong.run();
+        };
+
         @Override
         public boolean onTouchEvent(MotionEvent e) {
-            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) getParent().requestDisallowInterceptTouchEvent(true);
+            int act = e.getActionMasked();
+            if (act == MotionEvent.ACTION_DOWN) {
+                getParent().requestDisallowInterceptTouchEvent(true);
+                downY = e.getY();
+                downV = v;
+                longFired = false;
+                if (onLong != null) postDelayed(longCheck, 480);
+            }
+            if (longFired) {
+                if (act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL) longFired = false;
+                return true;
+            }
+            if (act == MotionEvent.ACTION_MOVE && Math.abs(e.getY() - downY) > dp(8)) removeCallbacks(longCheck);
             setValue(1f - e.getY() / getHeight());
-            boolean done = e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL;
+            boolean done = act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL;
+            if (done) removeCallbacks(longCheck);
             if (cb != null) cb.on(v, done);
             return true;
         }
@@ -1240,6 +1267,15 @@ final class Panels {
         });
         paintRinger(rng);
         map.put("ringer", rng);
+        final Tile hs = new Tile(Icon.HOTSPOT, s.getString(R.string.tg_hotspot), 0xFF30D158, null, null);
+        hs.disc.setOnClickListener(x -> openHotspot());
+        hs.disc.setOnLongClickListener(x -> {
+            openHotspot();
+            return true;
+        });
+        hs.set(hotspotOn(), null);
+        hotspotTile = hs;
+        map.put("hotspot", hs);
         map.put("plane", tPlane);
         map.put("torch", tTorch);
         map.put("dark", tDark);
@@ -1295,6 +1331,7 @@ final class Panels {
         }
         mid.addView(grid, new LinearLayout.LayoutParams(0, -2, 1f));
         vBright = new VSlider(Icon.SUN, this::setBrightness);
+        vBright.onLong = this::showDisplaySheet;
         vVolume = new VSlider(Icon.SPEAKER, (v, done) -> {
             android.media.AudioManager am = s.getSystemService(android.media.AudioManager.class);
             int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC);
@@ -1797,6 +1834,111 @@ final class Panels {
         } catch (SecurityException e) {
             if (Shell.granted()) Shell.run("cmd notification allow_dnd " + s.getPackageName());
         }
+    }
+
+    // ===================== Hotspot =====================
+
+    private Tile hotspotTile;
+
+    /** Keadaan hotspot (WIFI_AP_STATE_ENABLED = 13). */
+    private boolean hotspotOn() {
+        try {
+            android.net.wifi.WifiManager wmg = s.getSystemService(android.net.wifi.WifiManager.class);
+            java.lang.reflect.Method m = wmg.getClass().getMethod("getWifiApState");
+            return ((Integer) m.invoke(wmg)) == 13;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** Android tidak benarkan app hidupkan hotspot terus: buka halaman Hotspot sistem (satu ketikan lagi). */
+    private void openHotspot() {
+        String[][] targets = {
+                {"com.android.settings", "com.android.settings.Settings$WifiTetherSettingsActivity"},
+                {"com.android.settings", "com.android.settings.Settings$TetherSettingsActivity"},
+                {"com.android.settings", "com.android.settings.TetherSettings"}};
+        for (String[] t : targets) {
+            Intent i = new Intent().setClassName(t[0], t[1]);
+            if (s.getPackageManager().resolveActivity(i, 0) != null) {
+                launch(i);
+                return;
+            }
+        }
+        launch(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
+    }
+
+    void onHotspotChanged() {
+        if (hotspotTile != null) hotspotTile.set(hotspotOn(), null);
+    }
+
+    // ===================== Kecerahan: auto & Cahaya Malam =====================
+
+    private void showDisplaySheet() {
+        final android.content.ContentResolver cr = s.getContentResolver();
+        LinearLayout list = new LinearLayout(s);
+        list.setOrientation(LinearLayout.VERTICAL);
+        android.widget.Switch auto = new android.widget.Switch(s);
+        int mode = Settings.System.getInt(cr, Settings.System.SCREEN_BRIGHTNESS_MODE, 0);
+        auto.setChecked(mode == 1);
+        list.addView(subRow(Icon.SUN, 0xFFFF9F0A, s.getString(R.string.disp_auto), s.getString(R.string.disp_auto_sub), auto, null));
+        auto.setOnCheckedChangeListener((b, on) -> {
+            boolean ok = false;
+            try {
+                if (Settings.System.canWrite(s)) ok = Settings.System.putInt(cr, Settings.System.SCREEN_BRIGHTNESS_MODE, on ? 1 : 0);
+            } catch (Exception ignored) {
+            }
+            if (!ok && Shell.granted()) Shell.run("settings put system screen_brightness_mode " + (on ? 1 : 0));
+            b.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+        });
+        android.widget.Switch night = new android.widget.Switch(s);
+        night.setChecked(Settings.Secure.getInt(cr, "night_display_activated", 0) == 1);
+        list.addView(subRow(Icon.MOON, 0xFFFF9500, s.getString(R.string.disp_night), s.getString(R.string.disp_night_sub), night, null));
+        // kekuatan warna kuning (suhu warna: lebih rendah = lebih kuning)
+        LinearLayout sl = new LinearLayout(s);
+        sl.setOrientation(LinearLayout.VERTICAL);
+        sl.setPadding(dp(4), dp(4), dp(4), dp(8));
+        TextView lt = Ui.line(s, 13, 600, Color.argb(190, 235, 235, 245));
+        lt.setText(R.string.disp_night_str);
+        sl.addView(lt);
+        final android.widget.SeekBar sb = new android.widget.SeekBar(s);
+        final int minK = 2600, maxK = 4300;
+        sb.setMax(100);
+        int cur = Settings.Secure.getInt(cr, "night_display_color_temperature", 3300);
+        sb.setProgress(Math.round(100f * (maxK - Math.max(minK, Math.min(maxK, cur))) / (maxK - minK)));
+        sb.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFFFFB340));
+        sb.setThumbTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+        sb.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.argb(90, 255, 255, 255)));
+        sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(android.widget.SeekBar b, int v, boolean user) { }
+
+            @Override
+            public void onStartTrackingTouch(android.widget.SeekBar b) { }
+
+            @Override
+            public void onStopTrackingTouch(android.widget.SeekBar b) {
+                int k = maxK - Math.round((maxK - minK) * b.getProgress() / 100f);
+                if (Shell.granted()) {
+                    Shell.run("settings put secure night_display_color_temperature " + k
+                            + (night.isChecked() ? "" : "; settings put secure night_display_activated 1"));
+                    night.setChecked(true);
+                }
+            }
+        });
+        sl.addView(sb, new LinearLayout.LayoutParams(-1, dp(36)));
+        list.addView(sl);
+        night.setOnCheckedChangeListener((b, on) -> {
+            if (!b.isPressed()) return;
+            if (!Shell.granted()) {
+                Toast.makeText(s, R.string.need_shizuku, Toast.LENGTH_SHORT).show();
+                b.setChecked(!on);
+                return;
+            }
+            Shell.run("settings put secure night_display_activated " + (on ? 1 : 0));
+            b.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+        });
+        list.addView(subNote(s.getString(R.string.disp_note)));
+        showSub(s.getString(R.string.disp_title), list, null);
     }
 
     // ===================== Senarai Wi-Fi =====================

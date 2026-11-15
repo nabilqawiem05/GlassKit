@@ -415,6 +415,9 @@ public class PillService extends AccessibilityService
                 case android.media.AudioManager.RINGER_MODE_CHANGED_ACTION:
                     if (extras != null) extras.onRinger(i);
                     break;
+                case "android.net.wifi.WIFI_AP_STATE_CHANGED":
+                    if (panels != null) panels.onHotspotChanged();
+                    break;
                 case Intent.ACTION_TIME_TICK:
                     prayerTick();
                     Automation.tick(PillService.this);
@@ -560,6 +563,7 @@ public class PillService extends AccessibilityService
         f.addAction("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED");
         f.addAction(android.media.AudioManager.RINGER_MODE_CHANGED_ACTION);
         f.addAction(android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED);
+        f.addAction("android.net.wifi.WIFI_AP_STATE_CHANGED");
         registerReceiver(sysRx, f, Context.RECEIVER_EXPORTED);
         registered = true;
         try {

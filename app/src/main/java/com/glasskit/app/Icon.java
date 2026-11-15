@@ -13,7 +13,7 @@ class Icon extends View {
     static final int PLAY = 1, PAUSE = 2, NEXT = 3, PREV = 4, WIFI = 5, BT = 6, CELL = 7, PLANE = 8,
             TORCH = 9, MOON = 10, SUN = 11, SPEAKER = 12, DARK = 13, ROTATE = 14, BATTERY = 15,
             SHOT = 16, LOCK = 17, CAMERA = 18, BELL = 19, CLOSE = 20, NOTE = 21, GEAR = 22,
-            PIN = 23, NFC = 24, BOLT = 25, UNLOCK = 26, PHONE = 27, REC = 28;
+            PIN = 23, NFC = 24, BOLT = 25, UNLOCK = 26, PHONE = 27, REC = 28, HOTSPOT = 29;
 
     private int kind;
     private final Paint f = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -191,6 +191,15 @@ class Icon extends View {
             case REC:
                 c.drawCircle(12, 12, 9, s);
                 c.drawCircle(12, 12, 4.6f, f);
+                break;
+            case HOTSPOT:
+                // titik pemancar dengan dua gelombang kiri-kanan
+                c.drawCircle(12, 13, 2.2f, f);
+                c.drawLine(12, 15, 12, 21, s);
+                c.drawArc(new RectF(7, 8, 17, 18), 145, 70, false, s);
+                c.drawArc(new RectF(7, 8, 17, 18), -35, 70, false, s);
+                c.drawArc(new RectF(3, 4, 21, 22), 145, 70, false, s);
+                c.drawArc(new RectF(3, 4, 21, 22), -35, 70, false, s);
                 break;
             case PHONE:
                 p.moveTo(6.6f, 10.8f);
