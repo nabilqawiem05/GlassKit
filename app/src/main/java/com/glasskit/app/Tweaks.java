@@ -171,7 +171,7 @@ final class Tweaks {
     static void hideStockBar(Context c, boolean on) { hideStockBar(c, on, false); }
 
     /** Bendera "disable" StatusBarManager: sorok jam, ikon sistem & notifikasi stock, dan kunci panel stock. */
-    static final String DISABLE_FLAGS = "cmd statusbar send-disable-flag statusbar-expansion system-icons clock notification-icons";
+    static final String DISABLE_FLAGS = "cmd statusbar send-disable-flag system-icons clock notification-icons";
     static final String ENABLE_FLAGS = "cmd statusbar send-disable-flag none";
 
     static void hideStockBar(Context c, boolean on, boolean force) {
