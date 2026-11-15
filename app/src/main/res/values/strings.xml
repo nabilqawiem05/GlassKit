@@ -645,4 +645,11 @@
     <string name="tl_haptics">Premium haptics</string>
     <string name="tl_haptics_note">Soft taps on buttons and tiles, ticks every 10% on sliders, a firm thud when unlocking. Follows the system touch feedback setting.</string>
     <string name="tl_font">Uniform premium font (Google Sans)</string>
+    <string name="sound_lock">Lock sound</string>
+    <string name="sound_shot">Screenshot sound</string>
+    <string name="snd_note">GlassKit \"Crystal\" sounds: soft glass bells made by GlassKit itself. Silent in Vibrate and Silent mode.</string>
+    <string name="snd_tones">Notification tone</string>
+    <string name="snd_use">Use</string>
+    <string name="snd_set">%1$s is now your notification tone</string>
+    <string name="snd_tones_note">Tones are saved to the Notifications folder, so you can also pick them per app in WhatsApp or Telegram. To avoid double sounds, turn off \"Screen locking sound\" in Settings → Sound &amp; vibration.</string>
 </resources>

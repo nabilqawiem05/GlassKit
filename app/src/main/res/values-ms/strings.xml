@@ -638,4 +638,11 @@
     <string name="tl_haptics">Getaran premium</string>
     <string name="tl_haptics_note">Ketukan halus pada butang dan tile, tik setiap 10% pada peluncur, dentum padat bila buka kunci. Ikut tetapan getaran sentuh sistem.</string>
     <string name="tl_font">Fon premium seragam (Google Sans)</string>
+    <string name="sound_lock">Bunyi kunci</string>
+    <string name="sound_shot">Bunyi tangkapan skrin</string>
+    <string name="snd_note">Bunyi \"Kristal\" GlassKit: loceng kaca lembut yang dicipta oleh GlassKit sendiri. Senyap dalam mod Getar dan Senyap.</string>
+    <string name="snd_tones">Nada notifikasi</string>
+    <string name="snd_use">Guna</string>
+    <string name="snd_set">%1$s kini nada notifikasi anda</string>
+    <string name="snd_tones_note">Nada disimpan ke folder Notifications, jadi boleh juga dipilih ikut app dalam WhatsApp atau Telegram. Untuk elak bunyi berganda, matikan \"Screen locking sound\" di Tetapan → Sound &amp; vibration.</string>
 </resources>

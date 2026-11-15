@@ -385,6 +385,7 @@ public class PillService extends AccessibilityService
                     if (kWave != null) kWave.setRunning(false);
                     if (patch != null) patch.hide(false);
                     if (panels != null) panels.close();
+                    if (!islandCallActive()) Sounds.play(PillService.this, Sounds.LOCK);
                     if (prefs.getBoolean(Prefs.LOCK_ON, false) && !islandCallActive()) {
                         if (lockCover == null) lockCover = new LockCover(PillService.this);
                         lockCover.arm();

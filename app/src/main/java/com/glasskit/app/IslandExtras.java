@@ -238,7 +238,7 @@ final class IslandExtras {
             @Override
             public void onChange(boolean self, Uri uri) {
                 s.h.removeCallbacks(checkShot);
-                s.h.postDelayed(checkShot, 700);
+                s.h.postDelayed(checkShot, 350);
             }
         };
         try {
@@ -263,7 +263,8 @@ final class IslandExtras {
     private final Runnable checkShot = new Runnable() {
         @Override
         public void run() {
-            if (!s.prefs.getBoolean(Prefs.ISL_SHOT, false)) return;
+            boolean thumbOn = s.prefs.getBoolean(Prefs.ISL_SHOT, false);
+            if (!thumbOn && !s.prefs.getBoolean(Prefs.SOUND_SHOT, true)) return;
             long since = System.currentTimeMillis() / 1000 - 20;
             try (Cursor c = s.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.RELATIVE_PATH},
@@ -276,6 +277,8 @@ final class IslandExtras {
                 String path = c.getString(1);
                 lastShotId = Math.max(lastShotId, id);
                 if (path == null || !path.toLowerCase(java.util.Locale.ROOT).contains("screenshot")) return;
+                Sounds.play(s, Sounds.SHOT);
+                if (!thumbOn) return;
                 Uri u = android.content.ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id);
                 Bitmap b = s.getContentResolver().loadThumbnail(u, new android.util.Size(720, 1440), null);
                 if (thumb != null) thumb.dismiss(false);

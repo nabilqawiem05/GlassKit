@@ -306,12 +306,38 @@ public class MainActivity extends Activity {
         note(sys, getString(R.string.system_note));
 
         LinearLayout snd = card(pHome, R.string.sec_sound, Icon.SPEAKER, 0xFFFF375F);
-        toggle(snd, R.string.sound_charge, Prefs.SOUND_CHARGE, true);
+        note(snd, getString(R.string.snd_note));
+        toggle(snd, R.string.sound_lock, Prefs.SOUND_LOCK, true);
         toggle(snd, R.string.sound_unlock, Prefs.SOUND_UNLOCK, true);
+        toggle(snd, R.string.sound_charge, Prefs.SOUND_CHARGE, true);
+        toggle(snd, R.string.sound_shot, Prefs.SOUND_SHOT, true);
         button(snd, getString(R.string.btn_test_sound), false, v -> {
-            Sounds.play(this, Sounds.CHARGE);
-            stAcc.postDelayed(() -> Sounds.play(this, Sounds.UNLOCK), 1100);
+            Sounds.play(this, Sounds.LOCK);
+            stAcc.postDelayed(() -> Sounds.play(this, Sounds.UNLOCK), 700);
+            stAcc.postDelayed(() -> Sounds.play(this, Sounds.SHOT), 1500);
+            stAcc.postDelayed(() -> Sounds.play(this, Sounds.CHARGE), 2300);
         });
+        label(snd, R.string.snd_tones);
+        for (int ti = 0; ti < Sounds.TONE_NAMES.length; ti++) {
+            final int k = ti;
+            LinearLayout tr = new LinearLayout(this);
+            snd.addView(tr);
+            addPair(tr, button(null, "▶  " + Sounds.TONE_NAMES[k].replace("GlassKit ", ""), false,
+                            v -> Sounds.playPcm(Sounds.tone(k))),
+                    button(null, getString(R.string.snd_use), true, v -> new Thread(() -> {
+                        String msg;
+                        try {
+                            Sounds.installTone(this, k, true);
+                            msg = getString(R.string.snd_set, Sounds.TONE_NAMES[k]);
+                        } catch (Exception e) {
+                            CrashLog.write(this, e);
+                            msg = getString(R.string.t_fail);
+                        }
+                        final String m = msg;
+                        runOnUiThread(() -> toast(m));
+                    }).start()));
+        }
+        note(snd, getString(R.string.snd_tones_note));
 
         // ---------- Island ----------
         LinearLayout isl = card(pIsland, R.string.sec_island, Icon.NOTE, 0xFFFF375F);
