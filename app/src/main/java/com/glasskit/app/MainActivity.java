@@ -399,6 +399,7 @@ public class MainActivity extends Activity {
         // ---------- Lock screen ----------
         LinearLayout lk = card(pLock, R.string.sec_lock, Icon.LOCK, 0xFFFF9F0A);
         toggle(lk, R.string.lock_on, Prefs.LOCK_ON, false);
+        toggle(lk, R.string.lock_zoom, Prefs.LOCK_ZOOM, true);
         note(lk, getString(R.string.lock_note));
         button(lk, getString(R.string.btn_preview_lock), false, v -> startActivity(new Intent(this, LockActivity.class)));
 

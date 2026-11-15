@@ -387,6 +387,15 @@ public class LockActivity extends Activity {
         wall.setTranslationY(0);
         wall.setScaleX(1f);
         wall.setScaleY(1f);
+        unlockSpring.stop();
+        // masuk gaya iPhone: wallpaper bermula sedikit zoom & kabur, kemudian "zoom out" ke tempatnya
+        if (prefs.getBoolean(Prefs.LOCK_ZOOM, true)) {
+            applyUnlock(0.32f, 0f);
+            unlockSpring.value = 0.32f;
+            unlockSpring.to(0f, 0f, null);
+        } else {
+            applyUnlock(0f, 0f);
+        }
         if (km.isDeviceLocked()) {
             lockAnim.setLocked();
             soundPlayed = false;
@@ -1183,8 +1192,10 @@ public class LockActivity extends Activity {
                 soundPlayed = true;
                 Sounds.play(this, Sounds.UNLOCK);
             }
-            ui.animate().translationY(-H * 0.12f).alpha(0f).setDuration(240).start();
-            wall.animate().scaleX(1.08f).scaleY(1.08f).alpha(0f).setDuration(260).withEndAction(() -> {
+            unlockSpring.stop();
+            applyUnlock(Math.max(uProg, 0.6f), Math.min(uDy, -H * 0.2f));
+            ui.animate().translationY(-H * 0.3f).alpha(0f).setInterpolator(Ui.EXIT).setDuration(200).start();
+            wall.animate().scaleX(1.24f).scaleY(1.24f).alpha(0f).setInterpolator(Ui.EASE).setDuration(300).withEndAction(() -> {
                 if (r != null) r.run();
                 // simpan aktiviti di belakang supaya dibuka semula serta-merta (tiada skrin hitam)
                 boolean moved = false;
@@ -1202,10 +1213,43 @@ public class LockActivity extends Activity {
         }
     }
 
+    // ======================= Kesan zoom wallpaper ikut jari (gaya iPhone) =======================
+
+    private float uProg, uDy;
+    private float lastBlur = -1;
+    private final Spring unlockSpring = Spring.panel((v, vel) -> applyUnlock(v, v * -H * 0.45f)).range(1f);
+
+    /** p 0..1: 0 = lock screen biasa, 1 = wallpaper zoom penuh & kabur, UI hilang ke atas. */
+    private void applyUnlock(float p, float dy) {
+        uProg = p;
+        float q = Math.max(0f, Math.min(1.2f, p));
+        boolean zoom = prefs == null || prefs.getBoolean(Prefs.LOCK_ZOOM, true);
+        float sc = 1f + (zoom ? 0.16f : 0.04f) * q;
+        wall.setScaleX(sc);
+        wall.setScaleY(sc);
+        wall.setTranslationY(0);
+        if (zoom && android.os.Build.VERSION.SDK_INT >= 31) {
+            float r = Math.min(70f, 70f * q);
+            if (Math.abs(r - lastBlur) > 1.5f || (r < 0.5f) != (lastBlur < 0.5f)) {
+                lastBlur = r;
+                wall.setRenderEffect(r < 0.5f ? null
+                        : android.graphics.RenderEffect.createBlurEffect(r, r, android.graphics.Shader.TileMode.CLAMP));
+            }
+        }
+        ui.setTranslationY(dy);
+        ui.setAlpha(Math.max(0f, 1f - q * 1.35f));
+        float us = 1f - 0.05f * Math.min(1f, q);
+        ui.setScaleX(us);
+        ui.setScaleY(us);
+    }
+
     private void springBack() {
         afterUnlock = null;
-        ui.animate().translationY(0).alpha(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
-        wall.animate().translationY(0).setDuration(300).start();
+        ui.animate().cancel();
+        wall.animate().cancel();
+        wall.setAlpha(1f);
+        unlockSpring.value = uProg;
+        unlockSpring.to(0f, 0f, null);
     }
 
     private boolean inside(View v, MotionEvent e) {
@@ -1219,6 +1263,7 @@ public class LockActivity extends Activity {
     private class Root extends FrameLayout {
         private float y0, x0;
         private boolean dragging, fromList;
+        private android.view.VelocityTracker vt;
 
         Root(Context c) { super(c); }
 
@@ -1247,8 +1292,14 @@ public class LockActivity extends Activity {
 
         @Override
         public boolean onTouchEvent(MotionEvent e) {
+            if (vt == null) vt = android.view.VelocityTracker.obtain();
+            MotionEvent me = MotionEvent.obtain(e);
+            me.setLocation(e.getRawX(), e.getRawY());
+            vt.addMovement(me);
+            me.recycle();
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    unlockSpring.stop();
                     y0 = e.getRawY();
                     if (e.getRawY() > H * 0.76f && Math.abs(e.getRawX() - W / 2f) < W * 0.14f) {
                         lastSensorTouch = System.currentTimeMillis();
@@ -1256,16 +1307,23 @@ public class LockActivity extends Activity {
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dy = Math.min(0, e.getRawY() - y0);
+                    if (!dragging) unlockSpring.stop();
                     dragging = true;
-                    ui.setTranslationY(dy);
-                    ui.setAlpha(Math.max(0.2f, 1f + dy / (H * 0.5f)));
-                    wall.setTranslationY(dy * 0.15f);
+                    uDy = dy;
+                    // wallpaper zoom & kabur ikut jari; UI naik dan pudar
+                    applyUnlock(-dy / (H * 0.45f), dy);
                     return true;
                 }
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL: {
                     float dy = e.getRawY() - y0;
-                    if (dragging && dy < -dp(120)) unlock(null);
+                    vt.computeCurrentVelocity(1000);
+                    float vy = vt.getYVelocity();
+                    vt.recycle();
+                    vt = null;
+                    boolean go = dragging && e.getActionMasked() == MotionEvent.ACTION_UP
+                            && (dy < -dp(120) || (vy < -dp(900) && dy < -dp(40)));
+                    if (go) unlock(null);
                     else springBack();
                     dragging = false;
                     return true;

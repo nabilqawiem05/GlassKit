@@ -601,4 +601,5 @@
     <string name="solat_on_title">Prayer mode · %1$s</string>
     <string name="solat_on_body">Phone silenced until %1$s</string>
     <string name="solat_end_now">End now</string>
+    <string name="lock_zoom">Wallpaper zoom and blur when unlocking (iPhone style)</string>
 </resources>
