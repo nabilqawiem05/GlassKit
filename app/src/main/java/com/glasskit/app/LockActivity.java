@@ -123,6 +123,46 @@ public class LockActivity extends Activity {
         });
     }
     private UnlockAnim lockAnim;
+    private RevealView reveal;
+    private static Bitmap lastPlain;
+    private static String plainKey = "";
+
+    private static String imgKey(SharedPreferences p) {
+        return p.getLong(Prefs.IMG_VER, 0) + "|" + p.getBoolean(Prefs.WALL_MOOD, false);
+    }
+    private static RectF lastPopFrame;
+
+    /** Lukis bitmap asal dengan potongan bulat yang membesar dari "dari" ke skrin penuh. */
+    private static final class RevealView extends View {
+        Bitmap bmp;
+        final RectF from = new RectF(), cur = new RectF();
+        float t, radius;
+        final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG | android.graphics.Paint.ANTI_ALIAS_FLAG);
+        final android.graphics.Path clip = new android.graphics.Path();
+
+        RevealView(Context c) { super(c); }
+
+        void set(float v) {
+            t = v;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            if (bmp == null) return;
+            float w = getWidth(), h = getHeight();
+            float e = Math.max(0f, Math.min(1f, t));
+            cur.set(from.left + (0 - from.left) * e, from.top + (0 - from.top) * e,
+                    from.right + (w - from.right) * e, from.bottom + (h - from.bottom) * e);
+            float r = radius * (1f - e);
+            clip.reset();
+            clip.addRoundRect(cur, r, r, android.graphics.Path.Direction.CW);
+            c.save();
+            c.clipPath(clip);
+            c.drawBitmap(bmp, null, new RectF(0, 0, w, h), p);
+            c.restore();
+        }
+    }
     private TextView hint, clearAll;
     private Bitmap frame, bg, fg;
     private long imgVer = Long.MIN_VALUE;
@@ -232,6 +272,11 @@ public class LockActivity extends Activity {
                 copyBd(lastBd, bd);
             }
         }
+
+        // gambar asal (tanpa gaya timbul) yang "mekar" ke skrin penuh bila buka kunci
+        reveal = new RevealView(this);
+        reveal.setVisibility(View.GONE);
+        root.addView(reveal, new FrameLayout.LayoutParams(-1, -1));
 
         ui = new FrameLayout(this);
         root.addView(ui, new FrameLayout.LayoutParams(-1, -1));
@@ -384,6 +429,12 @@ public class LockActivity extends Activity {
         ui.setTranslationY(0);
         ui.setAlpha(1f);
         wall.setAlpha(1f);
+        if (reveal != null) {
+            reveal.setVisibility(View.GONE);
+            reveal.setScaleX(1f);
+            reveal.setScaleY(1f);
+            reveal.setRenderEffect(null);
+        }
         wall.setTranslationY(0);
         wall.setScaleX(1f);
         wall.setScaleY(1f);
@@ -535,6 +586,19 @@ public class LockActivity extends Activity {
                 out = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
                 DepthRenderer.draw(app, new Canvas(out), w, hh, bgB, fgB, prefs, true);
                 nb.set(out, w, hh);
+                int pop = prefs.getInt(Prefs.POP_STYLE, 0);
+                if (pop != 0 && bgB != null && fgB != null) {
+                    Bitmap pl = lastPlain;
+                    if (pl == null || pl.getWidth() != w || pl.getHeight() != hh || !imgKey(prefs).equals(plainKey)) {
+                        pl = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
+                        DepthRenderer.draw(app, new Canvas(pl), w, hh, bgB, fgB, prefs, false); // sama seperti home
+                        plainKey = imgKey(prefs);
+                    }
+                    lastPlain = pl;
+                    lastPopFrame = (pop == 1 || pop == 3) ? DepthRenderer.popFrame(fgB, w, hh) : null;
+                } else {
+                    lastPlain = null;
+                }
             } catch (Throwable t) {
                 CrashLog.write(app, t);
             }
@@ -1192,6 +1256,10 @@ public class LockActivity extends Activity {
                 soundPlayed = true;
                 Sounds.play(this, Sounds.UNLOCK);
             }
+            if (lastPlain != null && prefs.getInt(Prefs.POP_STYLE, 0) != 0) {
+                revealExit(r);
+                return;
+            }
             unlockSpring.stop();
             applyUnlock(Math.max(uProg, 0.6f), Math.min(uDy, -H * 0.2f));
             ui.animate().translationY(-H * 0.3f).alpha(0f).setInterpolator(Ui.EXIT).setDuration(200).start();
@@ -1242,6 +1310,56 @@ public class LockActivity extends Activity {
         float us = 1f - 0.05f * Math.min(1f, q);
         ui.setScaleX(us);
         ui.setScaleY(us);
+    }
+
+    /**
+     * Gaya timbul → gambar asal: wallpaper kembali ke saiz & ketajaman asal, gambar asal "mekar"
+     * dari bingkai ke skrin penuh, UI terbang ke atas; kemudian home (wallpaper sama) dipaparkan.
+     */
+    private void revealExit(Runnable after) {
+        unlockSpring.stop();
+        ui.animate().translationY(-H * 0.3f).alpha(0f).setInterpolator(Ui.EXIT).setDuration(220).start();
+        reveal.bmp = lastPlain;
+        if (lastPopFrame != null) reveal.from.set(lastPopFrame);
+        else reveal.from.set(0, 0, W, H);
+        reveal.radius = dp(28);
+        reveal.setAlpha(lastPopFrame != null ? 1f : 0f);
+        reveal.set(0f);
+        reveal.setVisibility(View.VISIBLE);
+        final float p0 = uProg;
+        android.animation.ValueAnimator va = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        va.setDuration(520);
+        va.setInterpolator(Ui.EASE);
+        va.addUpdateListener(a -> {
+            float f = (float) a.getAnimatedValue();
+            // kembalikan zoom & kabur ke 0 (gambar tajam seperti di home)
+            float q = p0 * (1f - f);
+            float sc = 1f + 0.16f * q;
+            wall.setScaleX(sc);
+            wall.setScaleY(sc);
+            reveal.setScaleX(sc);
+            reveal.setScaleY(sc);
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                float rr = 70f * q;
+                android.graphics.RenderEffect re = rr < 0.5f ? null
+                        : android.graphics.RenderEffect.createBlurEffect(rr, rr, android.graphics.Shader.TileMode.CLAMP);
+                wall.setRenderEffect(re);
+                reveal.setRenderEffect(re);
+            }
+            reveal.set(f);
+            if (lastPopFrame == null) reveal.setAlpha(f);
+        });
+        va.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator a) {
+                if (after != null) after.run();
+                boolean moved = false;
+                try { moved = moveTaskToBack(true); } catch (Throwable ignored) {}
+                if (!moved) finish();
+                overridePendingTransition(0, 0);
+            }
+        });
+        va.start();
     }
 
     private void springBack() {

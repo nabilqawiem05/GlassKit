@@ -114,7 +114,8 @@ public final class DepthRenderer {
         Paint bmp = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
         RectF bgRect = null;
         // gaya timbul: 0 biasa, 1 bingkai pecah, 2 bayang timbul, 3 gabung
-        int pop = fg != null && bg != null ? p.getInt(Prefs.POP_STYLE, 0) : 0;
+        // hanya untuk lock screen (dengan jam); home screen kekal gambar asal
+        int pop = showClock && fg != null && bg != null ? p.getInt(Prefs.POP_STYLE, 0) : 0;
         boolean frameOn = pop == 1 || pop == 3, shadowOn = pop == 2 || pop == 3;
         float density = ctx.getResources().getDisplayMetrics().density;
         RectF frame = null;
@@ -126,9 +127,7 @@ public final class DepthRenderer {
                 Bitmap soft = cached(bg, "soft", () -> GlassArt.blur(bg, 160, 6));
                 c.drawBitmap(soft, null, bgRect, bmp);
                 c.drawColor(Color.argb(150, 0, 0, 0));
-                float top = subjectTop(fg, w, h);
-                float ft = top < 0 ? h * 0.36f : Math.min(h * 0.55f, Math.max(h * 0.30f, top + h * 0.11f));
-                frame = new RectF(w * 0.06f, ft, w * 0.94f, h * 0.88f);
+                frame = popFrame(fg, w, h);
                 float rr = 28 * density;
                 c.save();
                 Path clip = new Path();
@@ -229,6 +228,13 @@ public final class DepthRenderer {
         path.computeBounds(b, true);
         float top = b.top - size * 0.16f - Math.max(28f, size * 0.15f) * 1.4f;
         return new float[]{Math.max(0, top - size * 0.1f), Math.min(h, b.bottom + size * 0.12f)};
+    }
+
+    /** Kedudukan bingkai gaya "Bingkai" (di bawah kepala subjek). */
+    static RectF popFrame(Bitmap fg, int w, int h) {
+        float top = subjectTop(fg, w, h);
+        float ft = top < 0 ? h * 0.36f : Math.min(h * 0.55f, Math.max(h * 0.30f, top + h * 0.11f));
+        return new RectF(w * 0.06f, ft, w * 0.94f, h * 0.88f);
     }
 
     // ---- cache: dikira sekali bagi setiap wallpaper, bukan setiap minit ----
