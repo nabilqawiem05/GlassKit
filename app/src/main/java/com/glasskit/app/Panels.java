@@ -1620,7 +1620,10 @@ final class Panels {
     private void paintRinger(Tile t) {
         if (t == null) return;
         int m = audio().getRingerMode();
-        t.set(m != android.media.AudioManager.RINGER_MODE_NORMAL, null);
+        // warna ikut mod: Bunyi = biru, Getar = oren, Senyap = merah
+        t.onColor = m == android.media.AudioManager.RINGER_MODE_SILENT ? 0xFFFF3B30
+                : m == android.media.AudioManager.RINGER_MODE_VIBRATE ? 0xFFFF9F0A : 0xFF0A84FF;
+        t.set(true, null);
         if (t.label != null) t.label.setText(m == android.media.AudioManager.RINGER_MODE_SILENT ? R.string.rg_silent
                 : m == android.media.AudioManager.RINGER_MODE_VIBRATE ? R.string.rg_vibrate : R.string.rg_sound);
     }
@@ -1656,11 +1659,20 @@ final class Panels {
 
     private void ringerFeedback(int mode) {
         if (mode == android.media.AudioManager.RINGER_MODE_VIBRATE) {
-            try {
-                android.os.Vibrator vb = s.getSystemService(android.os.Vibrator.class);
-                if (vb != null) vb.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_HEAVY_CLICK));
-            } catch (Throwable ignored) {
-            }
+            // getaran jelas (dua denyut) sebagai tanda mod Getar sudah hidup
+            s.h.postDelayed(() -> {
+                try {
+                    android.os.Vibrator vb = s.getSystemService(android.os.Vibrator.class);
+                    if (vb == null || !vb.hasVibrator()) return;
+                    android.os.VibrationEffect ef = android.os.VibrationEffect.createWaveform(new long[]{0, 220, 110, 220}, -1);
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        vb.vibrate(ef, android.os.VibrationAttributes.createForUsage(android.os.VibrationAttributes.USAGE_NOTIFICATION));
+                    } else {
+                        vb.vibrate(ef);
+                    }
+                } catch (Throwable ignored) {
+                }
+            }, 120);
         }
         Toast.makeText(s, mode == android.media.AudioManager.RINGER_MODE_SILENT ? R.string.rg_silent
                 : mode == android.media.AudioManager.RINGER_MODE_VIBRATE ? R.string.rg_vibrate : R.string.rg_sound, Toast.LENGTH_SHORT).show();
