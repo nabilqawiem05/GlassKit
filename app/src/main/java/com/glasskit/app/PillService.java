@@ -143,6 +143,21 @@ public class PillService extends AccessibilityService
 
     void onProfileChanged() { applyAwake(); }
 
+    /**
+     * Status bar & panel stock: disorok hanya bila bar GlassKit hidup. Panel stock dikunci hanya bila
+     * zon leret GlassKit wujud (potret + panel hidup) — jadi pengguna tak pernah tinggal tanpa panel.
+     */
+    void applyStock() {
+        if (prefs == null) return;
+        boolean hide = prefs.getBoolean(Prefs.HIDE_SYS_ICONS, true) && prefs.getBoolean(Prefs.SBAR_ON, false);
+        boolean lock = prefs.getBoolean(Prefs.PANELS_ON, true)
+                && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
+        Tweaks.hideStockBar(this, hide, false, lock);
+    }
+
+    private final rikka.shizuku.Shizuku.OnBinderReceivedListener shizukuUp = () -> h.postDelayed(this::applyStock, 800);
+    private final rikka.shizuku.Shizuku.OnRequestPermissionResultListener shizukuPerm = (code, res) -> h.postDelayed(this::applyStock, 500);
+
     FpsMeter fps;
 
     private void applyFps() {
@@ -328,7 +343,7 @@ public class PillService extends AccessibilityService
                     }
                     applyFps();
                     h.post(PillService.this::refresh);
-                    Tweaks.hideStockBar(PillService.this, prefs.getBoolean(Prefs.HIDE_SYS_ICONS, true) && prefs.getBoolean(Prefs.SBAR_ON, false));
+                    applyStock();
                     if (patch != null) patch.screenOn();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
                         // cuba serta-merta, kemudian ulang jika sistem lambat (elak lock screen stock terpapar)
@@ -486,11 +501,17 @@ public class PillService extends AccessibilityService
         volume = new VolumePanel(this);
         extras = new IslandExtras(this);
         profiles = new AppTools.ProfileRunner(this);
+        // Shizuku dihidupkan selepas but semula / kebenaran diberi: terus sorok status bar stock
+        try {
+            rikka.shizuku.Shizuku.addBinderReceivedListenerSticky(shizukuUp);
+            rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPerm);
+        } catch (Throwable ignored) {
+        }
         h.postDelayed(this::applyFps, 1500);
         h.postDelayed(() -> {
             Tweaks.reapply(this);
             // pastikan ikon stock kekal tersorok walaupun app lain (cth SystemUI Tuner) menulis ganti senarai
-            Tweaks.hideStockBar(this, prefs.getBoolean(Prefs.HIDE_SYS_ICONS, true) && prefs.getBoolean(Prefs.SBAR_ON, false));
+            applyStock();
         }, 3000);
         try {
             android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
@@ -581,7 +602,20 @@ public class PillService extends AccessibilityService
     public void onInterrupt() { }
 
     @Override
+    public boolean onUnbind(Intent intent) {
+        Tweaks.showStockBar();
+        return super.onUnbind(intent);
+    }
+
+    @Override
     public void onDestroy() {
+        // servis berhenti: pulihkan panel & ikon stock supaya telefon tak tinggal tanpa panel
+        Tweaks.showStockBar();
+        try {
+            rikka.shizuku.Shizuku.removeBinderReceivedListener(shizukuUp);
+            rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuPerm);
+        } catch (Throwable ignored) {
+        }
         if (extras != null) extras.stop();
         if (lockCover != null) lockCover.destroy();
         inst = null;
@@ -620,6 +654,7 @@ public class PillService extends AccessibilityService
             try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
         }
         if (panels != null) panels.updateEdges();
+        applyStock(); // landskap: buka kunci panel stock; potret: kunci semula
         int night = newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK;
         if (night != lastNight) {
             lastNight = night;
@@ -646,6 +681,7 @@ public class PillService extends AccessibilityService
             lockCover = null;
         }
         if (panels != null) panels.updateEdges();
+        if (Prefs.PANELS_ON.equals(key) || Prefs.SBAR_ON.equals(key) || Prefs.HIDE_SYS_ICONS.equals(key)) h.post(this::applyStock);
         updateStatusBar();
         refresh();
     }

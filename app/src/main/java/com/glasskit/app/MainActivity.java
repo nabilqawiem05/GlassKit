@@ -398,7 +398,8 @@ public class MainActivity extends Activity {
                         toast(getString(R.string.need_shizuku));
                         return;
                     }
-                    Tweaks.hideStockBar(this, true, true);
+                    if (PillService.inst != null) PillService.inst.applyStock();
+                    else Tweaks.hideStockBar(this, true, true);
                     toast(getString(R.string.t_done));
                 }),
                 button(null, getString(R.string.btn_restore_sys), false, v -> {
