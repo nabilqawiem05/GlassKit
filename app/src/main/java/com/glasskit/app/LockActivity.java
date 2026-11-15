@@ -289,7 +289,7 @@ public class LockActivity extends Activity {
         ui.addView(lockAnim, ll);
 
         gauges = new GaugeRow(this);
-        ui.addView(gauges, new FrameLayout.LayoutParams(-1, dp(130)));
+        ui.addView(gauges, new FrameLayout.LayoutParams(-1, dp(prefs.getBoolean(Prefs.LOCK_PRAYER, false) ? 168 : 130)));
 
         bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.VERTICAL);
@@ -671,6 +671,7 @@ public class LockActivity extends Activity {
                     line = (e.allDay ? ctx.getString(R.string.all_day) : Data.eventTime(ctx, e).split(" – ")[0]) + "  " + e.title;
                 }
                 gLine = line;
+                gPrayer = prefs.getBoolean(Prefs.LOCK_PRAYER, false) ? Cards.nextPrayerInfo(ctx) : null;
                 gCol = col;
                 gWx = Data.weather(ctx);
                 gSteps = Data.steps(ctx);
@@ -682,6 +683,8 @@ public class LockActivity extends Activity {
             h.post(() -> { if (gauges != null) gauges.invalidate(); });
         });
     }
+
+    private volatile Object[] gPrayer;
 
     private class GaugeRow extends View {
         GaugeRow(Context c) {
@@ -712,6 +715,33 @@ public class LockActivity extends Activity {
             if (line == null) return;
             int col = gCol;
             boolean hasLine = !line.isEmpty();
+            Object[] np = gPrayer;
+            float cardH = 0;
+            if (np != null) {
+                // D · kad solat seterusnya dengan bar masa
+                cardH = 66 * u;
+                RectF cr = new RectF(cx - Math.min(w / 2f - 16 * u, 170 * u), 2 * u, cx + Math.min(w / 2f - 16 * u, 170 * u), 2 * u + cardH - 6 * u);
+                android.graphics.Paint pp = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+                pp.setColor(Color.argb(150, 8, 40, 34));
+                c.drawRoundRect(cr, 20 * u, 20 * u, pp);
+                pp.setStyle(android.graphics.Paint.Style.STROKE);
+                pp.setStrokeWidth(1f * u);
+                pp.setColor(Color.argb(60, 255, 255, 255));
+                c.drawRoundRect(cr, 20 * u, 20 * u, pp);
+                Draw3D.text(c, getString(R.string.next_prayer_cap, ((String) np[0]).toUpperCase(java.util.Locale.ROOT)),
+                        cr.left + 16 * u, cr.top + 18 * u, 10.5f * u, 700, 0xFF9FE1CB, Draw3D.LEFT);
+                Draw3D.text(c, (String) np[1], cr.left + 16 * u, cr.top + 44 * u, 22 * u, 800, Color.WHITE, Draw3D.LEFT);
+                Draw3D.text(c, (String) np[2], cr.right - 16 * u, cr.top + 44 * u, 12 * u, 700, 0xFF5DCAA5, Draw3D.RIGHT);
+                float bl = cr.left + 16 * u, br = cr.right - 16 * u, by = cr.bottom - 9 * u;
+                android.graphics.Paint bp = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+                bp.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+                bp.setStrokeWidth(3.5f * u);
+                bp.setColor(Color.argb(70, 255, 255, 255));
+                c.drawLine(bl, by, br, by, bp);
+                bp.setColor(0xFF5DCAA5);
+                c.drawLine(bl, by, bl + (br - bl) * (float) np[3], by, bp);
+                hasLine = false; // kad solat menggantikan baris acara
+            }
             if (hasLine) {
                 line = Draw3D.fit(line, 16 * u, 700, w - 60 * u);
                 float tw = Draw3D.measure(line, 16 * u, 700);
@@ -722,7 +752,7 @@ public class LockActivity extends Activity {
             }
 
             // baris 2: cuaca, langkah, bateri — dialih ke tepi jika bertindih dengan orang dalam gambar
-            float cy = (hasLine ? 82 : 50) * u, gap = 96 * u;
+            float cy = (hasLine ? 82 : (cardH > 0 ? 40 : 50)) * u + cardH, gap = 96 * u;
             float xW = cx - gap, xS = cx, xB = cx + gap;
             boolean showW = true;
             RectF sb = subjScreen;

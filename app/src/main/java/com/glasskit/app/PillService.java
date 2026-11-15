@@ -110,7 +110,20 @@ public class PillService extends AccessibilityService
 
     private boolean attached, expanded;
     private int mode = IDLE;
-    private int curW, curH, compactW, compactH, topY, xOff;
+    private int curW, curH, compactW, compactH, topY, xOff, camR;
+    CameraRing ring;
+
+    private int ringCx() { return screenW / 2 + xOff; }
+
+    private int ringCy() { return topY + compactH / 2; }
+
+    private int ringR() { return camR > 0 ? camR : compactH / 2 - dp(3); }
+
+    private void updateRing() {
+        if (ring == null) return;
+        PowerManager pm = getSystemService(PowerManager.class);
+        ring.update(mode == IDLE, pm == null || pm.isInteractive(), ringCx(), ringCy(), ringR());
+    }
     int screenW, screenH, statusH;
     private boolean wasNotiShown, missedTick;
 
@@ -343,6 +356,7 @@ public class PillService extends AccessibilityService
                     }
                     applyFps();
                     h.post(PillService.this::refresh);
+                    h.postDelayed(PillService.this::updateRing, 600);
                     applyStock();
                     if (patch != null) patch.screenOn();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
@@ -361,6 +375,7 @@ public class PillService extends AccessibilityService
                     h.removeCallbacks(progTick);
                     h.removeCallbacks(liveTick);
                     if (fps != null) fps.stop();
+                    if (ring != null) ring.remove();
                     if (cWave != null) cWave.setRunning(false);
                     if (mWave != null) mWave.setRunning(false);
                     if (kWave != null) kWave.setRunning(false);
@@ -437,6 +452,8 @@ public class PillService extends AccessibilityService
                     break;
                 case Intent.ACTION_POWER_CONNECTED:
                     Automation.fire(PillService.this, Automation.T_CHARGE, "");
+                    if (ring != null) h.postDelayed(() -> ring.onCharge(Math.max(0, Ui.battery(PillService.this)), ringCx(), ringCy(), ringR(),
+                            mode == IDLE), 300);
                     if (sbar != null && sbarShown) sbar.refresh();
                     Sounds.play(PillService.this, Sounds.CHARGE);
                     h.postDelayed(PillService.this::showCharging, 600);
@@ -501,6 +518,7 @@ public class PillService extends AccessibilityService
         volume = new VolumePanel(this);
         extras = new IslandExtras(this);
         profiles = new AppTools.ProfileRunner(this);
+        ring = new CameraRing(this);
         // Shizuku dihidupkan selepas but semula / kebenaran diberi: terus sorok status bar stock
         try {
             rikka.shizuku.Shizuku.addBinderReceivedListenerSticky(shizukuUp);
@@ -704,6 +722,7 @@ public class PillService extends AccessibilityService
             compactH = Math.max(dp(30), Math.min(dp(36), r.height() + dp(4)));
             topY = Math.max(dp(4), r.centerY() - compactH / 2);
             xOff = r.centerX() - screenW / 2;
+            camR = Math.min(r.width(), r.height()) / 2;
         } else {
             compactH = dp(34);
             topY = dp(10);
@@ -1408,6 +1427,7 @@ public class PillService extends AccessibilityService
                 && (panels == null || !panels.isOpen())) newMode = PRIV;
         int prevMode = mode;
         mode = newMode;
+        if (prevMode != mode) h.postDelayed(this::updateRing, mode == IDLE ? 450 : 0);
         if (mode == IDLE) {
             if (sbar != null && sbarShown) sbar.setGeometry(topY + compactH / 2f, screenW / 2f + xOff, compactH / 2f + dp(4));
             expanded = false;
@@ -1594,6 +1614,7 @@ public class PillService extends AccessibilityService
     // ================= Notifikasi =================
 
     void onNotification(StatusBarNotification sbn) {
+        if (ring != null) h.postDelayed(() -> ring.onNotification(sbn, mode == IDLE, ringCx(), ringCy(), ringR()), 50);
         if (prefs == null) return;
         if (LockActivity.visible) {
             lockBanner(sbn);
@@ -2269,6 +2290,7 @@ public class PillService extends AccessibilityService
     }
 
     void onNotifsChanged() {
+        h.post(this::updateRing);
         if (LockActivity.inst != null) h.post(() -> { if (LockActivity.inst != null) LockActivity.inst.refreshNotifs(); });
         if (sbar != null && sbarShown) h.post(() -> { if (sbar != null) sbar.refresh(); });
     }

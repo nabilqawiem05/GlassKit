@@ -79,6 +79,11 @@ public final class Prefs {
     public static final String LOCK_ZOOM = "lockZoom";
     public static final String POP_STYLE = "popStyle";
     public static final String CLOCK_AUTO = "clockAuto";
+    public static final String CLOCK_LAYOUT = "clockLayout";
+    public static final String LOCK_HIJRI = "lockHijri";
+    public static final String HIJRI_ADJ = "hijriAdj";
+    public static final String LOCK_PRAYER = "lockPrayer";
+    public static final String ISL_RING = "islRing";
     public static final String LOCK_STACK = "lockStack";
     public static final String HIDE_SYS_ICONS = "hideSysIcons";
     public static final String BLOCK_STOCK_SHADE = "blockStockShade";

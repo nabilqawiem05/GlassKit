@@ -102,7 +102,21 @@ public final class DepthRenderer {
         tp.setLetterSpacing(0.01f); // jarak kecil: digit tidak bersentuh / bertindih
         tp.setTypeface(font(p.getInt(Prefs.CLOCK_FONT, 0)));
         Path path = new Path();
-        tp.getTextPath(time, 0, time.length(), w / 2f, y, path);
+        if (p.getInt(Prefs.CLOCK_LAYOUT, 0) == 1) {
+            // A · jam bertindan: jam di atas, minit di bawah, lebih besar & rapat
+            String[] hm = time.split(":");
+            tp.setTextSize(size * 1.45f);
+            tp.setLetterSpacing(-0.02f);
+            Paint.FontMetrics fm = tp.getFontMetrics();
+            float lineH = (fm.descent - fm.ascent) * 0.78f;
+            Path a = new Path(), b2 = new Path();
+            tp.getTextPath(hm[0], 0, hm[0].length(), w / 2f, y, a);
+            tp.getTextPath(hm[1], 0, hm[1].length(), w / 2f, y + lineH, b2);
+            path.addPath(a);
+            path.addPath(b2);
+        } else {
+            tp.getTextPath(time, 0, time.length(), w / 2f, y, path);
+        }
         Matrix m = new Matrix();
         m.setScale(sx, sy, w / 2f, y);
         path.transform(m);
@@ -209,7 +223,16 @@ public final class DepthRenderer {
             dp.setTypeface(Typeface.create(Typeface.SANS_SERIF, 600, false));
             dp.setShadowLayer(size * 0.03f, 0, size * 0.008f, Color.argb(70, 0, 0, 0));
             String date = new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(new Date());
-            c.drawText(date, w / 2f, b.top - size * 0.16f, dp);
+            float dy = b.top - size * 0.16f;
+            if (p.getBoolean(Prefs.LOCK_HIJRI, false)) {
+                // D · tarikh Hijri di bawah tarikh Masihi
+                Paint hp = new Paint(dp);
+                hp.setTextSize(dp.getTextSize() * 0.82f);
+                hp.setColor(glass ? Color.argb(215, 200, 255, 230) : color);
+                c.drawText(Hijri.today(ctx), w / 2f, dy, hp);
+                dy -= hp.getTextSize() * 1.25f;
+            }
+            c.drawText(date, w / 2f, dy, dp);
 
             if (glass) {
                 int tint = (color & 0x00FFFFFF) == 0x00FFFFFF ? 0 : (color | 0xFF000000);

@@ -105,6 +105,15 @@ public abstract class GlassWidget extends AppWidgetProvider {
         GlassEngine.cur = t;
         float m = GlassEngine.shadowPad(d);
         RectF card = new RectF(m, m, w - m, h - m);
+        if (bare()) {
+            // widget melukis kad-kad kecilnya sendiri (contoh: bento)
+            try {
+                render(c, cv, card, t, d, GlassEngine.size(card.width(), card.height(), d));
+            } catch (Throwable e) {
+                CrashLog.write(c, e);
+            }
+            return bmp;
+        }
         GlassEngine.card(cv, card, t, d);
         float pad = Math.min(15 * d, Math.min(card.width(), card.height()) * 0.12f);
         RectF in = new RectF(card.left + pad, card.top + pad, card.right - pad, card.bottom - pad);
@@ -119,6 +128,9 @@ public abstract class GlassWidget extends AppWidgetProvider {
         }
         return bmp;
     }
+
+    /** Tiada kad besar: widget melukis jubin sendiri. */
+    boolean bare() { return false; }
 
     /** Kandungan memenuhi seluruh kad (contoh: gambar). */
     boolean fullBleed() { return false; }
@@ -143,6 +155,7 @@ public abstract class GlassWidget extends AppWidgetProvider {
         Calendar now = Calendar.getInstance();
         int m = now.get(Calendar.MINUTE);
         updateAll(c, UpNextWidget.class); // kira detik
+        updateAll(c, BentoWidget.class);
         if (m % 5 == 0) SmartStack.refresh(c);
         if (m % 15 == 0) {
             updateAll(c, StepsWidget.class);

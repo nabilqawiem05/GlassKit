@@ -612,4 +612,19 @@
     <string name="stack_count">%1$d notifikasi</string>
     <string name="lock_stack">Lock screen kemas (tindan notifikasi, widget elak orang)</string>
     <string name="clock_auto">Warna jam ikut wallpaper</string>
+    <string name="widget_bento_name">Bento (jam, solat, cuaca, langkah)</string>
+    <string name="widget_bento_desc">Jubin kaca kecil: jam, solat seterusnya, cuaca, langkah dan acara seterusnya.</string>
+    <string name="w_battery_line">Bateri %1$d%%</string>
+    <string name="next_prayer_cap">SETERUSNYA · %1$s</string>
+    <string name="clock_layout">Susunan jam</string>
+    <string name="clock_inline">Sebaris</string>
+    <string name="clock_stacked">Bertindan</string>
+    <string name="lock_hijri">Tunjuk tarikh Hijri</string>
+    <string name="hijri_adj">Pelarasan tarikh Hijri</string>
+    <string name="hijri_m1">−1 hari</string>
+    <string name="hijri_0">Asal</string>
+    <string name="hijri_p1">+1 hari</string>
+    <string name="lock_prayer">Kad solat seterusnya di lock screen</string>
+    <string name="isl_ring">Cincin cahaya di keliling kamera</string>
+    <string name="isl_ring_note">Menyala ikut warna app bila notifikasi masuk, dan terisi hijau bila pengecas dipasang.</string>
 </resources>

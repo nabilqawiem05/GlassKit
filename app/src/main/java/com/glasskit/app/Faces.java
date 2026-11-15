@@ -22,7 +22,7 @@ final class Faces {
     static final int COUNT = 4;
     static final int[] NAMES = {R.string.face_main, R.string.face_work, R.string.face_family, R.string.face_night};
     private static final String[] KEYS = {Prefs.CLOCK_SIZE, Prefs.CLOCK_Y, Prefs.CLOCK_COLOR, Prefs.CLOCK_FONT,
-            Prefs.CLOCK_W, Prefs.CLOCK_H, Prefs.CLOCK_GLASS, Prefs.WALL_MOOD};
+            Prefs.CLOCK_W, Prefs.CLOCK_H, Prefs.CLOCK_GLASS, Prefs.WALL_MOOD, Prefs.CLOCK_LAYOUT, Prefs.POP_STYLE, Prefs.CLOCK_AUTO};
     private static final ExecutorService IO = Executors.newSingleThreadExecutor(r -> new Thread(r, "gk-faces"));
 
     static int active(Context c) { return Prefs.get(c).getInt(Prefs.FACE, 0); }

@@ -384,6 +384,26 @@ final class Cards {
         }
     }
 
+    /** Solat seterusnya + pecahan masa berlalu sejak waktu sebelumnya (0..1). */
+    static Object[] nextPrayerInfo(Context c) {
+        try {
+            Prayer.Day dd = Prayer.today(c);
+            if (dd == null) return null;
+            long now = System.currentTimeMillis(), prev = -1;
+            for (int i = 0; i < 6; i++) {
+                if (i == Prayer.SUNRISE) continue;
+                if (dd.t[i] > now) {
+                    if (prev < 0) prev = dd.t[i] - 6 * 3600_000L;
+                    float f = Math.max(0f, Math.min(1f, (now - prev) / (float) Math.max(1, dd.t[i] - prev)));
+                    return new Object[]{c.getString(Prayer.NAMES[i]), Prayer.fmt(c, dd.t[i]), countdown(c, dd.t[i]), f};
+                }
+                prev = dd.t[i];
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
     /** {nama, masa, kira detik} solat seterusnya, atau null jika lokasi belum ditetapkan. */
     static String[] nextPrayer(Context c) {
         try {

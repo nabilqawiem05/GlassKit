@@ -323,6 +323,8 @@ public class MainActivity extends Activity {
         toggle(isl, R.string.isl_ringer_on, Prefs.ISL_RINGER, true);
         toggle(isl, R.string.isl_privacy_on, Prefs.ISL_PRIVACY, true);
         toggle(isl, R.string.isl_shot_on, Prefs.ISL_SHOT, false);
+        toggle(isl, R.string.isl_ring, Prefs.ISL_RING, true);
+        note(isl, getString(R.string.isl_ring_note));
         note(isl, getString(R.string.live_note));
         toggle(isl, R.string.charge_anim, Prefs.CHARGE_ANIM, true);
         button(isl, getString(R.string.btn_test), false, v -> {
@@ -407,6 +409,11 @@ public class MainActivity extends Activity {
         toggle(lk, R.string.lock_on, Prefs.LOCK_ON, false);
         toggle(lk, R.string.lock_zoom, Prefs.LOCK_ZOOM, true);
         toggle(lk, R.string.lock_stack, Prefs.LOCK_STACK, true);
+        toggle(lk, R.string.lock_prayer, Prefs.LOCK_PRAYER, false);
+        toggle(lk, R.string.lock_hijri, Prefs.LOCK_HIJRI, false);
+        label(lk, R.string.hijri_adj);
+        segmented(lk, new int[]{R.string.hijri_m1, R.string.hijri_0, R.string.hijri_p1}, prefs.getInt(Prefs.HIJRI_ADJ, 0) + 1,
+                i -> prefs.edit().putInt(Prefs.HIJRI_ADJ, i - 1).apply());
         label(lk, R.string.pop_title);
         segmented(lk, new int[]{R.string.pop_0, R.string.pop_1, R.string.pop_2, R.string.pop_3},
                 prefs.getInt(Prefs.POP_STYLE, 0), i -> prefs.edit().putInt(Prefs.POP_STYLE, i).apply());
@@ -572,6 +579,9 @@ public class MainActivity extends Activity {
 
         label(clk, R.string.lbl_font);
         fontChips(clk);
+        label(clk, R.string.clock_layout);
+        segmented(clk, new int[]{R.string.clock_inline, R.string.clock_stacked}, prefs.getInt(Prefs.CLOCK_LAYOUT, 0),
+                i -> prefs.edit().putInt(Prefs.CLOCK_LAYOUT, i).apply());
 
         label(clk, R.string.clock_style);
         segmented(clk, new int[]{R.string.style_glass, R.string.style_solid},
