@@ -109,7 +109,7 @@ final class Ui {
         if (apState >= 0) return apState == 13;
         try {
             // siaran "sticky": keadaan terakhir tanpa perlu API tersembunyi
-            Intent st = c.registerReceiver(null, new android.content.IntentFilter("android.net.wifi.WIFI_AP_STATE_CHANGED"),
+            android.content.Intent st = c.registerReceiver(null, new android.content.IntentFilter("android.net.wifi.WIFI_AP_STATE_CHANGED"),
                     Context.RECEIVER_EXPORTED);
             if (st != null) {
                 apState = st.getIntExtra("wifi_state", 11);
