@@ -102,12 +102,7 @@ class StatusBar extends View {
 
         wifi = -1;
         hotspot = false;
-        try {
-            WifiManager wmg = c.getSystemService(WifiManager.class);
-            java.lang.reflect.Method m = wmg.getClass().getMethod("getWifiApState");
-            hotspot = ((Integer) m.invoke(wmg)) == 13;
-        } catch (Throwable ignored) {
-        }
+        hotspot = Ui.hotspotOn(c);
         try {
             ConnectivityManager cm = c.getSystemService(ConnectivityManager.class);
             for (Network n : cm.getAllNetworks()) {

@@ -741,7 +741,19 @@ final class Panels {
         hBattery.setText(lvl >= 0 ? lvl + "%" : "");
         hBatIcon.setKind(ch ? Icon.BOLT : Icon.BATTERY);
         hBatIcon.setColor(ch ? 0xFF30D158 : (lvl >= 0 && lvl <= 15 ? 0xFFFF453A : Color.WHITE));
-        hWifi.setColor(wifiConnected() ? Color.WHITE : Color.argb(90, 255, 255, 255));
+        // kepala panel: Wi-Fi hanya bila benar-benar bersambung; hotspot ditunjuk dengan ikonnya sendiri
+        boolean hsOn = Ui.hotspotOn(s);
+        if (wifiConnected()) {
+            hWifi.setKind(Icon.WIFI);
+            hWifi.setColor(Color.WHITE);
+            hWifi.setVisibility(View.VISIBLE);
+        } else if (hsOn) {
+            hWifi.setKind(Icon.HOTSPOT);
+            hWifi.setColor(0xFF30D158);
+            hWifi.setVisibility(View.VISIBLE);
+        } else {
+            hWifi.setVisibility(View.GONE);
+        }
         hCell.setColor(global("mobile_data") ? Color.WHITE : Color.argb(90, 255, 255, 255));
     }
 
@@ -1841,15 +1853,7 @@ final class Panels {
     private Tile hotspotTile;
 
     /** Keadaan hotspot (WIFI_AP_STATE_ENABLED = 13). */
-    private boolean hotspotOn() {
-        try {
-            android.net.wifi.WifiManager wmg = s.getSystemService(android.net.wifi.WifiManager.class);
-            java.lang.reflect.Method m = wmg.getClass().getMethod("getWifiApState");
-            return ((Integer) m.invoke(wmg)) == 13;
-        } catch (Throwable t) {
-            return false;
-        }
-    }
+    private boolean hotspotOn() { return Ui.hotspotOn(s); }
 
     /** Android tidak benarkan app hidupkan hotspot terus: buka halaman Hotspot sistem (satu ketikan lagi). */
     private void openHotspot() {
@@ -1869,6 +1873,7 @@ final class Panels {
 
     void onHotspotChanged() {
         if (hotspotTile != null) hotspotTile.set(hotspotOn(), null);
+        if (root != null) refreshControl();
     }
 
     // ===================== Kecerahan: auto & Cahaya Malam =====================
@@ -2308,7 +2313,7 @@ final class Panels {
             ConnectivityManager cm = s.getSystemService(ConnectivityManager.class);
             for (Network n : cm.getAllNetworks()) {
                 NetworkCapabilities c = cm.getNetworkCapabilities(n);
-                if (c != null && c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return true;
+                if (c != null && c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return true;
             }
         } catch (Exception ignored) {
         }

@@ -102,6 +102,30 @@ final class Ui {
         return new android.graphics.drawable.BitmapDrawable(c.getResources(), b);
     }
 
+    /** Keadaan hotspot terakhir dari siaran WIFI_AP_STATE_CHANGED (13 = hidup). -1 = belum tahu. */
+    static volatile int apState = -1;
+
+    static boolean hotspotOn(Context c) {
+        if (apState >= 0) return apState == 13;
+        try {
+            // siaran "sticky": keadaan terakhir tanpa perlu API tersembunyi
+            Intent st = c.registerReceiver(null, new android.content.IntentFilter("android.net.wifi.WIFI_AP_STATE_CHANGED"),
+                    Context.RECEIVER_EXPORTED);
+            if (st != null) {
+                apState = st.getIntExtra("wifi_state", 11);
+                return apState == 13;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            android.net.wifi.WifiManager wmg = c.getSystemService(android.net.wifi.WifiManager.class);
+            java.lang.reflect.Method m = wmg.getClass().getMethod("getWifiApState");
+            return ((Integer) m.invoke(wmg)) == 13;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     static int battery(Context c) {
         android.os.BatteryManager bm = c.getSystemService(android.os.BatteryManager.class);
         return bm == null ? -1 : bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);

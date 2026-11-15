@@ -416,6 +416,7 @@ public class PillService extends AccessibilityService
                     if (extras != null) extras.onRinger(i);
                     break;
                 case "android.net.wifi.WIFI_AP_STATE_CHANGED":
+                    Ui.apState = i.getIntExtra("wifi_state", Ui.apState);
                     if (panels != null) panels.onHotspotChanged();
                     if (sbar != null && sbarShown) sbar.refresh();
                     break;
