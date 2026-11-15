@@ -452,6 +452,12 @@ public class PillService extends AccessibilityService
                 case Intent.ACTION_POWER_DISCONNECTED:
                     Automation.fire(PillService.this, Automation.T_UNPLUG, "");
                     if (chargeAnim != null) chargeAnim.hide();
+                    if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
+                        h.postDelayed(ensureLock, 250);
+                        lockMiss = 0;
+                        h.removeCallbacks(lockWatch);
+                        h.postDelayed(lockWatch, 600);
+                    }
                     if (sbar != null && sbarShown) sbar.refresh();
                     GlassWidget.updateAll(PillService.this, BatteryWidget.class);
                     break;
@@ -462,6 +468,13 @@ public class PillService extends AccessibilityService
                     if (sbar != null && sbarShown) sbar.refresh();
                     Sounds.play(PillService.this, Sounds.CHARGE);
                     h.postDelayed(PillService.this::showCharging, 600);
+                    // pasang pengecas = skrin menyala tanpa kitaran biasa: pastikan lock screen GlassKit di depan
+                    if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
+                        h.postDelayed(ensureLock, 250);
+                        lockMiss = 0;
+                        h.removeCallbacks(lockWatch);
+                        h.postDelayed(lockWatch, 600);
+                    }
                     if (prefs.getBoolean(Prefs.NIGHTSTAND, false)) {
                         KeyguardManager kg = getSystemService(KeyguardManager.class);
                         if (kg != null && kg.isKeyguardLocked()) h.postDelayed(PillService.this::showNightstand, 4200);
