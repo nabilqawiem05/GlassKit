@@ -144,12 +144,23 @@ final class Tweaks {
         return s;
     }
 
+    /**
+     * Gabung dengan senarai sedia ada (contoh "Sorok ikon sistem" GlassKit) — jangan tulis ganti,
+     * supaya jam / bateri stock tidak muncul semula.
+     */
     static void setSbHidden(Context c, java.util.Set<String> keys, Done d) {
+        final java.util.Set<String> before = sbHidden(c);
         p(c).edit().putString("sbHidden", String.join(",", keys)).apply();
-        String cmd = keys.isEmpty() ? restoreCmd(c, "secure", "icon_blacklist") + "true"
-                : "settings put secure icon_blacklist '" + String.join(",", keys) + "'";
-        if (keys.isEmpty()) Shell.run(cmd, (ok, o) -> { if (d != null) d.on(ok, o); });
-        else saveThen(c, "secure", "icon_blacklist", cmd, d);
+        Shell.run("settings get secure icon_blacklist", (ok, out) -> {
+            java.util.Set<String> cur = new java.util.LinkedHashSet<>();
+            String v = out == null ? "" : out.trim();
+            if (!v.equals("null")) for (String k : v.split(",")) if (!k.trim().isEmpty()) cur.add(k.trim());
+            for (String k : before) if (!keys.contains(k)) cur.remove(k);
+            cur.addAll(keys);
+            String cmd = cur.isEmpty() ? "settings delete secure icon_blacklist"
+                    : "settings put secure icon_blacklist '" + String.join(",", cur) + "'";
+            Shell.run(cmd, (ok2, o2) -> { if (d != null) d.on(ok2, o2); });
+        });
     }
 
     // ======================= Pulihkan semua =======================
@@ -160,7 +171,6 @@ final class Tweaks {
                 + restoreCmd(c, "global", "window_animation_scale")
                 + "settings put global transition_animation_scale 1; settings put global animator_duration_scale 1; "
                 + restoreCmd(c, "secure", "lock_screen_show_notifications")
-                + restoreCmd(c, "secure", "icon_blacklist")
                 + "settings put secure accessibility_display_daltonizer_enabled 0; setprop debug.hwui.force_dark false; wm density reset; ";
         StringBuilder un = new StringBuilder(cmd);
         for (String pkg : AppTools.restricted(c)) un.append("cmd appops set ").append(pkg).append(" RUN_ANY_IN_BACKGROUND allow; ");
