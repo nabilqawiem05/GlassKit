@@ -168,7 +168,9 @@ final class Tweaks {
             + "connected_display,screen_record,sensors_off,cameraToggle,microphone,mute,wifi_calling";
 
     /** Sorok semua ikon stock (digabung dengan senarai sedia ada, tak tulis ganti). */
-    static void hideStockBar(Context c, boolean on) {
+    static void hideStockBar(Context c, boolean on) { hideStockBar(c, on, false); }
+
+    static void hideStockBar(Context c, boolean on, boolean force) {
         if (!on || !Shell.granted()) return;
         Shell.run("settings get secure icon_blacklist", (ok, out) -> {
             java.util.Set<String> cur = new java.util.LinkedHashSet<>();
@@ -176,7 +178,9 @@ final class Tweaks {
             if (!v.equals("null")) for (String k : v.split(",")) if (!k.trim().isEmpty()) cur.add(k.trim());
             int n = cur.size();
             for (String k : STOCK_ALL.split(",")) cur.add(k);
-            if (cur.size() != n) Shell.run("settings put secure icon_blacklist '" + String.join(",", cur) + "'");
+            // padam dulu kemudian tulis: paksa SystemUI baca semula senarai
+            if (cur.size() != n || force) Shell.run("settings delete secure icon_blacklist; sleep 0.3; settings put secure icon_blacklist '"
+                    + String.join(",", cur) + "'");
         });
     }
 

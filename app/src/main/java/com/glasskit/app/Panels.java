@@ -222,7 +222,10 @@ final class Panels {
     private View addEdge(final boolean left) {
         View v = new View(s);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                Math.round(s.screenW * 0.36f), s.statusH,
+                // separuh skrin setiap satu: seluruh bar status dipegang GlassKit, panel stock tak terbuka
+                // (island sentiasa di atas tetingkap ini, jadi masih boleh diketik)
+                s.prefs.getBoolean(Prefs.BLOCK_STOCK_SHADE, true) ? (s.screenW + 1) / 2 : Math.round(s.screenW * 0.36f),
+                s.statusH + Math.round(s.getResources().getDisplayMetrics().density * 6),
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN

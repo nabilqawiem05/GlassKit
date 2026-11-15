@@ -393,7 +393,12 @@ public class MainActivity extends Activity {
         sb.addView(sr);
         addPair(sr, button(null, getString(R.string.btn_hide_sys), false, v -> {
                     prefs.edit().putBoolean(Prefs.HIDE_SYS_ICONS, true).apply();
-                    Tweaks.hideStockBar(this, true);
+                    if (!Shell.granted()) {
+                        Shell.request();
+                        toast(getString(R.string.need_shizuku));
+                        return;
+                    }
+                    Tweaks.hideStockBar(this, true, true);
                     toast(getString(R.string.t_done));
                 }),
                 button(null, getString(R.string.btn_restore_sys), false, v -> {
