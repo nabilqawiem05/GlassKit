@@ -564,4 +564,13 @@
     <string name="canta_get">Muat turun (GitHub)</string>
     <string name="canta_open">Buka Canta</string>
     <string name="canta_missing">Pasang Canta dahulu</string>
+    <string name="rg_sound">Bunyi</string>
+    <string name="rg_vibrate">Getar</string>
+    <string name="rg_silent">Senyap</string>
+    <string name="rg_title">Bunyi & kelantangan</string>
+    <string name="vol_ring">Nada dering</string>
+    <string name="vol_notif">Notifikasi</string>
+    <string name="vol_alarm">Penggera</string>
+    <string name="vol_call">Panggilan (semasa bercakap)</string>
+    <string name="vol_note">Nada dering 0% akan tukar ke Getar. Penggera tetap berbunyi dalam mod Senyap.</string>
 </resources>

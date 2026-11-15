@@ -571,4 +571,13 @@
     <string name="canta_get">Download (GitHub)</string>
     <string name="canta_open">Open Canta</string>
     <string name="canta_missing">Install Canta first</string>
+    <string name="rg_sound">Sound</string>
+    <string name="rg_vibrate">Vibrate</string>
+    <string name="rg_silent">Silent</string>
+    <string name="rg_title">Sound & volume</string>
+    <string name="vol_ring">Ringtone</string>
+    <string name="vol_notif">Notifications</string>
+    <string name="vol_alarm">Alarm</string>
+    <string name="vol_call">Call (earpiece)</string>
+    <string name="vol_note">Ringtone at 0% switches to Vibrate. Alarms still ring in Silent mode.</string>
 </resources>

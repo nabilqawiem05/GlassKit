@@ -1228,6 +1228,18 @@ final class Panels {
         map.put("bt", tBt);
         map.put("data", tData);
         map.put("dnd", tDnd);
+        final Tile rng = new Tile(Icon.BELL, s.getString(R.string.rg_sound), 0xFFFF375F, null, null);
+        rng.disc.setOnClickListener(x -> {
+            cycleRinger();
+            s.h.postDelayed(() -> paintRinger(rng), 150);
+        });
+        rng.disc.setOnLongClickListener(x -> {
+            x.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            showSoundSheet(rng);
+            return true;
+        });
+        paintRinger(rng);
+        map.put("ringer", rng);
         map.put("plane", tPlane);
         map.put("torch", tTorch);
         map.put("dark", tDark);
@@ -1599,6 +1611,180 @@ final class Panels {
         refreshControl();
         sh.setProgress(1f);
         if (root != null) LiquidGlass.invalidateTree(root);
+    }
+
+    // ===================== Mod bunyi (Bunyi / Getar / Senyap) & kelantangan =====================
+
+    private android.media.AudioManager audio() { return s.getSystemService(android.media.AudioManager.class); }
+
+    private void paintRinger(Tile t) {
+        if (t == null) return;
+        int m = audio().getRingerMode();
+        t.set(m != android.media.AudioManager.RINGER_MODE_NORMAL, null);
+        if (t.label != null) t.label.setText(m == android.media.AudioManager.RINGER_MODE_SILENT ? R.string.rg_silent
+                : m == android.media.AudioManager.RINGER_MODE_VIBRATE ? R.string.rg_vibrate : R.string.rg_sound);
+    }
+
+    private void cycleRinger() {
+        int m = audio().getRingerMode();
+        int next = m == android.media.AudioManager.RINGER_MODE_NORMAL ? android.media.AudioManager.RINGER_MODE_VIBRATE
+                : m == android.media.AudioManager.RINGER_MODE_VIBRATE ? android.media.AudioManager.RINGER_MODE_SILENT
+                : android.media.AudioManager.RINGER_MODE_NORMAL;
+        setRinger(next);
+    }
+
+    /** Tukar mod; jika Android minta akses Jangan Ganggu, beri melalui Shizuku dan cuba lagi. */
+    void setRinger(final int mode) {
+        try {
+            audio().setRingerMode(mode);
+            ringerFeedback(mode);
+        } catch (SecurityException e) {
+            if (!Shell.granted()) {
+                Toast.makeText(s, R.string.need_shizuku, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Shell.run("cmd notification allow_dnd " + s.getPackageName(), (ok, out) -> s.h.postDelayed(() -> {
+                try {
+                    audio().setRingerMode(mode);
+                    ringerFeedback(mode);
+                } catch (Exception ex) {
+                    Toast.makeText(s, R.string.t_fail, Toast.LENGTH_SHORT).show();
+                }
+            }, 250));
+        }
+    }
+
+    private void ringerFeedback(int mode) {
+        if (mode == android.media.AudioManager.RINGER_MODE_VIBRATE) {
+            try {
+                android.os.Vibrator vb = s.getSystemService(android.os.Vibrator.class);
+                if (vb != null) vb.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_HEAVY_CLICK));
+            } catch (Throwable ignored) {
+            }
+        }
+        Toast.makeText(s, mode == android.media.AudioManager.RINGER_MODE_SILENT ? R.string.rg_silent
+                : mode == android.media.AudioManager.RINGER_MODE_VIBRATE ? R.string.rg_vibrate : R.string.rg_sound, Toast.LENGTH_SHORT).show();
+    }
+
+    private void showSoundSheet(final Tile tile) {
+        final LinearLayout list = new LinearLayout(s);
+        list.setOrientation(LinearLayout.VERTICAL);
+        // pilihan mod
+        final LinearLayout modes = new LinearLayout(s);
+        modes.setPadding(0, dp(4), 0, dp(8));
+        final int[] mv = {android.media.AudioManager.RINGER_MODE_NORMAL, android.media.AudioManager.RINGER_MODE_VIBRATE,
+                android.media.AudioManager.RINGER_MODE_SILENT};
+        final int[] mn = {R.string.rg_sound, R.string.rg_vibrate, R.string.rg_silent};
+        final TextView[] chips = new TextView[3];
+        final Runnable[] paint = new Runnable[1];
+        final List<Runnable> sliderRefresh = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            final int m = mv[i];
+            TextView c = Ui.line(s, 14, 650, Color.WHITE);
+            c.setText(mn[i]);
+            c.setGravity(Gravity.CENTER);
+            Ui.press(c);
+            c.setOnClickListener(v -> {
+                setRinger(m);
+                s.h.postDelayed(() -> {
+                    paint[0].run();
+                    for (Runnable r : sliderRefresh) r.run();
+                    paintRinger(tile);
+                }, 350);
+            });
+            chips[i] = c;
+            LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(0, dp(40), 1f);
+            if (i > 0) cl.leftMargin = dp(8);
+            modes.addView(c, cl);
+        }
+        paint[0] = () -> {
+            int cur = audio().getRingerMode();
+            for (int i = 0; i < 3; i++) {
+                boolean on = mv[i] == cur;
+                chips[i].setBackground(Ui.round(on ? Color.WHITE : Color.argb(40, 255, 255, 255), dp(20)));
+                chips[i].setTextColor(on ? 0xFF0B0B10 : Color.WHITE);
+            }
+        };
+        paint[0].run();
+        list.addView(modes, new LinearLayout.LayoutParams(-1, -2));
+        int[] streams = {android.media.AudioManager.STREAM_RING, android.media.AudioManager.STREAM_NOTIFICATION,
+                android.media.AudioManager.STREAM_ALARM, android.media.AudioManager.STREAM_VOICE_CALL};
+        int[] names = {R.string.vol_ring, R.string.vol_notif, R.string.vol_alarm, R.string.vol_call};
+        int[] icons = {Icon.BELL, Icon.NOTE, Icon.MOON, Icon.PHONE};
+        for (int i = 0; i < streams.length; i++) {
+            list.addView(volRow(streams[i], names[i], icons[i], () -> {
+                paint[0].run();
+                paintRinger(tile);
+            }, sliderRefresh));
+        }
+        list.addView(subNote(s.getString(R.string.vol_note)));
+        showSub(s.getString(R.string.rg_title), list, null);
+    }
+
+    private View volRow(final int stream, int name, int icon, final Runnable onChange, List<Runnable> refreshers) {
+        final android.media.AudioManager am = audio();
+        LinearLayout col = new LinearLayout(s);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(0, dp(8), 0, dp(4));
+        LinearLayout top = new LinearLayout(s);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView iv = new ImageView(s);
+        iv.setImageDrawable(Ui.iconDrawable(s, icon, Color.WHITE, Color.argb(60, 255, 255, 255), dp(28)));
+        top.addView(iv, new LinearLayout.LayoutParams(dp(28), dp(28)));
+        TextView t = Ui.line(s, 14, 600, Color.WHITE);
+        t.setText(name);
+        t.setPadding(dp(10), 0, 0, 0);
+        top.addView(t, new LinearLayout.LayoutParams(0, -2, 1f));
+        final TextView pct = Ui.line(s, 13, 600, Color.argb(170, 235, 235, 245));
+        top.addView(pct);
+        col.addView(top);
+        final android.widget.SeekBar sb = new android.widget.SeekBar(s);
+        final int min = am.getStreamMinVolume(stream), max = am.getStreamMaxVolume(stream);
+        sb.setMin(min);
+        sb.setMax(max);
+        sb.setProgressTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+        sb.setThumbTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+        sb.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.argb(90, 255, 255, 255)));
+        final Runnable refresh = () -> {
+            int v = am.getStreamVolume(stream);
+            sb.setProgress(v);
+            pct.setText(Math.round(100f * v / Math.max(1, max)) + "%");
+        };
+        refresh.run();
+        refreshers.add(refresh);
+        sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(android.widget.SeekBar b, int v, boolean user) {
+                if (!user) return;
+                pct.setText(Math.round(100f * v / Math.max(1, max)) + "%");
+                setVol(stream, v, 0);
+            }
+
+            @Override
+            public void onStartTrackingTouch(android.widget.SeekBar b) { }
+
+            @Override
+            public void onStopTrackingTouch(android.widget.SeekBar b) {
+                // dengar contoh bunyi pada tahap baharu
+                setVol(stream, b.getProgress(), stream == android.media.AudioManager.STREAM_VOICE_CALL ? 0
+                        : android.media.AudioManager.FLAG_PLAY_SOUND);
+                s.h.postDelayed(() -> {
+                    refresh.run();
+                    onChange.run();
+                }, 250);
+            }
+        });
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, dp(36));
+        col.addView(sb, sl);
+        return col;
+    }
+
+    private void setVol(int stream, int v, int flags) {
+        try {
+            audio().setStreamVolume(stream, v, flags);
+        } catch (SecurityException e) {
+            if (Shell.granted()) Shell.run("cmd notification allow_dnd " + s.getPackageName());
+        }
     }
 
     // ===================== Senarai Wi-Fi =====================
