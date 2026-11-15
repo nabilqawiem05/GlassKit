@@ -28,7 +28,8 @@ import java.util.Set;
 
 /** Tab "Alatan": tweak sistem melalui Shizuku. Semuanya boleh dipulihkan. */
 final class ToolsPage {
-    private static final String TUNER = "com.zacharee1.systemuituner";
+    private static final String[] CANTA = {"io.github.samolego.canta", "org.samo_lego.canta"};
+    private static final String CANTA_URL = "https://github.com/samolego/Canta/releases/latest";
     private final MainActivity a;
     private final SharedPreferences p;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -164,30 +165,21 @@ final class ToolsPage {
         a.button(au, a.getString(R.string.auto_add), true, v -> addRule());
 
         // ---------- Lain-lain ----------
-        LinearLayout tu = a.card(box, R.string.tl_tuner, Icon.GEAR, 0xFF64D2FF);
-        a.note(tu, a.getString(R.string.tl_tuner_note));
-        LinearLayout tr = new LinearLayout(a);
-        tu.addView(tr);
-        a.addPair(tr, a.button(null, a.getString(R.string.tuner_get), false, v -> {
-                    Intent i = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=" + TUNER));
-                    try {
-                        a.startActivity(i);
-                    } catch (Exception e) {
-                        a.startActivity(new Intent(Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://play.google.com/store/apps/details?id=" + TUNER)));
+        LinearLayout ca = a.card(box, R.string.tl_canta, Icon.GEAR, 0xFF64D2FF);
+        a.note(ca, a.getString(R.string.tl_canta_note));
+        LinearLayout cr = new LinearLayout(a);
+        ca.addView(cr);
+        a.addPair(cr, a.button(null, a.getString(R.string.canta_get), false, v ->
+                        a.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(CANTA_URL)))),
+                a.button(null, a.getString(R.string.canta_open), true, v -> {
+                    for (String pk : CANTA) {
+                        Intent i = a.getPackageManager().getLaunchIntentForPackage(pk);
+                        if (i != null) {
+                            a.startActivity(i);
+                            return;
+                        }
                     }
-                }),
-                a.button(null, a.getString(R.string.tuner_grant), true, v -> {
-                    if (!needShell()) return;
-                    try {
-                        a.getPackageManager().getPackageInfo(TUNER, 0);
-                    } catch (Exception e) {
-                        a.toast(a.getString(R.string.tuner_missing));
-                        return;
-                    }
-                    Shell.run("pm grant " + TUNER + " android.permission.WRITE_SECURE_SETTINGS; pm grant " + TUNER
-                            + " android.permission.DUMP; pm grant " + TUNER + " android.permission.PACKAGE_USAGE_STATS; true",
-                            (ok, out) -> a.toast(a.getString(ok ? R.string.tuner_ok : R.string.t_fail)));
+                    a.toast(a.getString(R.string.canta_missing));
                 }));
 
         LinearLayout o = a.card(box, R.string.tl_more, Icon.GEAR, 0xFF8E8E93);

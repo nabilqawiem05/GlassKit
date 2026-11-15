@@ -559,4 +559,9 @@
     <string name="wifi_saved_hint">Android tak benarkan app tukar ke rangkaian disimpan. Ketik sekali dalam senarai ini.</string>
     <string name="wifi_scanning">Mencari…</string>
     <string name="wifi_secured">Dilindungi</string>
+    <string name="tl_canta">Canta (buang bloatware)</string>
+    <string name="tl_canta_note">App percuma untuk buang app terpasang yang tak digunakan, melalui Shizuku. Buang hanya app berlabel Recommended. App yang dibuang boleh dipulihkan dalam Canta.</string>
+    <string name="canta_get">Muat turun (GitHub)</string>
+    <string name="canta_open">Buka Canta</string>
+    <string name="canta_missing">Pasang Canta dahulu</string>
 </resources>

@@ -566,4 +566,9 @@
     <string name="wifi_saved_hint">Android doesn\'t let apps switch to saved networks. Tap it once in this list.</string>
     <string name="wifi_scanning">Searching…</string>
     <string name="wifi_secured">Secured</string>
+    <string name="tl_canta">Canta (remove bloatware)</string>
+    <string name="tl_canta_note">Free app that uninstalls pre-installed apps you don\'t use, through Shizuku. Only remove apps marked Recommended. Removed apps can be restored inside Canta.</string>
+    <string name="canta_get">Download (GitHub)</string>
+    <string name="canta_open">Open Canta</string>
+    <string name="canta_missing">Install Canta first</string>
 </resources>
