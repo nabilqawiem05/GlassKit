@@ -406,6 +406,7 @@ public class MainActivity extends Activity {
         LinearLayout lk = card(pLock, R.string.sec_lock, Icon.LOCK, 0xFFFF9F0A);
         toggle(lk, R.string.lock_on, Prefs.LOCK_ON, false);
         toggle(lk, R.string.lock_zoom, Prefs.LOCK_ZOOM, true);
+        toggle(lk, R.string.lock_stack, Prefs.LOCK_STACK, true);
         label(lk, R.string.pop_title);
         segmented(lk, new int[]{R.string.pop_0, R.string.pop_1, R.string.pop_2, R.string.pop_3},
                 prefs.getInt(Prefs.POP_STYLE, 0), i -> prefs.edit().putInt(Prefs.POP_STYLE, i).apply());
@@ -539,6 +540,23 @@ public class MainActivity extends Activity {
         LinearLayout cr = new LinearLayout(this);
         cr.setGravity(Gravity.CENTER_VERTICAL);
         clk.addView(cr);
+        {
+            // "Auto": warna lembut dari wallpaper
+            View chip = new View(this);
+            GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFFF5D06F, 0xFF8AB4F8, 0xFFC8B6FF});
+            g.setShape(GradientDrawable.OVAL);
+            g.setStroke(dp(1.5f), Color.argb(90, 255, 255, 255));
+            chip.setBackground(g);
+            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(dp(38), dp(38));
+            l.rightMargin = dp(12);
+            l.topMargin = dp(4);
+            chip.setOnClickListener(v -> {
+                prefs.edit().putBoolean(Prefs.CLOCK_AUTO, true).apply();
+                toast(getString(R.string.clock_auto));
+            });
+            Ui.press(chip);
+            cr.addView(chip, l);
+        }
         for (int c : COLORS) {
             View chip = new View(this);
             GradientDrawable g = Ui.circle(c);
@@ -547,7 +565,7 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(dp(38), dp(38));
             l.rightMargin = dp(12);
             l.topMargin = dp(4);
-            chip.setOnClickListener(v -> prefs.edit().putInt(Prefs.CLOCK_COLOR, c).apply());
+            chip.setOnClickListener(v -> prefs.edit().putInt(Prefs.CLOCK_COLOR, c).putBoolean(Prefs.CLOCK_AUTO, false).apply());
             Ui.press(chip);
             cr.addView(chip, l);
         }

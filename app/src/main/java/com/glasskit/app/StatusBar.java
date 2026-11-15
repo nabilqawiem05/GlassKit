@@ -140,7 +140,7 @@ class StatusBar extends View {
                         if ((n.flags & Notification.FLAG_GROUP_SUMMARY) != 0 && arr.length > 1) continue;
                         if (sbn.getPackageName().equals(c.getPackageName())) continue;
                         if (!seen.add(sbn.getPackageName())) continue;
-                        if (notifs.size() >= 4) { moreNotifs++; continue; }
+                        if (notifs.size() >= 3) { moreNotifs++; continue; }
                         if (n.getSmallIcon() == null) continue;
                         Drawable d = n.getSmallIcon().loadDrawable(c);
                         if (d == null) continue;
@@ -160,7 +160,11 @@ class StatusBar extends View {
     private float leftWidth() {
         float w = text.measureText(time);
         if (!notifs.isEmpty()) w += dp(8) + notifs.size() * dp(16) + (notifs.size() - 1) * dp(5);
-        if (moreNotifs > 0) w += dp(12);
+        if (moreNotifs > 0) {
+            sp.setTextSize(dp(10.5f));
+            sp.setTypeface(Ui.font(700));
+            w += sp.measureText("+" + moreNotifs) + dp(2);
+        }
         return w;
     }
 
@@ -251,8 +255,11 @@ class StatusBar extends View {
             x += is + dp(5);
         }
         if (moreNotifs > 0) {
-            fill.setColor(Color.WHITE);
-            c.drawCircle(x + dp(3), cy, dp(2.4f), fill);
+            sp.setTextSize(dp(10.5f));
+            sp.setTypeface(Ui.font(700));
+            sp.setColor(Color.argb(230, 255, 255, 255));
+            Paint.FontMetrics mf = sp.getFontMetrics();
+            c.drawText("+" + moreNotifs, x, cy - (mf.ascent + mf.descent) / 2f, sp);
         }
 
         // ---- kanan: kelajuan, DND, signal, Wi-Fi, bateri ----

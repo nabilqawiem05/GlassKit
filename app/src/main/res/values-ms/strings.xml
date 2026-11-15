@@ -609,4 +609,7 @@
     <string name="pop_2">Bayang</string>
     <string name="pop_3">Gabung</string>
     <string name="pop_note">Bingkai: orang melangkah keluar dari gambar berbingkai. Bayang: orang terangkat dari skrin dengan bayang lembut. Gabung: bingkai + bayang. Perlu gambar yang ada potongan orang (wallpaper depth).</string>
+    <string name="stack_count">%1$d notifikasi</string>
+    <string name="lock_stack">Lock screen kemas (tindan notifikasi, widget elak orang)</string>
+    <string name="clock_auto">Warna jam ikut wallpaper</string>
 </resources>

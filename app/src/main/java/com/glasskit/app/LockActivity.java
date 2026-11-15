@@ -125,6 +125,8 @@ public class LockActivity extends Activity {
     private UnlockAnim lockAnim;
     private RevealView reveal;
     private static Bitmap lastPlain;
+    /** Kotak orang dalam gambar (piksel skrin) untuk elak widget bertindih. */
+    private static volatile RectF subjScreen;
     private static String plainKey = "";
 
     private static String imgKey(SharedPreferences p) {
@@ -386,6 +388,10 @@ public class LockActivity extends Activity {
     protected void onPause() {
         super.onPause();
         visible = false;
+        if (stackOpen) {
+            stackOpen = false; // tindan semula bila skrin dimatikan / dibuka kunci
+            refreshNotifs();
+        }
         if (leaving) holdUntil = System.currentTimeMillis() + 5000;
         if (PillService.inst != null) PillService.inst.hideBanner(false);
         h.removeCallbacks(lockPoll);
@@ -586,6 +592,13 @@ public class LockActivity extends Activity {
                 out = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
                 DepthRenderer.draw(app, new Canvas(out), w, hh, bgB, fgB, prefs, true);
                 nb.set(out, w, hh);
+                if (fgB != null) {
+                    RectF sbx = DepthRenderer.subjectBox(fgB, DepthRenderer.centerCrop(fgB, w, hh));
+                    float sc = (float) app.getResources().getDisplayMetrics().widthPixels / w;
+                    subjScreen = new RectF(sbx.left * sc, sbx.top * sc, sbx.right * sc, sbx.bottom * sc);
+                } else {
+                    subjScreen = null;
+                }
                 int pop = prefs.getInt(Prefs.POP_STYLE, 0);
                 if (pop != 0 && bgB != null && fgB != null) {
                     Bitmap pl = lastPlain;
@@ -614,6 +627,7 @@ public class LockActivity extends Activity {
                     }
                     if (!isDestroyed()) {
                         wall.setImageBitmap(done);
+                        if (gauges != null) gauges.invalidate();
                         copyBd(nb, bd);
                         LiquidGlass.invalidateTree(ui);
                         gauges.invalidate();
@@ -650,7 +664,7 @@ public class LockActivity extends Activity {
                 String line;
                 int col = Ui.accent(ctx, false);
                 if (ev.isEmpty()) {
-                    line = Data.dayLabel(ctx, System.currentTimeMillis()) + " · " + ctx.getString(R.string.no_events);
+                    line = ""; // tiada acara: baris disorok supaya kemas
                 } else {
                     Data.Event e = ev.get(0);
                     col = e.color;
@@ -697,32 +711,62 @@ public class LockActivity extends Activity {
             String line = gLine;
             if (line == null) return;
             int col = gCol;
-            line = Draw3D.fit(line, 16 * u, 700, w - 60 * u);
-            float tw = Draw3D.measure(line, 16 * u, 700);
-            Path bar = new Path();
-            bar.addRoundRect(new RectF(cx - tw / 2f - 12 * u, 8 * u, cx - tw / 2f - 7 * u, 26 * u), 3 * u, 3 * u, Path.Direction.CW);
-            Draw3D.shape(c, bar, 10 * u, col);
-            Draw3D.text(c, line, cx + 2 * u, 23 * u, 16 * u, 700, Color.WHITE, Draw3D.CENTER);
+            boolean hasLine = !line.isEmpty();
+            if (hasLine) {
+                line = Draw3D.fit(line, 16 * u, 700, w - 60 * u);
+                float tw = Draw3D.measure(line, 16 * u, 700);
+                Path bar = new Path();
+                bar.addRoundRect(new RectF(cx - tw / 2f - 12 * u, 8 * u, cx - tw / 2f - 7 * u, 26 * u), 3 * u, 3 * u, Path.Direction.CW);
+                Draw3D.shape(c, bar, 10 * u, col);
+                Draw3D.text(c, line, cx + 2 * u, 23 * u, 16 * u, 700, Color.WHITE, Draw3D.CENTER);
+            }
 
-            // baris 2: cuaca, langkah, bateri
-            float cy = 82 * u, gap = 96 * u;
+            // baris 2: cuaca, langkah, bateri — dialih ke tepi jika bertindih dengan orang dalam gambar
+            float cy = (hasLine ? 82 : 50) * u, gap = 96 * u;
+            float xW = cx - gap, xS = cx, xB = cx + gap;
+            boolean showW = true;
+            RectF sb = subjScreen;
+            if (sb != null && prefs.getBoolean(Prefs.LOCK_STACK, true)) {
+                float sl = sb.left - lc[0], sr = sb.right - lc[0], rowTop = cy - 35 * u, rowBot = cy + 40 * u;
+                boolean overlapY = sb.top - lc[1] < rowBot && sb.bottom - lc[1] > rowTop;
+                boolean overlapX = sl < xB + 30 * u && sr > xW - 30 * u;
+                if (overlapY && overlapX) {
+                    java.util.List<Float> slots = new java.util.ArrayList<>();
+                    for (float x = 38 * u; x + 32 * u <= sl; x += 70 * u) slots.add(x);
+                    java.util.List<Float> right = new java.util.ArrayList<>();
+                    for (float x = w - 38 * u; x - 32 * u >= sr; x -= 70 * u) right.add(0, x);
+                    slots.addAll(right);
+                    if (slots.size() >= 3) {
+                        xW = slots.get(0);
+                        xS = slots.get(slots.size() >= 4 || right.size() < 2 ? 1 : slots.size() - 2);
+                        xB = slots.get(slots.size() - 1);
+                        if (xS == xB) xS = slots.get(1);
+                    } else if (slots.size() == 2) {
+                        showW = false;
+                        xS = slots.get(0);
+                        xB = slots.get(1);
+                    }
+                }
+            }
             Data.Weather wx = gWx;
-            if (wx != null) {
-                Draw3D.weather(c, wx.code, wx.day, cx - gap, cy - 12 * u, 40 * u);
-                Draw3D.text(c, Math.round(wx.temp) + "°", cx - gap, cy + 34 * u, 17 * u, 700, Color.WHITE, Draw3D.CENTER);
-            } else {
-                Draw3D.weather(c, 2, true, cx - gap, cy - 12 * u, 40 * u);
+            if (showW) {
+                if (wx != null) {
+                    Draw3D.weather(c, wx.code, wx.day, xW, cy - 12 * u, 40 * u);
+                    Draw3D.text(c, Math.round(wx.temp) + "°", xW, cy + 34 * u, 17 * u, 700, Color.WHITE, Draw3D.CENTER);
+                } else {
+                    Draw3D.weather(c, 2, true, xW, cy - 12 * u, 40 * u);
+                }
             }
             int steps = gSteps;
             int goal = Math.max(1000, prefs.getInt("stepGoal", 10000));
-            Draw3D.ring(c, cx, cy, 27 * u, 6 * u, steps / (float) goal, 0xFF30D158, Color.argb(70, 48, 209, 88));
+            Draw3D.ring(c, xS, cy, 27 * u, 6 * u, steps / (float) goal, 0xFF30D158, Color.argb(70, 48, 209, 88));
             String st = steps >= 10000 ? (steps / 1000) + "k" : String.valueOf(steps);
-            Draw3D.text(c, st, cx, cy + 5 * u, 14 * u, 800, Color.WHITE, Draw3D.CENTER);
+            Draw3D.text(c, st, xS, cy + 5 * u, 14 * u, 800, Color.WHITE, Draw3D.CENTER);
             int lvl = gLvl;
             boolean ch = gCharging;
-            Draw3D.ring(c, cx + gap, cy, 27 * u, 6 * u, lvl / 100f, ch ? 0xFF30D158 : (lvl <= 20 ? 0xFFFF453A : Color.WHITE),
+            Draw3D.ring(c, xB, cy, 27 * u, 6 * u, lvl / 100f, ch ? 0xFF30D158 : (lvl <= 20 ? 0xFFFF453A : Color.WHITE),
                     Color.argb(70, 255, 255, 255));
-            Draw3D.text(c, lvl + "%", cx + gap, cy + 5 * u, 14 * u, 800, Color.WHITE, Draw3D.CENTER);
+            Draw3D.text(c, lvl + "%", xB, cy + 5 * u, 14 * u, 800, Color.WHITE, Draw3D.CENTER);
         }
     }
 
@@ -793,6 +837,7 @@ public class LockActivity extends Activity {
     /** Kembangkan notifikasi (dari banner) dan skrol ke atas. */
     void expand(String key) {
         expanded.add(key);
+        stackOpen = true;
         refreshNotifs();
         if (notifScroll != null) notifScroll.post(() -> notifScroll.smoothScrollTo(0, 0));
     }
@@ -825,8 +870,33 @@ public class LockActivity extends Activity {
                 || (x.getNotification().flags & Notification.FLAG_GROUP_SUMMARY) != 0
                 || x.getPackageName().equals(getPackageName()));
         list.sort((a, b) -> Long.compare(b.getPostTime(), a.getPostTime()));
-        clearAll.setVisibility(list.isEmpty() ? View.GONE : View.VISIBLE);
+        boolean stack = prefs.getBoolean(Prefs.LOCK_STACK, true) && list.size() > 1 && !stackOpen;
+        clearAll.setVisibility(list.isEmpty() || stack ? View.GONE : View.VISIBLE);
         fitNotifs();
+        if (stack) {
+            // tindanan gaya iOS: satu pil kecil supaya gambar kelihatan penuh
+            boolean fresh = false;
+            java.util.Set<String> nowKeys = new java.util.HashSet<>();
+            for (StatusBarNotification x : list) {
+                nowKeys.add(x.getKey());
+                if (seenNotifs != null && !seenNotifs.contains(x.getKey())) fresh = true;
+            }
+            seenNotifs = nowKeys;
+            View pill = stackPill(list);
+            FrameLayout wrap = new FrameLayout(this);
+            wrap.addView(pill, new FrameLayout.LayoutParams(-2, dp(44), Gravity.CENTER_HORIZONTAL));
+            LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(-1, -2);
+            wl.topMargin = dp(8);
+            notifList.addView(wrap, wl);
+            if (fresh) {
+                pill.setScaleX(0.85f);
+                pill.setScaleY(0.85f);
+                pill.setTranslationY(-dp(14));
+                pill.animate().scaleX(1f).scaleY(1f).translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                pill.postDelayed(() -> pill.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM), 90);
+            }
+            return;
+        }
         boolean bumped = false;
         java.util.Set<String> now = new java.util.HashSet<>();
         for (StatusBarNotification sbn : list) {
@@ -851,6 +921,57 @@ public class LockActivity extends Activity {
             }
         }
         seenNotifs = now;
+        if (stackOpen && prefs.getBoolean(Prefs.LOCK_STACK, true) && list.size() > 1) {
+            TextView less = pill(getString(R.string.show_less), false);
+            FrameLayout wrap = new FrameLayout(this);
+            wrap.addView(less, new FrameLayout.LayoutParams(-2, dp(36), Gravity.CENTER_HORIZONTAL));
+            less.setOnClickListener(v -> {
+                stackOpen = false;
+                refreshNotifs();
+            });
+            LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(-1, -2);
+            wl.topMargin = dp(10);
+            notifList.addView(wrap, wl);
+        }
+    }
+
+    private boolean stackOpen;
+
+    /** Pil "N notifikasi" dengan ikon app bertindih. */
+    private View stackPill(List<StatusBarNotification> list) {
+        LinearLayout p = new LinearLayout(this);
+        p.setGravity(Gravity.CENTER_VERTICAL);
+        p.setPadding(dp(10), 0, dp(18), 0);
+        p.setBackground(GlassEngine.drawable(this, 22, true, 30));
+        java.util.LinkedHashSet<String> pk = new java.util.LinkedHashSet<>();
+        for (StatusBarNotification x : list) {
+            pk.add(x.getPackageName());
+            if (pk.size() >= 3) break;
+        }
+        int i = 0;
+        for (String k : pk) {
+            ImageView iv = new ImageView(this);
+            try {
+                iv.setImageDrawable(getPackageManager().getApplicationIcon(k));
+            } catch (Exception e) {
+                continue;
+            }
+            LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(dp(26), dp(26));
+            if (i > 0) il.leftMargin = -dp(9);
+            iv.setElevation(dp(3 - i));
+            p.addView(iv, il);
+            i++;
+        }
+        TextView t = Ui.line(this, 14, 650, Color.WHITE);
+        t.setText(getString(R.string.stack_count, list.size()));
+        t.setPadding(dp(10), 0, 0, 0);
+        p.addView(t);
+        p.setOnClickListener(v -> {
+            stackOpen = true;
+            refreshNotifs();
+        });
+        Ui.press(p);
+        return p;
     }
 
     private java.util.Set<String> seenNotifs;

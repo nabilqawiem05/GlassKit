@@ -359,8 +359,13 @@ final class Cards {
         int fit = Math.max(1, (int) (r.height() / (38 * d)));
         List<Data.Event> ev = Data.events(c, 7, Math.min(max, fit));
         if (ev.isEmpty()) {
-            GlassEngine.icon(c, cv, Icon.NOTE, r.left + 9 * d, r.top + 12 * d, 16 * d, t.muted);
-            text(cv, c.getString(R.string.w_no_events), r.left + 24 * d, r.top + 17 * d, 13 * d, 600, t.muted, AL, r.width() - 24 * d);
+            // tiada acara: tunjuk waktu solat seterusnya (lebih berguna dari "tiada acara")
+            String[] np = nextPrayer(c);
+            if (np != null) {
+                text(cv, up(np[0]), r.left, r.top + 12 * d, 11 * d, 700, 0xFF30D158, AL, r.width());
+                text(cv, np[1], r.left - 1 * d, r.top + 40 * d, 24 * d, 700, t.primary, AL, r.width());
+                text(cv, np[2], r.left, r.top + 58 * d, 11.5f * d, 600, t.secondary, AL, r.width());
+            }
             return;
         }
         float y = r.top + 2 * d;
@@ -377,6 +382,21 @@ final class Cards {
             eventRow(c, cv, r.left, y, r.width(), e, t, d);
             y += 38 * d;
         }
+    }
+
+    /** {nama, masa, kira detik} solat seterusnya, atau null jika lokasi belum ditetapkan. */
+    static String[] nextPrayer(Context c) {
+        try {
+            Prayer.Day dd = Prayer.today(c);
+            if (dd == null) return null;
+            long now = System.currentTimeMillis();
+            for (int i = 0; i < 6; i++) {
+                if (i == Prayer.SUNRISE) continue;
+                if (dd.t[i] > now) return new String[]{c.getString(Prayer.NAMES[i]), Prayer.fmt(c, dd.t[i]), countdown(c, dd.t[i])};
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     static String countdown(Context c, long to) {
@@ -396,7 +416,8 @@ final class Cards {
             if (ev == null) {
                 text(cv, c.getString(R.string.w_need_calendar), r.left, r.bottom - 4 * d, 11.5f * d, 600, t.muted, AL, r.width());
             } else if (ev.isEmpty()) {
-                text(cv, c.getString(R.string.w_no_events), r.left, r.bottom - 4 * d, 12 * d, 600, t.muted, AL, r.width());
+                String[] np = nextPrayer(c);
+                if (np != null) text(cv, np[0] + " " + np[1] + " · " + np[2], r.left, r.bottom - 4 * d, 11.5f * d, 600, t.secondary, AL, r.width());
             } else {
                 Data.Event e = ev.get(0);
                 boolean live = e.begin <= System.currentTimeMillis();

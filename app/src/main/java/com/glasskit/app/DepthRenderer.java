@@ -192,6 +192,7 @@ public final class DepthRenderer {
     /** Lukis tarikh + jam sahaja (digunakan juga oleh lapisan jam 3D). */
     static void drawClock(Context ctx, Canvas c, int w, int h, Bitmap bg, RectF bgRect, SharedPreferences p) {
             int color = p.getInt(Prefs.CLOCK_COLOR, Color.WHITE);
+            if (p.getBoolean(Prefs.CLOCK_AUTO, false) && bg != null) color = autoColor(bg);
             boolean glass = p.getBoolean(Prefs.CLOCK_GLASS, true);
             boolean dark = Ui.darkGlass(ctx);
             float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
@@ -228,6 +229,53 @@ public final class DepthRenderer {
         path.computeBounds(b, true);
         float top = b.top - size * 0.16f - Math.max(28f, size * 0.15f) * 1.4f;
         return new float[]{Math.max(0, top - size * 0.1f), Math.min(h, b.bottom + size * 0.12f)};
+    }
+
+    private static Bitmap autoSrc;
+    private static int autoCol = Color.WHITE;
+
+    /** Warna jam lembut diambil dari wallpaper (pastel, cukup terang untuk dibaca). */
+    static synchronized int autoColor(Bitmap bg) {
+        if (bg == autoSrc) return autoCol;
+        int c = Color.WHITE;
+        try {
+            android.app.WallpaperColors wc = android.app.WallpaperColors.fromBitmap(bg);
+            android.graphics.Color pc = wc.getPrimaryColor();
+            float[] hsl = new float[3];
+            androidx_hsl(pc.toArgb(), hsl);
+            hsl[1] = Math.min(0.55f, Math.max(0.25f, hsl[1]));
+            hsl[2] = 0.86f;
+            c = hslToRgb(hsl);
+        } catch (Throwable ignored) {
+        }
+        autoSrc = bg;
+        autoCol = c;
+        return c;
+    }
+
+    private static void androidx_hsl(int rgb, float[] out) {
+        float r = Color.red(rgb) / 255f, g = Color.green(rgb) / 255f, b = Color.blue(rgb) / 255f;
+        float max = Math.max(r, Math.max(g, b)), min = Math.min(r, Math.min(g, b)), l = (max + min) / 2f, h = 0, s = 0;
+        if (max != min) {
+            float d = max - min;
+            s = l > 0.5f ? d / (2f - max - min) : d / (max + min);
+            if (max == r) h = ((g - b) / d + (g < b ? 6 : 0));
+            else if (max == g) h = (b - r) / d + 2;
+            else h = (r - g) / d + 4;
+            h *= 60f;
+        }
+        out[0] = h;
+        out[1] = s;
+        out[2] = l;
+    }
+
+    private static int hslToRgb(float[] hsl) {
+        float h = hsl[0], s = hsl[1], l = hsl[2];
+        float c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60f) % 2 - 1)), m = l - c / 2f;
+        float r, g, b;
+        if (h < 60) { r = c; g = x; b = 0; } else if (h < 120) { r = x; g = c; b = 0; } else if (h < 180) { r = 0; g = c; b = x; }
+        else if (h < 240) { r = 0; g = x; b = c; } else if (h < 300) { r = x; g = 0; b = c; } else { r = c; g = 0; b = x; }
+        return Color.rgb(Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255));
     }
 
     /** Kedudukan bingkai gaya "Bingkai" (di bawah kepala subjek). */

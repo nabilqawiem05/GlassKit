@@ -616,4 +616,7 @@
     <string name="pop_2">Shadow</string>
     <string name="pop_3">Both</string>
     <string name="pop_note">Frame: the person steps out of a framed photo. Shadow: the person lifts off the screen with a soft shadow. Both: frame + shadow. Needs a photo with a person cut out (depth wallpaper).</string>
+    <string name="stack_count">%1$d notifications</string>
+    <string name="lock_stack">Tidy lock screen (stack notifications, keep widgets off people)</string>
+    <string name="clock_auto">Clock colour follows the wallpaper</string>
 </resources>
