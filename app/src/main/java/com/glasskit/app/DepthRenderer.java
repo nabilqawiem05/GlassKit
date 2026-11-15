@@ -121,7 +121,18 @@ public final class DepthRenderer {
             c.drawColor(Color.rgb(28, 36, 48));
         }
 
-        if (showClock) {
+        if (showClock) drawClock(ctx, c, w, h, bg, bgRect, p);
+
+        if (fg != null) {
+            c.drawBitmap(fg, null, centerCrop(fg, w, h), bmp);
+        }
+        if (p.getBoolean(Prefs.WALL_MOOD, false)) {
+            try { Mood.apply(ctx, c, w, h); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** Lukis tarikh + jam sahaja (digunakan juga oleh lapisan jam 3D). */
+    static void drawClock(Context ctx, Canvas c, int w, int h, Bitmap bg, RectF bgRect, SharedPreferences p) {
             int color = p.getInt(Prefs.CLOCK_COLOR, Color.WHITE);
             boolean glass = p.getBoolean(Prefs.CLOCK_GLASS, true);
             boolean dark = Ui.darkGlass(ctx);
@@ -149,14 +160,16 @@ public final class DepthRenderer {
                 fp.setColor(color);
                 c.drawPath(path, fp);
             }
-        }
+    }
 
-        if (fg != null) {
-            c.drawBitmap(fg, null, centerCrop(fg, w, h), bmp);
-        }
-        if (p.getBoolean(Prefs.WALL_MOOD, false)) {
-            try { Mood.apply(ctx, c, w, h); } catch (Throwable ignored) {}
-        }
+    /** Sempadan menegak (atas, bawah) kawasan tarikh + jam pada skrin. */
+    static float[] clockBounds(Context ctx, SharedPreferences p, int w, int h) {
+        float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
+        Path path = clockPath(ctx, p, w, h);
+        RectF b = new RectF();
+        path.computeBounds(b, true);
+        float top = b.top - size * 0.16f - Math.max(28f, size * 0.15f) * 1.4f;
+        return new float[]{Math.max(0, top - size * 0.1f), Math.min(h, b.bottom + size * 0.12f)};
     }
 
     /** Kedudukan Y (piksel skrin) bahagian paling atas subjek, atau -1. */

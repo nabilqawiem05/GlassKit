@@ -123,6 +123,31 @@ public class LockActivity extends Activity {
         });
     }
     private UnlockAnim lockAnim;
+    private Depth3DView depth3d;
+    /** Lapisan 3D terakhir: {bg, fg, depth, clock, clockTop, key, w, h}. */
+    private static Object[] last3d;
+
+    private boolean want3d() {
+        return prefs.getBoolean(Prefs.DEPTH_3D, true) && !prefs.getBoolean(Prefs.WALL_MOOD, false);
+    }
+
+    private void apply3d(Object[] L) {
+        if (depth3d == null || L == null || !want3d() || android.os.Build.VERSION.SDK_INT < 33) {
+            if (depth3d != null) {
+                depth3d.stop();
+                depth3d.clear();
+                depth3d.setVisibility(View.GONE);
+            }
+            return;
+        }
+        if ((int) L[6] != W || (int) L[7] != H) return;
+        float str = prefs.getInt(Prefs.DEPTH_STR, 60) / 60f;
+        depth3d.setLayers((Bitmap) L[0], (Bitmap) L[1], (Bitmap) L[2], (Bitmap) L[3], (float) L[4], W, H, str);
+        if (depth3d.ready()) {
+            depth3d.setVisibility(View.VISIBLE);
+            if (visible) depth3d.start();
+        }
+    }
     private TextView hint, clearAll;
     private Bitmap frame, bg, fg;
     private long imgVer = Long.MIN_VALUE;
@@ -233,6 +258,24 @@ public class LockActivity extends Activity {
             }
         }
 
+        // wallpaper 3D (peta kedalaman) di atas bingkai biasa; ikut semua transformasi "wall"
+        depth3d = new Depth3DView(this);
+        depth3d.setVisibility(View.GONE);
+        root.addView(depth3d, new FrameLayout.LayoutParams(-1, -1));
+        root.getViewTreeObserver().addOnPreDrawListener(() -> {
+            if (depth3d.getVisibility() == View.VISIBLE) {
+                depth3d.setScaleX(wall.getScaleX());
+                depth3d.setScaleY(wall.getScaleY());
+                depth3d.setTranslationX(wall.getTranslationX());
+                depth3d.setTranslationY(wall.getTranslationY());
+                depth3d.setAlpha(wall.getAlpha());
+            }
+            return true;
+        });
+        synchronized (lastBd) {
+            if (last3d != null) apply3d(last3d);
+        }
+
         ui = new FrameLayout(this);
         root.addView(ui, new FrameLayout.LayoutParams(-1, -1));
 
@@ -321,6 +364,7 @@ public class LockActivity extends Activity {
     protected void onResume() {
         super.onResume();
         visible = true;
+        if (depth3d != null && depth3d.ready() && depth3d.getVisibility() == View.VISIBLE) depth3d.start();
         holdUntil = 0;
         // tanggalkan penutup selepas bingkai pertama aktiviti ini dilukis
         getWindow().getDecorView().postDelayed(() -> {
@@ -341,6 +385,7 @@ public class LockActivity extends Activity {
     protected void onPause() {
         super.onPause();
         visible = false;
+        if (depth3d != null) depth3d.stop();
         if (leaving) holdUntil = System.currentTimeMillis() + 5000;
         if (PillService.inst != null) PillService.inst.hideBanner(false);
         h.removeCallbacks(lockPoll);
@@ -518,7 +563,12 @@ public class LockActivity extends Activity {
         } catch (Throwable ignored) {
         }
         final String key = frameKey();
-        if (key.equals(lastKey) && frame != null) return;
+        if (key.equals(lastKey) && frame != null) {
+            synchronized (lastBd) {
+                if (last3d != null && key.equals(last3d[5]) && depth3d != null && !depth3d.ready()) apply3d(last3d);
+            }
+            return;
+        }
         if (renderBusy) {
             renderAgain = true;
             return;
@@ -535,6 +585,26 @@ public class LockActivity extends Activity {
                 out = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
                 DepthRenderer.draw(app, new Canvas(out), w, hh, bgB, fgB, prefs, true);
                 nb.set(out, w, hh);
+                // lapisan 3D: peta kedalaman (dikira sekali bagi setiap wallpaper) + jam berasingan
+                if (bgB != null && prefs.getBoolean(Prefs.DEPTH_3D, true) && !prefs.getBoolean(Prefs.WALL_MOOD, false)) {
+                    try {
+                        Bitmap dm = DepthMap.ensure(app, bgB, fgB);
+                        if (dm != null) {
+                            float[] cb = DepthRenderer.clockBounds(app, prefs, w, hh);
+                            int ch = Math.max(1, Math.round(cb[1] - cb[0]));
+                            Bitmap clk = Bitmap.createBitmap(w, ch, Bitmap.Config.ARGB_8888);
+                            Canvas cc = new Canvas(clk);
+                            cc.translate(0, -cb[0]);
+                            DepthRenderer.drawClock(app, cc, w, hh, bgB, DepthRenderer.centerCrop(bgB, w, hh), prefs);
+                            Object[] L = {bgB, fgB, dm, clk, cb[0], key, w, hh};
+                            synchronized (lastBd) {
+                                last3d = L;
+                            }
+                        }
+                    } catch (Throwable t3) {
+                        CrashLog.write(app, t3);
+                    }
+                }
             } catch (Throwable t) {
                 CrashLog.write(app, t);
             }
@@ -550,6 +620,9 @@ public class LockActivity extends Activity {
                     }
                     if (!isDestroyed()) {
                         wall.setImageBitmap(done);
+                        synchronized (lastBd) {
+                            apply3d(last3d != null && key.equals(last3d[5]) ? last3d : null);
+                        }
                         copyBd(nb, bd);
                         LiquidGlass.invalidateTree(ui);
                         gauges.invalidate();
@@ -1232,8 +1305,10 @@ public class LockActivity extends Activity {
             float r = Math.min(70f, 70f * q);
             if (Math.abs(r - lastBlur) > 1.5f || (r < 0.5f) != (lastBlur < 0.5f)) {
                 lastBlur = r;
-                wall.setRenderEffect(r < 0.5f ? null
-                        : android.graphics.RenderEffect.createBlurEffect(r, r, android.graphics.Shader.TileMode.CLAMP));
+                android.graphics.RenderEffect re = r < 0.5f ? null
+                        : android.graphics.RenderEffect.createBlurEffect(r, r, android.graphics.Shader.TileMode.CLAMP);
+                wall.setRenderEffect(re);
+                if (depth3d != null) depth3d.setRenderEffect(re);
             }
         }
         ui.setTranslationY(dy);

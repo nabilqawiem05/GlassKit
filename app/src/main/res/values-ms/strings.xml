@@ -595,4 +595,7 @@
     <string name="solat_on_body">Telefon disenyapkan hingga %1$s</string>
     <string name="solat_end_now">Tamatkan sekarang</string>
     <string name="lock_zoom">Wallpaper zoom &amp; kabur bila buka kunci (gaya iPhone)</string>
+    <string name="lock_3d">Wallpaper 3D (bergerak bila telefon disengetkan)</string>
+    <string name="lock_3d_str">Kekuatan 3D</string>
+    <string name="lock_3d_note">Kedalaman dikira sekali dalam telefon bila wallpaper ditukar (beberapa saat, tanpa internet). Sensor senget hanya hidup semasa lock screen kelihatan.</string>
 </resources>

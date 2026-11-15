@@ -602,4 +602,7 @@
     <string name="solat_on_body">Phone silenced until %1$s</string>
     <string name="solat_end_now">End now</string>
     <string name="lock_zoom">Wallpaper zoom and blur when unlocking (iPhone style)</string>
+    <string name="lock_3d">3D wallpaper (moves when you tilt the phone)</string>
+    <string name="lock_3d_str">3D strength</string>
+    <string name="lock_3d_note">Depth is worked out once on the phone when you change the wallpaper (a few seconds, no internet). The tilt sensor only runs while the lock screen is showing.</string>
 </resources>
