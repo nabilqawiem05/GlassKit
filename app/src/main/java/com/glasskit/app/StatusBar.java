@@ -47,6 +47,7 @@ class StatusBar extends View {
     private float centerY = -1, islandCx = -1, gapHalf;
     private String time = "";
     private int battery = -1, wifi = -1, cell = -1;
+    private boolean hotspot;
     private boolean charging, dnd, airplane;
     private final List<Drawable> notifs = new ArrayList<>();
     private int moreNotifs;
@@ -100,11 +101,21 @@ class StatusBar extends View {
         }
 
         wifi = -1;
+        hotspot = false;
+        try {
+            WifiManager wmg = c.getSystemService(WifiManager.class);
+            java.lang.reflect.Method m = wmg.getClass().getMethod("getWifiApState");
+            hotspot = ((Integer) m.invoke(wmg)) == 13;
+        } catch (Throwable ignored) {
+        }
         try {
             ConnectivityManager cm = c.getSystemService(ConnectivityManager.class);
             for (Network n : cm.getAllNetworks()) {
                 NetworkCapabilities nc = cm.getNetworkCapabilities(n);
-                if (nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                // hanya Wi-Fi sebenar yang menyambung ke internet (bukan rangkaian hotspot / tempatan)
+                if (nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                        && nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        && (!hotspot || nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))) {
                     int rssi = nc.getSignalStrength();
                     WifiManager wm = c.getSystemService(WifiManager.class);
                     int lvl = wm.calculateSignalLevel(rssi);
@@ -189,6 +200,7 @@ class StatusBar extends View {
     private float rightWidth() {
         float w = batteryWidth() + speedWidth();
         if (wifi >= 0) w += dp(17) + dp(6);
+        if (hotspot) w += dp(17) + dp(6);
         if (cell >= 0 || airplane) w += dp(16) + dp(6);
         if (dnd) w += dp(13) + dp(6);
         return w;
@@ -282,6 +294,10 @@ class StatusBar extends View {
             drawWifi(c, x, cy, wifi);
             x += dp(17) + dp(6);
         }
+        if (hotspot) {
+            drawHotspot(c, x, cy);
+            x += dp(17) + dp(6);
+        }
         drawBattery(c, x, cy);
     }
 
@@ -293,6 +309,24 @@ class StatusBar extends View {
             float l = x + i * (bw + gap);
             c.drawRoundRect(l, bottom - bh, l + bw, bottom, dp(1), dp(1), fill);
         }
+    }
+
+    /** Ikon hotspot: titik pemancar dengan gelombang kiri-kanan (hijau seperti iPhone). */
+    private void drawHotspot(Canvas c, float x, float cy) {
+        float cxh = x + dp(8.5f), cyh = cy - dp(0.5f);
+        int col = 0xFF30D158;
+        fill.setColor(col);
+        stroke.setColor(col);
+        stroke.setStrokeWidth(dp(1.8f));
+        c.drawCircle(cxh, cyh, dp(2f), fill);
+        c.drawLine(cxh, cyh + dp(2f), cxh, cy + dp(6f), stroke);
+        float[] r = {dp(4.6f), dp(8.2f)};
+        for (float rr : r) {
+            RectF o = new RectF(cxh - rr, cyh - rr, cxh + rr, cyh + rr);
+            c.drawArc(o, 145, 70, false, stroke);
+            c.drawArc(o, -35, 70, false, stroke);
+        }
+        stroke.setColor(Color.WHITE);
     }
 
     private void drawWifi(Canvas c, float x, float cy, int level) {

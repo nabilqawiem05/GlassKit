@@ -417,6 +417,7 @@ public class PillService extends AccessibilityService
                     break;
                 case "android.net.wifi.WIFI_AP_STATE_CHANGED":
                     if (panels != null) panels.onHotspotChanged();
+                    if (sbar != null && sbarShown) sbar.refresh();
                     break;
                 case Intent.ACTION_TIME_TICK:
                     prayerTick();
