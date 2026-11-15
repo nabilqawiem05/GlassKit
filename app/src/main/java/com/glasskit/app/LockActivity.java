@@ -1438,6 +1438,7 @@ public class LockActivity extends Activity {
             if (!soundPlayed) {
                 soundPlayed = true;
                 Sounds.play(this, Sounds.UNLOCK);
+                Haptics.thud(this);
             }
             if (lastPlain != null && prefs.getInt(Prefs.POP_STYLE, 0) != 0) {
                 revealExit(r);

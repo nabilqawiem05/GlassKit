@@ -185,8 +185,24 @@ final class Ui {
         }
     }
 
+    private static final android.util.SparseArray<Typeface> FONTS = new android.util.SparseArray<>();
+    static volatile boolean uniFont = true;
+
+    /** Fon seragam GlassKit: Google Sans (fon premium Pixel), jatuh balik ke sans-serif. */
     static Typeface font(int weight) {
-        return Typeface.create(Typeface.SANS_SERIF, weight, false);
+        int w = Math.max(100, Math.min(1000, weight));
+        int key = uniFont ? w : -w;
+        Typeface t = FONTS.get(key);
+        if (t != null) return t;
+        if (uniFont) {
+            Typeface base = Typeface.create(w < 600 ? "google-sans-text" : "google-sans", Typeface.NORMAL);
+            if (base == null || base == Typeface.DEFAULT) base = Typeface.create("google-sans", Typeface.NORMAL);
+            t = Typeface.create(base, w, false);
+        } else {
+            t = Typeface.create(Typeface.SANS_SERIF, w, false);
+        }
+        FONTS.put(key, t);
+        return t;
     }
 
     static TextView text(Context c, float sp, int weight, int color) {
@@ -261,6 +277,7 @@ final class Ui {
             switch (e.getActionMasked()) {
                 case android.view.MotionEvent.ACTION_DOWN:
                     view.animate().scaleX(0.94f).scaleY(0.94f).setInterpolator(EASE).setDuration(110).start();
+                    Haptics.tap(view.getContext());
                     break;
                 case android.view.MotionEvent.ACTION_UP:
                 case android.view.MotionEvent.ACTION_CANCEL:

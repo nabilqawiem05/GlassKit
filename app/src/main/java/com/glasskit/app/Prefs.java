@@ -78,6 +78,8 @@ public final class Prefs {
     public static final String PERF = "perfMode";
     public static final String LOCK_ZOOM = "lockZoom";
     public static final String POP_STYLE = "popStyle";
+    public static final String HAPTICS = "haptics";
+    public static final String FONT_UNI = "fontUni";
     public static final String CLOCK_AUTO = "clockAuto";
     public static final String CLOCK_LAYOUT = "clockLayout";
     public static final String LOCK_HIJRI = "lockHijri";
@@ -95,6 +97,7 @@ public final class Prefs {
     public static SharedPreferences get(Context c) {
         SharedPreferences p = c.getApplicationContext().getSharedPreferences(NAME, Context.MODE_PRIVATE);
         if (perf == null) perf = p.getBoolean(PERF, true);
+        Ui.uniFont = p.getBoolean(FONT_UNI, true);
         return p;
     }
 

@@ -220,7 +220,7 @@ public final class DepthRenderer {
             dp.setColor(glass ? Color.WHITE : color);
             dp.setTextAlign(Paint.Align.CENTER);
             dp.setTextSize(Math.max(28f, size * 0.15f));
-            dp.setTypeface(Typeface.create(Typeface.SANS_SERIF, 600, false));
+            dp.setTypeface(Ui.font(600));
             dp.setShadowLayer(size * 0.03f, 0, size * 0.008f, Color.argb(70, 0, 0, 0));
             String date = new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(new Date());
             float dy = b.top - size * 0.16f;

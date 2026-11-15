@@ -115,6 +115,9 @@ final class ToolsPage {
         LinearLayout pf = a.card(box, R.string.tl_perf, Icon.BOLT, 0xFF30D158);
         a.toggle(pf, R.string.tl_perf_mode, Prefs.PERF, true);
         a.note(pf, a.getString(R.string.tl_perf_note));
+        a.toggle(pf, R.string.tl_haptics, Prefs.HAPTICS, true);
+        a.note(pf, a.getString(R.string.tl_haptics_note));
+        a.toggle(pf, R.string.tl_font, Prefs.FONT_UNI, true);
         a.toggle(pf, R.string.tl_fps, Prefs.FPS_METER, false);
         a.note(pf, a.getString(R.string.tl_fps_note));
 

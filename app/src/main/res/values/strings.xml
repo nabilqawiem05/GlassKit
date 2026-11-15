@@ -642,4 +642,7 @@
     <string name="disp_night_sub">Yellow screen, easier on the eyes at night</string>
     <string name="disp_night_str">Warmth</string>
     <string name="disp_note">Tip: press and hold the brightness slider to open this.</string>
+    <string name="tl_haptics">Premium haptics</string>
+    <string name="tl_haptics_note">Soft taps on buttons and tiles, ticks every 10% on sliders, a firm thud when unlocking. Follows the system touch feedback setting.</string>
+    <string name="tl_font">Uniform premium font (Google Sans)</string>
 </resources>

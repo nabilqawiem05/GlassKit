@@ -635,4 +635,7 @@
     <string name="disp_night_sub">Skrin kekuningan, lebih selesa untuk mata waktu malam</string>
     <string name="disp_night_str">Kekuningan</string>
     <string name="disp_note">Tip: tekan lama peluncur kecerahan untuk buka ini.</string>
+    <string name="tl_haptics">Getaran premium</string>
+    <string name="tl_haptics_note">Ketukan halus pada butang dan tile, tik setiap 10% pada peluncur, dentum padat bila buka kunci. Ikut tetapan getaran sentuh sistem.</string>
+    <string name="tl_font">Fon premium seragam (Google Sans)</string>
 </resources>

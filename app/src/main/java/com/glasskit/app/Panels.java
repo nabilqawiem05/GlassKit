@@ -155,6 +155,7 @@ final class Panels {
     private void settle(boolean openIt, float v) {
         progSpring.value = prog;
         if (openIt) {
+            Haptics.soft(s);
             progSpring.to(1f, v, () -> {
                 if (liquid != null && open == QS) liquid.settle();
             });
@@ -959,7 +960,14 @@ final class Panels {
                 return true;
             }
             if (act == MotionEvent.ACTION_MOVE && Math.abs(e.getY() - downY) > dp(8)) removeCallbacks(longCheck);
+            float before = v;
             setValue(1f - e.getY() / getHeight());
+            // tik setiap 10%, lebih jelas di hujung
+            int b0 = Math.round(before * 10), b1 = Math.round(v * 10);
+            if (act == MotionEvent.ACTION_MOVE && b0 != b1) {
+                if (v <= 0.001f || v >= 0.999f) Haptics.edge(getContext());
+                else Haptics.tick(getContext());
+            }
             boolean done = act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL;
             if (done) removeCallbacks(longCheck);
             if (cb != null) cb.on(v, done);
@@ -1817,6 +1825,7 @@ final class Panels {
             @Override
             public void onProgressChanged(android.widget.SeekBar b, int v, boolean user) {
                 if (!user) return;
+                Haptics.tick(s);
                 pct.setText(Math.round(100f * v / Math.max(1, max)) + "%");
                 setVol(stream, v, 0);
             }
