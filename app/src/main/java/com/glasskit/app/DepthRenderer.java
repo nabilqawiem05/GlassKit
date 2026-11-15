@@ -113,10 +113,45 @@ public final class DepthRenderer {
                             SharedPreferences p, boolean showClock) {
         Paint bmp = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
         RectF bgRect = null;
+        // gaya timbul: 0 biasa, 1 bingkai pecah, 2 bayang timbul, 3 gabung
+        int pop = fg != null && bg != null ? p.getInt(Prefs.POP_STYLE, 0) : 0;
+        boolean frameOn = pop == 1 || pop == 3, shadowOn = pop == 2 || pop == 3;
+        float density = ctx.getResources().getDisplayMetrics().density;
+        RectF frame = null;
         if (bg != null) {
             c.drawColor(Color.BLACK);
             bgRect = centerCrop(bg, w, h);
-            c.drawBitmap(bg, null, bgRect, bmp);
+            if (frameOn) {
+                // luar bingkai: wallpaper sama, sangat kabur & gelap
+                Bitmap soft = cached(bg, "soft", () -> GlassArt.blur(bg, 160, 6));
+                c.drawBitmap(soft, null, bgRect, bmp);
+                c.drawColor(Color.argb(150, 0, 0, 0));
+                float top = subjectTop(fg, w, h);
+                float ft = top < 0 ? h * 0.36f : Math.min(h * 0.55f, Math.max(h * 0.30f, top + h * 0.11f));
+                frame = new RectF(w * 0.06f, ft, w * 0.94f, h * 0.88f);
+                float rr = 28 * density;
+                c.save();
+                Path clip = new Path();
+                clip.addRoundRect(frame, rr, rr, Path.Direction.CW);
+                c.clipPath(clip);
+                c.drawBitmap(bg, null, bgRect, bmp);
+                if (shadowOn) c.drawColor(Color.argb(40, 0, 0, 0));
+                c.restore();
+                Paint st = new Paint(Paint.ANTI_ALIAS_FLAG);
+                st.setStyle(Paint.Style.STROKE);
+                st.setStrokeWidth(2.5f * density);
+                st.setColor(Color.argb(225, 255, 255, 255));
+                c.drawRoundRect(frame, rr, rr, st);
+            } else {
+                c.drawBitmap(bg, null, bgRect, bmp);
+                if (shadowOn) {
+                    // latar sedikit kabur & gelap supaya subjek "terangkat"
+                    Paint sp = new Paint(bmp);
+                    sp.setAlpha(170);
+                    c.drawBitmap(cached(bg, "mild", () -> GlassArt.blur(bg, 420, 2)), null, bgRect, sp);
+                    c.drawColor(Color.argb(55, 0, 0, 0));
+                }
+            }
         } else {
             c.drawColor(Color.rgb(28, 36, 48));
         }
@@ -124,7 +159,31 @@ public final class DepthRenderer {
         if (showClock) drawClock(ctx, c, w, h, bg, bgRect, p);
 
         if (fg != null) {
-            c.drawBitmap(fg, null, centerCrop(fg, w, h), bmp);
+            RectF fr = centerCrop(fg, w, h);
+            c.save();
+            if (frame != null) c.clipRect(0, 0, w, frame.bottom); // keluar bingkai ke atas & sisi sahaja
+            if (shadowOn) {
+                // bayang lembut di belakang subjek
+                final int[] off = new int[2];
+                Object[] so = shadowOf(fg);
+                Bitmap sh = (Bitmap) so[0];
+                off[0] = ((int[]) so[1])[0];
+                off[1] = ((int[]) so[1])[1];
+                Paint shp = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+                shp.setColor(Color.argb(150, 0, 0, 0));
+                float sx = fr.width() / fg.getWidth(), sy = fr.height() / fg.getHeight();
+                RectF sr = new RectF(fr.left + off[0] * sx, fr.top + off[1] * sy,
+                        fr.left + (off[0] + sh.getWidth()) * sx, fr.top + (off[1] + sh.getHeight()) * sy);
+                sr.offset(w * 0.022f, h * 0.012f);
+                c.drawBitmap(sh, null, sr, shp);
+                // subjek dibesarkan sedikit dari tengahnya & diangkat
+                RectF bb = subjectBox(fg, fr);
+                float cx = bb.centerX(), cy = bb.centerY();
+                c.scale(1.035f, 1.035f, cx, cy);
+                c.translate(-w * 0.006f, -h * 0.004f);
+            }
+            c.drawBitmap(fg, null, fr, bmp);
+            c.restore();
         }
         if (p.getBoolean(Prefs.WALL_MOOD, false)) {
             try { Mood.apply(ctx, c, w, h); } catch (Throwable ignored) {}
@@ -170,6 +229,57 @@ public final class DepthRenderer {
         path.computeBounds(b, true);
         float top = b.top - size * 0.16f - Math.max(28f, size * 0.15f) * 1.4f;
         return new float[]{Math.max(0, top - size * 0.1f), Math.min(h, b.bottom + size * 0.12f)};
+    }
+
+    // ---- cache: dikira sekali bagi setiap wallpaper, bukan setiap minit ----
+    private static final java.util.HashMap<String, Object[]> popCache = new java.util.HashMap<>();
+
+    interface Make { Bitmap make(); }
+
+    private static synchronized Bitmap cached(Bitmap src, String tag, Make m) {
+        Object[] e = popCache.get(tag);
+        if (e != null && e[0] == src) return (Bitmap) e[1];
+        Bitmap b = m.make();
+        popCache.put(tag, new Object[]{src, b});
+        return b;
+    }
+
+    /** Bayang kabur subjek (dikira pada separuh saiz supaya ringan). */
+    private static synchronized Object[] shadowOf(Bitmap fg) {
+        Object[] e = popCache.get("shadow");
+        if (e != null && e[0] == fg) return new Object[]{e[1], e[2]};
+        float k = Math.min(1f, 900f / fg.getWidth());
+        Bitmap small = k < 1f ? Bitmap.createScaledBitmap(fg, Math.round(fg.getWidth() * k), Math.round(fg.getHeight() * k), true) : fg;
+        Paint bp = new Paint();
+        bp.setMaskFilter(new android.graphics.BlurMaskFilter(Math.max(4f, small.getWidth() * 0.02f),
+                android.graphics.BlurMaskFilter.Blur.NORMAL));
+        int[] off = new int[2];
+        Bitmap a = small.extractAlpha(bp, off);
+        // simpan dalam koordinat imej asal (skala balik)
+        Bitmap full = Bitmap.createScaledBitmap(a, Math.round(a.getWidth() / k), Math.round(a.getHeight() / k), true);
+        int[] offFull = {Math.round(off[0] / k), Math.round(off[1] / k)};
+        popCache.put("shadow", new Object[]{fg, full, offFull});
+        return new Object[]{full, offFull};
+    }
+
+    /** Kotak sempadan subjek pada skrin (anggaran dari imej kecil). */
+    static RectF subjectBox(Bitmap fg, RectF r) {
+        int sw = 72, sh = Math.max(1, Math.round(72f * fg.getHeight() / fg.getWidth()));
+        Bitmap s = Bitmap.createScaledBitmap(fg, sw, sh, true);
+        int x0 = sw, y0 = sh, x1 = -1, y1 = -1;
+        for (int y = 0; y < sh; y++) {
+            for (int x = 0; x < sw; x++) {
+                if (Color.alpha(s.getPixel(x, y)) > 110) {
+                    if (x < x0) x0 = x;
+                    if (x > x1) x1 = x;
+                    if (y < y0) y0 = y;
+                    if (y > y1) y1 = y;
+                }
+            }
+        }
+        if (x1 < 0) return new RectF(r);
+        return new RectF(r.left + x0 / (float) sw * r.width(), r.top + y0 / (float) sh * r.height(),
+                r.left + (x1 + 1) / (float) sw * r.width(), r.top + (y1 + 1) / (float) sh * r.height());
     }
 
     /** Kedudukan Y (piksel skrin) bahagian paling atas subjek, atau -1. */

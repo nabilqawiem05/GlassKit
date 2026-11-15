@@ -149,6 +149,12 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         CrashLog.install(this);
         prefs = Prefs.get(this);
+        // buang model 3D lama (66 MB) jika pernah dimuat turun
+        try {
+            new java.io.File(getFilesDir(), "midas.tflite").delete();
+            new java.io.File(getFilesDir(), "depth.png").delete();
+        } catch (Exception ignored) {
+        }
         getWindow().setStatusBarColor(0xFF07080F);
         getWindow().setNavigationBarColor(0xFF0B1424);
 
@@ -400,27 +406,10 @@ public class MainActivity extends Activity {
         LinearLayout lk = card(pLock, R.string.sec_lock, Icon.LOCK, 0xFFFF9F0A);
         toggle(lk, R.string.lock_on, Prefs.LOCK_ON, false);
         toggle(lk, R.string.lock_zoom, Prefs.LOCK_ZOOM, true);
-        toggle(lk, R.string.lock_3d, Prefs.DEPTH_3D, true);
-        label(lk, R.string.lock_3d_str);
-        slider(lk, 20, 100, prefs.getInt(Prefs.DEPTH_STR, 60), v -> prefs.edit().putInt(Prefs.DEPTH_STR, v).apply());
-        note(lk, getString(R.string.lock_3d_note));
-        final TextView m3 = note(lk, getString(DepthMap.hasModel(this) ? R.string.lock_3d_model_ok : R.string.lock_3d_model_none));
-        button(lk, getString(R.string.lock_3d_dl), false, v -> {
-            if (DepthMap.hasModel(this)) {
-                toast(getString(R.string.lock_3d_model_ok));
-                return;
-            }
-            v.setEnabled(false);
-            new Thread(() -> DepthMap.download(this, (pct, fin, ok) -> runOnUiThread(() -> {
-                if (!fin) {
-                    m3.setText(getString(R.string.lock_3d_dl_prog, Math.max(0, pct)));
-                    return;
-                }
-                v.setEnabled(true);
-                m3.setText(getString(ok ? R.string.lock_3d_model_ok : R.string.lock_3d_dl_fail));
-                if (ok) prefs.edit().putLong("depthModelAt", System.currentTimeMillis()).apply(); // lukis semula lock screen
-            })), "gk-midas").start();
-        });
+        label(lk, R.string.pop_title);
+        segmented(lk, new int[]{R.string.pop_0, R.string.pop_1, R.string.pop_2, R.string.pop_3},
+                prefs.getInt(Prefs.POP_STYLE, 0), i -> prefs.edit().putInt(Prefs.POP_STYLE, i).apply());
+        note(lk, getString(R.string.pop_note));
         note(lk, getString(R.string.lock_note));
         button(lk, getString(R.string.btn_preview_lock), false, v -> startActivity(new Intent(this, LockActivity.class)));
 

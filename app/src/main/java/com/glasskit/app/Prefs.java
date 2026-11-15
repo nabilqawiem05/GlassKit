@@ -77,8 +77,7 @@ public final class Prefs {
 
     public static final String PERF = "perfMode";
     public static final String LOCK_ZOOM = "lockZoom";
-    public static final String DEPTH_3D = "depth3d";
-    public static final String DEPTH_STR = "depthStr";
+    public static final String POP_STYLE = "popStyle";
     public static final String HIDE_SYS_ICONS = "hideSysIcons";
     public static final String BLOCK_STOCK_SHADE = "blockStockShade";
     public static final String FPS_METER = "fpsMeter";

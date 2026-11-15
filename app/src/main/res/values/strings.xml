@@ -610,4 +610,10 @@
     <string name="lock_3d_dl_fail">Download failed. Try again on Wi-Fi.</string>
     <string name="lock_3d_model_ok">Real depth model ready ✓</string>
     <string name="lock_3d_model_none">Without the model, 3D uses 2 layers (subject and background). Download the model for real depth.</string>
+    <string name="pop_title">Lock screen style</string>
+    <string name="pop_0">Normal</string>
+    <string name="pop_1">Frame</string>
+    <string name="pop_2">Shadow</string>
+    <string name="pop_3">Both</string>
+    <string name="pop_note">Frame: the person steps out of a framed photo. Shadow: the person lifts off the screen with a soft shadow. Both: frame + shadow. Needs a photo with a person cut out (depth wallpaper).</string>
 </resources>

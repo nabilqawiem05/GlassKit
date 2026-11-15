@@ -603,4 +603,10 @@
     <string name="lock_3d_dl_fail">Muat turun gagal. Cuba lagi dengan Wi-Fi.</string>
     <string name="lock_3d_model_ok">Model kedalaman sebenar sedia ✓</string>
     <string name="lock_3d_model_none">Tanpa model, 3D guna 2 lapis (subjek dan latar). Muat turun model untuk kedalaman sebenar.</string>
+    <string name="pop_title">Gaya lock screen</string>
+    <string name="pop_0">Biasa</string>
+    <string name="pop_1">Bingkai</string>
+    <string name="pop_2">Bayang</string>
+    <string name="pop_3">Gabung</string>
+    <string name="pop_note">Bingkai: orang melangkah keluar dari gambar berbingkai. Bayang: orang terangkat dari skrin dengan bayang lembut. Gabung: bingkai + bayang. Perlu gambar yang ada potongan orang (wallpaper depth).</string>
 </resources>
