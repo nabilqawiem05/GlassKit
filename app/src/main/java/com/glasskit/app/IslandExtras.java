@@ -263,7 +263,7 @@ final class IslandExtras {
     private final Runnable checkShot = new Runnable() {
         @Override
         public void run() {
-            if (!s.prefs.getBoolean(Prefs.ISL_SHOT, true)) return;
+            if (!s.prefs.getBoolean(Prefs.ISL_SHOT, false)) return;
             long since = System.currentTimeMillis() / 1000 - 20;
             try (Cursor c = s.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.RELATIVE_PATH},

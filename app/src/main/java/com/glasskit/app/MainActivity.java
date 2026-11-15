@@ -316,7 +316,7 @@ public class MainActivity extends Activity {
         toggle(isl, R.string.isl_bt_on, Prefs.ISL_BT, true);
         toggle(isl, R.string.isl_ringer_on, Prefs.ISL_RINGER, true);
         toggle(isl, R.string.isl_privacy_on, Prefs.ISL_PRIVACY, true);
-        toggle(isl, R.string.isl_shot_on, Prefs.ISL_SHOT, true);
+        toggle(isl, R.string.isl_shot_on, Prefs.ISL_SHOT, false);
         note(isl, getString(R.string.live_note));
         toggle(isl, R.string.charge_anim, Prefs.CHARGE_ANIM, true);
         button(isl, getString(R.string.btn_test), false, v -> {
@@ -391,11 +391,15 @@ public class MainActivity extends Activity {
                 prefs.getInt(Prefs.SBAR_STYLE, 0), i -> prefs.edit().putInt(Prefs.SBAR_STYLE, i).apply());
         LinearLayout sr = new LinearLayout(this);
         sb.addView(sr);
-        addPair(sr, button(null, getString(R.string.btn_hide_sys), false, v -> runShell(
-                "settings put secure icon_blacklist clock,battery,wifi,mobile,airplane,rotate,headset,alarm_clock,"
-                        + "nfc,hotspot,zen,volume,cast,bluetooth,vpn,data_saver,location,managed_profile,ethernet,ims,"
-                        + "call_strength,mobile_data,speakerphone,dnd")),
-                button(null, getString(R.string.btn_restore_sys), false, v -> runShell("settings delete secure icon_blacklist")));
+        addPair(sr, button(null, getString(R.string.btn_hide_sys), false, v -> {
+                    prefs.edit().putBoolean(Prefs.HIDE_SYS_ICONS, true).apply();
+                    Tweaks.hideStockBar(this, true);
+                    toast(getString(R.string.t_done));
+                }),
+                button(null, getString(R.string.btn_restore_sys), false, v -> {
+                    prefs.edit().putBoolean(Prefs.HIDE_SYS_ICONS, false).apply();
+                    runShell("settings delete secure icon_blacklist");
+                }));
         note(sb, getString(R.string.sbar_note));
 
         // ---------- Panel ----------

@@ -163,6 +163,23 @@ final class Tweaks {
         });
     }
 
+    static final String STOCK_ALL = "clock,battery,wifi,mobile,airplane,rotate,headset,alarm_clock,nfc,hotspot,zen,volume,cast,"
+            + "bluetooth,vpn,data_saver,location,managed_profile,ethernet,ims,call_strength,mobile_data,speakerphone,dnd,"
+            + "connected_display,screen_record,sensors_off,cameraToggle,microphone,mute,wifi_calling";
+
+    /** Sorok semua ikon stock (digabung dengan senarai sedia ada, tak tulis ganti). */
+    static void hideStockBar(Context c, boolean on) {
+        if (!on || !Shell.granted()) return;
+        Shell.run("settings get secure icon_blacklist", (ok, out) -> {
+            java.util.Set<String> cur = new java.util.LinkedHashSet<>();
+            String v = out == null ? "" : out.trim();
+            if (!v.equals("null")) for (String k : v.split(",")) if (!k.trim().isEmpty()) cur.add(k.trim());
+            int n = cur.size();
+            for (String k : STOCK_ALL.split(",")) cur.add(k);
+            if (cur.size() != n) Shell.run("settings put secure icon_blacklist '" + String.join(",", cur) + "'");
+        });
+    }
+
     // ======================= Pulihkan semua =======================
 
     static void restoreAll(Context c, Done d) {

@@ -72,6 +72,7 @@ public final class Prefs {
     private Prefs() {}
 
     public static final String PERF = "perfMode";
+    public static final String HIDE_SYS_ICONS = "hideSysIcons";
     public static final String FPS_METER = "fpsMeter";
     public static final String TILE_ORDER = "tileOrder";
     public static final String TILE_HIDDEN = "tileHidden";

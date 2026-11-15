@@ -328,6 +328,7 @@ public class PillService extends AccessibilityService
                     }
                     applyFps();
                     h.post(PillService.this::refresh);
+                    Tweaks.hideStockBar(PillService.this, prefs.getBoolean(Prefs.HIDE_SYS_ICONS, true) && prefs.getBoolean(Prefs.SBAR_ON, false));
                     if (patch != null) patch.screenOn();
                     if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
                         // cuba serta-merta, kemudian ulang jika sistem lambat (elak lock screen stock terpapar)
@@ -486,7 +487,11 @@ public class PillService extends AccessibilityService
         extras = new IslandExtras(this);
         profiles = new AppTools.ProfileRunner(this);
         h.postDelayed(this::applyFps, 1500);
-        h.postDelayed(() -> Tweaks.reapply(this), 3000);
+        h.postDelayed(() -> {
+            Tweaks.reapply(this);
+            // pastikan ikon stock kekal tersorok walaupun app lain (cth SystemUI Tuner) menulis ganti senarai
+            Tweaks.hideStockBar(this, prefs.getBoolean(Prefs.HIDE_SYS_ICONS, true) && prefs.getBoolean(Prefs.SBAR_ON, false));
+        }, 3000);
         try {
             android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
             cm.registerNetworkCallback(new android.net.NetworkRequest.Builder()
