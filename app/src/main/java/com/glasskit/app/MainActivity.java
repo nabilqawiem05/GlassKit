@@ -366,7 +366,7 @@ public class MainActivity extends Activity {
         solSw.setTextColor(Color.WHITE);
         solSw.setChecked(prefs.getBoolean(Prefs.SOLAT_SILENT, false));
         solSw.setPadding(0, Ui.dp(this, 12), 0, 0);
-        solSw.setOnCheckedChangeListener((b, on) -> {
+        solSw.setOnCheckedChangeListener((cb, on) -> {
             prefs.edit().putBoolean(Prefs.SOLAT_SILENT, on).apply();
             if (on && !Prayer.hasLocation(this)) toast(getString(R.string.solat_need_loc));
             if (on) {
