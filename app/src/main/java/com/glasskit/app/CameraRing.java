@@ -50,8 +50,14 @@ final class CameraRing {
         }
     }
 
+    private void stopAnim() {
+        ValueAnimator a = anim;
+        anim = null;
+        if (a != null) a.cancel();
+    }
+
     void remove() {
-        if (anim != null) anim.cancel();
+        stopAnim();
         if (v != null) {
             try { s.wm.removeViewImmediate(v); } catch (Exception ignored) {}
             v = null;
@@ -77,9 +83,10 @@ final class CameraRing {
     }
 
     private void show(int cx, int cy, int rad, boolean pulse) {
+        // batalkan animasi dahulu (penamatnya boleh membuang cincin), kemudian pastikan cincin wujud
+        stopAnim();
         ensure(cx, cy, rad);
         if (v == null) return;
-        if (anim != null) anim.cancel();
         v.mode = RingView.GLOW;
         v.color = pkgColor;
         if (!pulse) {
@@ -90,6 +97,7 @@ final class CameraRing {
         anim = ValueAnimator.ofFloat(0f, 1f);
         anim.setDuration(1800);
         anim.addUpdateListener(a -> {
+            if (v == null) return;
             float f = (float) a.getAnimatedValue();
             // dua denyut kemudian tenang pada 55%
             float pulseV = (float) Math.abs(Math.sin(f * Math.PI * 2));
@@ -101,15 +109,16 @@ final class CameraRing {
 
     void onCharge(int level, int cx, int cy, int rad, boolean islandIdle) {
         if (!on() || !islandIdle) return;
+        stopAnim();
         ensure(cx, cy, rad);
         if (v == null) return;
-        if (anim != null) anim.cancel();
         v.mode = RingView.CHARGE;
         v.color = level <= 20 ? 0xFFFF453A : 0xFF30D158;
         final float target = Math.max(0.03f, level / 100f);
         anim = ValueAnimator.ofFloat(0f, 1f);
         anim.setDuration(3200);
         anim.addUpdateListener(a -> {
+            if (v == null) return;
             float f = (float) a.getAnimatedValue();
             float grow = Math.min(1f, f / 0.35f);
             grow = 1f - (1f - grow) * (1f - grow);
@@ -118,9 +127,14 @@ final class CameraRing {
             v.invalidate();
         });
         anim.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean cancelled;
+
+            @Override
+            public void onAnimationCancel(android.animation.Animator a) { cancelled = true; }
+
             @Override
             public void onAnimationEnd(android.animation.Animator a) {
-                if (v != null && v.mode == RingView.CHARGE) remove();
+                if (!cancelled && v != null && v.mode == RingView.CHARGE) remove();
             }
         });
         anim.start();

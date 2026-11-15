@@ -121,8 +121,12 @@ public class PillService extends AccessibilityService
 
     private void updateRing() {
         if (ring == null) return;
-        PowerManager pm = getSystemService(PowerManager.class);
-        ring.update(mode == IDLE, pm == null || pm.isInteractive(), ringCx(), ringCy(), ringR());
+        try {
+            PowerManager pm = getSystemService(PowerManager.class);
+            ring.update(mode == IDLE, pm == null || pm.isInteractive(), ringCx(), ringCy(), ringR());
+        } catch (Throwable t) {
+            CrashLog.write(this, t); // cincin hanya hiasan: jangan sesekali jatuhkan servis
+        }
     }
     int screenW, screenH, statusH;
     private boolean wasNotiShown, missedTick;
@@ -463,8 +467,13 @@ public class PillService extends AccessibilityService
                     break;
                 case Intent.ACTION_POWER_CONNECTED:
                     Automation.fire(PillService.this, Automation.T_CHARGE, "");
-                    if (ring != null) h.postDelayed(() -> ring.onCharge(Math.max(0, Ui.battery(PillService.this)), ringCx(), ringCy(), ringR(),
-                            mode == IDLE), 300);
+                    if (ring != null) h.postDelayed(() -> {
+                        try {
+                            ring.onCharge(Math.max(0, Ui.battery(PillService.this)), ringCx(), ringCy(), ringR(), mode == IDLE);
+                        } catch (Throwable t) {
+                            CrashLog.write(PillService.this, t);
+                        }
+                    }, 300);
                     if (sbar != null && sbarShown) sbar.refresh();
                     Sounds.play(PillService.this, Sounds.CHARGE);
                     h.postDelayed(PillService.this::showCharging, 600);
@@ -1633,7 +1642,9 @@ public class PillService extends AccessibilityService
     // ================= Notifikasi =================
 
     void onNotification(StatusBarNotification sbn) {
-        if (ring != null) h.postDelayed(() -> ring.onNotification(sbn, mode == IDLE, ringCx(), ringCy(), ringR()), 50);
+        if (ring != null) h.postDelayed(() -> {
+            try { ring.onNotification(sbn, mode == IDLE, ringCx(), ringCy(), ringR()); } catch (Throwable t) { CrashLog.write(this, t); }
+        }, 50);
         if (prefs == null) return;
         if (LockActivity.visible) {
             lockBanner(sbn);
