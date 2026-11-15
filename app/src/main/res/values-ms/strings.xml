@@ -625,6 +625,6 @@
     <string name="hijri_0">Asal</string>
     <string name="hijri_p1">+1 hari</string>
     <string name="lock_prayer">Kad solat seterusnya di lock screen</string>
-    <string name="isl_ring">Cincin cahaya di keliling kamera</string>
+    <string name="isl_camring">Cincin cahaya di keliling kamera</string>
     <string name="isl_ring_note">Menyala ikut warna app bila notifikasi masuk, dan terisi hijau bila pengecas dipasang.</string>
 </resources>

@@ -632,6 +632,6 @@
     <string name="hijri_0">As is</string>
     <string name="hijri_p1">+1 day</string>
     <string name="lock_prayer">Next prayer card on lock screen</string>
-    <string name="isl_ring">Light ring around the camera</string>
+    <string name="isl_camring">Light ring around the camera</string>
     <string name="isl_ring_note">Glows in the app colour when a notification arrives, and fills up green when you plug in the charger.</string>
 </resources>
