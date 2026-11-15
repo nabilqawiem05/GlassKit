@@ -1022,6 +1022,38 @@ public class LockActivity extends Activity {
         return c;
     }
 
+    /** Kad notifikasi gaya lock screen untuk banner di atas (ketik = buka dalam senarai, leret atas = tutup). */
+    View bannerCard(StatusBarNotification sbn, Runnable onTap, Runnable onDismiss) {
+        View c = card(sbn);
+        if (c == null) return null;
+        final float[] y0 = new float[1];
+        c.setOnClickListener(v -> onTap.run());
+        c.setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    y0[0] = e.getRawY();
+                    v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(100).start();
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    v.setTranslationY(Math.min(0, e.getRawY() - y0[0]));
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL: {
+                    float dy = e.getRawY() - y0[0];
+                    v.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                    if (dy < -dp(28)) onDismiss.run();
+                    else {
+                        v.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                        if (e.getActionMasked() == MotionEvent.ACTION_UP && Math.abs(dy) < dp(10)) v.performClick();
+                    }
+                    return true;
+                }
+            }
+            return true;
+        });
+        return c;
+    }
+
     private TextView pill(String s, boolean primary) {
         TextView t = Ui.line(this, 13, 650, primary ? 0xFF0B0B10 : Color.WHITE);
         t.setText(s);

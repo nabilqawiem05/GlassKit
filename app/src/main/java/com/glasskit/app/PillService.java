@@ -2143,13 +2143,23 @@ public class PillService extends AccessibilityService
         CharSequence body = n.extras.getCharSequence(Notification.EXTRA_TEXT);
         if (TextUtils.isEmpty(t) && TextUtils.isEmpty(body)) return;
         hideBanner(false);
+        final String bkey = sbn.getKey();
+        // guna kad yang sama seperti senarai notifikasi lock screen (kemas, tanpa bingkai kanta)
+        View same = LockActivity.inst == null ? null : LockActivity.inst.bannerCard(sbn, () -> {
+            hideBanner(true);
+            if (LockActivity.inst != null) LockActivity.inst.expand(bkey);
+        }, () -> hideBanner(true));
+        if (same != null) {
+            showBannerView(same);
+            return;
+        }
         LiquidGlass.Backdrop prev = LiquidGlass.current;
         LiquidGlass.current = LockActivity.inst != null ? LockActivity.inst.bd : null;
         FrameLayout win = new FrameLayout(this);
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(14), dp(16), dp(12));
-        LiquidGlass.apply(card, 26, false);
+        card.setBackground(GlassEngine.drawable(this, 26, true, 30));
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         ImageView ic = new ImageView(this);
@@ -2186,14 +2196,20 @@ public class PillService extends AccessibilityService
             if (LockActivity.inst != null) LockActivity.inst.expand(key);
         });
         LiquidGlass.current = prev;
-        FrameLayout.LayoutParams cl = new FrameLayout.LayoutParams(-1, -1);
-        cl.leftMargin = dp(10);
-        cl.rightMargin = dp(10);
-        cl.topMargin = dp(4);
-        cl.bottomMargin = dp(8);
+        showBannerView(card);
+    }
+
+    private void showBannerView(View card) {
+        FrameLayout win = new FrameLayout(this);
+        win.setClipChildren(false);
+        FrameLayout.LayoutParams cl = new FrameLayout.LayoutParams(-1, -2);
+        cl.leftMargin = dp(12);
+        cl.rightMargin = dp(12);
+        cl.topMargin = dp(6);
+        cl.bottomMargin = dp(10);
         win.addView(card, cl);
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT, dp(168),
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
