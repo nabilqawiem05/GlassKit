@@ -404,6 +404,23 @@ public class MainActivity extends Activity {
         label(lk, R.string.lock_3d_str);
         slider(lk, 20, 100, prefs.getInt(Prefs.DEPTH_STR, 60), v -> prefs.edit().putInt(Prefs.DEPTH_STR, v).apply());
         note(lk, getString(R.string.lock_3d_note));
+        final TextView m3 = note(lk, getString(DepthMap.hasModel(this) ? R.string.lock_3d_model_ok : R.string.lock_3d_model_none));
+        button(lk, getString(R.string.lock_3d_dl), false, v -> {
+            if (DepthMap.hasModel(this)) {
+                toast(getString(R.string.lock_3d_model_ok));
+                return;
+            }
+            v.setEnabled(false);
+            new Thread(() -> DepthMap.download(this, (pct, fin, ok) -> runOnUiThread(() -> {
+                if (!fin) {
+                    m3.setText(getString(R.string.lock_3d_dl_prog, Math.max(0, pct)));
+                    return;
+                }
+                v.setEnabled(true);
+                m3.setText(getString(ok ? R.string.lock_3d_model_ok : R.string.lock_3d_dl_fail));
+                if (ok) prefs.edit().putLong("depthModelAt", System.currentTimeMillis()).apply(); // lukis semula lock screen
+            })), "gk-midas").start();
+        });
         note(lk, getString(R.string.lock_note));
         button(lk, getString(R.string.btn_preview_lock), false, v -> startActivity(new Intent(this, LockActivity.class)));
 

@@ -10,8 +10,8 @@ android {
         applicationId 'com.glasskit.app'
         minSdk 31
         targetSdk 35
-        versionCode 44
-        versionName '14.3'
+        versionCode 45
+        versionName '14.4'
         // Pixel 8 Pro = arm64; elak saiz APK berganda untuk ABI lain (TFLite)
         ndk { abiFilters 'arm64-v8a' }
     }
@@ -40,27 +40,6 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
-
-// Model kedalaman MiDaS v2.1 small (MIT, Intel ISL) dimuat turun semasa binaan
-def midasModel = file('src/main/assets/midas.tflite')
-tasks.register('fetchMidas') {
-    outputs.file(midasModel)
-    doLast {
-        if (!midasModel.exists() || midasModel.length() < 1000000) {
-            midasModel.parentFile.mkdirs()
-            try {
-                new URL('https://github.com/isl-org/MiDaS/releases/download/v2_1/model_opt.tflite').withInputStream { i ->
-                    midasModel.withOutputStream { it << i }
-                }
-                println "MiDaS model: ${midasModel.length()} bytes"
-            } catch (Exception e) {
-                println "MiDaS download failed (3D falls back to 2 layers): ${e}"
-                midasModel.delete()
-            }
-        }
-    }
-}
-preBuild.dependsOn fetchMidas
 
 dependencies {
     implementation 'org.tensorflow:tensorflow-lite:2.16.1'

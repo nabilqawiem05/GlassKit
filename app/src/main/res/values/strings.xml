@@ -605,4 +605,9 @@
     <string name="lock_3d">3D wallpaper (moves when you tilt the phone)</string>
     <string name="lock_3d_str">3D strength</string>
     <string name="lock_3d_note">Depth is worked out once on the phone when you change the wallpaper (a few seconds, no internet). The tilt sensor only runs while the lock screen is showing.</string>
+    <string name="lock_3d_dl">Download 3D model (66 MB, once)</string>
+    <string name="lock_3d_dl_prog">Downloading… %1$d%%</string>
+    <string name="lock_3d_dl_fail">Download failed. Try again on Wi-Fi.</string>
+    <string name="lock_3d_model_ok">Real depth model ready ✓</string>
+    <string name="lock_3d_model_none">Without the model, 3D uses 2 layers (subject and background). Download the model for real depth.</string>
 </resources>

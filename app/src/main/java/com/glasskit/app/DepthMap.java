@@ -23,19 +23,64 @@ final class DepthMap {
 
     static File file(Context c) { return new File(c.getFilesDir(), "depth.png"); }
 
-    static boolean hasModel(Context c) {
-        try (InputStream in = c.getAssets().open("midas.tflite")) {
-            return in.read() >= 0;
-        } catch (Exception e) {
-            return false;
+    static final String MODEL_URL = "https://github.com/isl-org/MiDaS/releases/download/v2_1/model_opt.tflite";
+
+    static File modelFile(Context c) { return new File(c.getFilesDir(), "midas.tflite"); }
+
+    static boolean hasModel(Context c) { return modelFile(c).length() > 1_000_000; }
+
+    interface Progress { void on(int pct, boolean done, boolean ok); }
+
+    /** Muat turun model sekali (≈66 MB) ke storan app. Dipanggil di benang latar. */
+    static void download(Context c, Progress cb) {
+        File out = modelFile(c), part = new File(c.getFilesDir(), "midas.part");
+        boolean ok = false;
+        try {
+            java.net.HttpURLConnection hc = (java.net.HttpURLConnection) new java.net.URL(MODEL_URL).openConnection();
+            hc.setInstanceFollowRedirects(true);
+            hc.setConnectTimeout(15000);
+            hc.setReadTimeout(30000);
+            int code = hc.getResponseCode();
+            // GitHub mengubah hala ke hos lain (https -> https)
+            for (int i = 0; i < 5 && code / 100 == 3; i++) {
+                String loc = hc.getHeaderField("Location");
+                hc.disconnect();
+                hc = (java.net.HttpURLConnection) new java.net.URL(loc).openConnection();
+                hc.setConnectTimeout(15000);
+                hc.setReadTimeout(30000);
+                code = hc.getResponseCode();
+            }
+            long total = hc.getContentLengthLong(), got = 0;
+            int last = -1;
+            try (InputStream in = hc.getInputStream(); FileOutputStream fo = new FileOutputStream(part)) {
+                byte[] buf = new byte[1 << 16];
+                int n;
+                while ((n = in.read(buf)) > 0) {
+                    fo.write(buf, 0, n);
+                    got += n;
+                    int pct = total > 0 ? (int) (got * 100 / total) : -1;
+                    if (pct != last && cb != null) {
+                        last = pct;
+                        cb.on(pct, false, false);
+                    }
+                }
+            }
+            hc.disconnect();
+            ok = part.length() > 1_000_000 && (total <= 0 || part.length() == total) && part.renameTo(out);
+            if (ok) file(c).delete(); // kira semula kedalaman dengan model sebenar
+        } catch (Throwable t) {
+            CrashLog.write(c, t);
+        } finally {
+            part.delete();
         }
+        if (cb != null) cb.on(100, true, ok);
     }
 
     /** Pastikan peta kedalaman terkini untuk wallpaper semasa; kembalikan bitmap (atau null). */
     static synchronized Bitmap ensure(Context c, Bitmap bg, Bitmap fg) {
         if (bg == null) return null;
         File out = file(c), src = DepthRenderer.bgFile(c), sub = DepthRenderer.fgFile(c);
-        long need = Math.max(src.lastModified(), sub.exists() ? sub.lastModified() : 0);
+        long need = Math.max(Math.max(src.lastModified(), sub.exists() ? sub.lastModified() : 0), modelFile(c).lastModified());
         if (out.exists() && out.lastModified() >= need) {
             Bitmap b = BitmapFactory.decodeFile(out.getAbsolutePath());
             if (b != null) return b;
@@ -75,7 +120,7 @@ final class DepthMap {
 
     private static float[] midas(Context c, Bitmap bg) throws Exception {
         ByteBuffer model;
-        try (InputStream in = c.getAssets().open("midas.tflite")) {
+        try (InputStream in = new java.io.FileInputStream(modelFile(c))) {
             java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
             byte[] buf = new byte[1 << 16];
             int n;
