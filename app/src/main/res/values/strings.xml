@@ -652,4 +652,5 @@
     <string name="snd_use">Use</string>
     <string name="snd_set">%1$s is now your notification tone</string>
     <string name="snd_tones_note">Tones are saved to the Notifications folder, so you can also pick them per app in WhatsApp or Telegram. To avoid double sounds, turn off \"Screen locking sound\" in Settings → Sound &amp; vibration.</string>
+    <string name="clock_edit_hint">Drag ▾ for height · ▸ for width · tap outside to save</string>
 </resources>

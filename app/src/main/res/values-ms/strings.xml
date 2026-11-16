@@ -645,4 +645,5 @@
     <string name="snd_use">Guna</string>
     <string name="snd_set">%1$s kini nada notifikasi anda</string>
     <string name="snd_tones_note">Nada disimpan ke folder Notifications, jadi boleh juga dipilih ikut app dalam WhatsApp atau Telegram. Untuk elak bunyi berganda, matikan \"Screen locking sound\" di Tetapan → Sound &amp; vibration.</string>
+    <string name="clock_edit_hint">Tarik ▾ untuk tinggi · ▸ untuk lebar · ketik luar untuk simpan</string>
 </resources>

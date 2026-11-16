@@ -393,6 +393,7 @@ public class LockActivity extends Activity {
     protected void onPause() {
         super.onPause();
         visible = false;
+        if (clockEdit != null) endClockEdit();
         if (stackOpen) {
             stackOpen = false; // tindan semula bila skrin dimatikan / dibuka kunci
             refreshNotifs();
@@ -687,6 +688,146 @@ public class LockActivity extends Activity {
             }
             h.post(() -> { if (gauges != null) gauges.invalidate(); });
         });
+    }
+
+    // ======================= Sunting saiz jam terus di lock screen =======================
+
+    private ClockEdit clockEdit;
+    private final Runnable clockHold = () -> {
+        if (clockEdit != null || isFinishing()) return;
+        Haptics.thud(this);
+        clockEdit = new ClockEdit(this);
+        ((FrameLayout) ui.getParent()).addView(clockEdit, new FrameLayout.LayoutParams(-1, -1));
+        ui.animate().alpha(0.25f).setDuration(200).start();
+        clockEdit.setAlpha(0f);
+        clockEdit.animate().alpha(1f).setDuration(200).start();
+    };
+
+    private boolean clockHit(float x, float y) {
+        try {
+            RectF r = DepthRenderer.clockRect(this, prefs, W, H);
+            r.inset(-dp(16), -dp(16));
+            return r.contains(x, y);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private void endClockEdit() {
+        final ClockEdit ce = clockEdit;
+        if (ce == null) return;
+        clockEdit = null;
+        Haptics.tap(this);
+        ui.animate().alpha(1f).setDuration(220).start();
+        ce.animate().alpha(0f).setDuration(180).withEndAction(() -> {
+            ViewGroup p = (ViewGroup) ce.getParent();
+            if (p != null) p.removeView(ce);
+        }).start();
+        render();
+    }
+
+    /** Bingkai sunting: pemegang bawah = tinggi, pemegang kanan = lebar. Ketik di luar = simpan. */
+    private final class ClockEdit extends View {
+        private final android.graphics.Paint line = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Paint knob = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private RectF box = new RectF();
+        private int mode; // 0 tiada, 1 tinggi, 2 lebar
+        private float sx, sy, h0, w0, bh0, bw0;
+        private int lastStep = -1;
+        private long lastApply;
+
+        ClockEdit(Context c) {
+            super(c);
+            line.setStyle(android.graphics.Paint.Style.STROKE);
+            line.setStrokeWidth(dp(1.6f));
+            line.setColor(Color.argb(200, 255, 255, 255));
+            line.setPathEffect(new android.graphics.DashPathEffect(new float[]{dp(7), dp(5)}, 0));
+            knob.setColor(Color.WHITE);
+            update();
+        }
+
+        void update() {
+            box = DepthRenderer.clockRect(getContext(), prefs, W, H);
+            box.inset(-dp(10), -dp(8));
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            float r = dp(18);
+            c.drawRoundRect(box, r, r, line);
+            // pemegang bawah (tinggi)
+            float bx = box.centerX(), by = box.bottom;
+            c.drawRoundRect(new RectF(bx - dp(26), by - dp(5), bx + dp(26), by + dp(5)), dp(5), dp(5), knob);
+            // pemegang kanan (lebar)
+            float rx = box.right, ry = box.centerY();
+            c.drawRoundRect(new RectF(rx - dp(5), ry - dp(22), rx + dp(5), ry + dp(22)), dp(5), dp(5), knob);
+            android.graphics.Paint tp = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            tp.setColor(Color.WHITE);
+            tp.setTextSize(dp(13));
+            tp.setTypeface(Ui.font(650));
+            tp.setTextAlign(android.graphics.Paint.Align.CENTER);
+            c.drawText(getString(R.string.clock_edit_hint), W / 2f, Math.min(H - dp(60), box.bottom + dp(44)), tp);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent e) {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN: {
+                    float x = e.getX(), y = e.getY();
+                    boolean nearBottom = Math.abs(y - box.bottom) < dp(36) && x > box.left && x < box.right;
+                    boolean nearRight = Math.abs(x - box.right) < dp(36) && y > box.top && y < box.bottom;
+                    boolean inside = box.contains(x, y);
+                    mode = nearBottom ? 1 : nearRight ? 2 : inside ? 1 : 0;
+                    if (mode == 0) {
+                        endClockEdit();
+                        return true;
+                    }
+                    sx = e.getRawX();
+                    sy = e.getRawY();
+                    h0 = prefs.getInt(Prefs.CLOCK_H, 100);
+                    w0 = prefs.getInt(Prefs.CLOCK_W, 100);
+                    bh0 = box.height();
+                    bw0 = box.width();
+                    Haptics.tap(getContext());
+                    return true;
+                }
+                case MotionEvent.ACTION_MOVE: {
+                    int v;
+                    String k;
+                    if (mode == 1) {
+                        float f = Math.max(0.3f, (bh0 + (e.getRawY() - sy)) / bh0);
+                        v = Math.round(Math.max(60, Math.min(240, h0 * f)));
+                        k = Prefs.CLOCK_H;
+                    } else if (mode == 2) {
+                        float f = Math.max(0.3f, (bw0 + 2 * (e.getRawX() - sx)) / bw0);
+                        v = Math.round(Math.max(60, Math.min(170, w0 * f)));
+                        k = Prefs.CLOCK_W;
+                    } else return true;
+                    int step = v / 5;
+                    if (step != lastStep) {
+                        lastStep = step;
+                        if (v == 60 || v == 240 || (mode == 2 && v == 170)) Haptics.edge(getContext());
+                        else Haptics.tick(getContext());
+                    }
+                    long now = System.currentTimeMillis();
+                    if (now - lastApply > 90) {
+                        lastApply = now;
+                        prefs.edit().putInt(k, v).apply();
+                        update();
+                        render();
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    update();
+                    render();
+                    mode = 0;
+                    return true;
+            }
+            return true;
+        }
     }
 
     private volatile Object[] gPrayer;
@@ -1577,6 +1718,21 @@ public class LockActivity extends Activity {
 
         @Override
         public boolean onInterceptTouchEvent(MotionEvent e) {
+            if (clockEdit != null) return false; // mod sunting: bingkai sunting yang pegang sentuhan
+            // tekan lama pada jam: mod sunting saiz (gaya iPhone)
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    removeCallbacks(clockHold);
+                    if (clockEdit == null && clockHit(e.getRawX(), e.getRawY())) postDelayed(clockHold, 520);
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (Math.hypot(e.getRawX() - x0, e.getRawY() - y0) > dp(10)) removeCallbacks(clockHold);
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    removeCallbacks(clockHold);
+                    break;
+            }
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     y0 = e.getRawY();

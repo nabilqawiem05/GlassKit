@@ -244,6 +244,13 @@ public final class DepthRenderer {
             }
     }
 
+    /** Kotak jam (piksel skrin). */
+    static RectF clockRect(Context ctx, SharedPreferences p, int w, int h) {
+        RectF b = new RectF();
+        clockPath(ctx, p, w, h).computeBounds(b, true);
+        return b;
+    }
+
     /** Sempadan menegak (atas, bawah) kawasan tarikh + jam pada skrin. */
     static float[] clockBounds(Context ctx, SharedPreferences p, int w, int h) {
         float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
