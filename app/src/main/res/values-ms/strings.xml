@@ -667,4 +667,17 @@
     <string name="panel_bento">Bento</string>
     <string name="bento_battery">Bateri</string>
     <string name="bento_steps">Langkah hari ini</string>
+    <string name="bento_notifs">Notifikasi</string>
+    <string name="bento_all">Semua</string>
+    <string name="bento_msgs">Mesej</string>
+    <string name="bento_other">App lain</string>
+    <string name="bento_new">BARU</string>
+    <string name="bento_earlier">LEBIH AWAL</string>
+    <string name="bento_clear_x">Buang ✕</string>
+    <string name="bento_now">kini</string>
+    <string name="bento_h">j</string>
+    <string name="bento_d">h</string>
+    <string name="bento_auto">Auto</string>
+    <string name="bento_auto_on">Kecerahan auto dihidupkan</string>
+    <string name="bento_auto_off">Kecerahan auto dimatikan</string>
 </resources>

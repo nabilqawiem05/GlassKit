@@ -674,4 +674,17 @@
     <string name="panel_bento">Bento</string>
     <string name="bento_battery">Battery</string>
     <string name="bento_steps">Steps today</string>
+    <string name="bento_notifs">Notifications</string>
+    <string name="bento_all">All</string>
+    <string name="bento_msgs">Messages</string>
+    <string name="bento_other">Other apps</string>
+    <string name="bento_new">NEW</string>
+    <string name="bento_earlier">EARLIER</string>
+    <string name="bento_clear_x">Clear ✕</string>
+    <string name="bento_now">now</string>
+    <string name="bento_h">h</string>
+    <string name="bento_d">d</string>
+    <string name="bento_auto">Auto</string>
+    <string name="bento_auto_on">Adaptive brightness on</string>
+    <string name="bento_auto_off">Adaptive brightness off</string>
 </resources>

@@ -1498,11 +1498,36 @@ final class Panels {
 
         // ---- baris 2: kecerahan penuh ----
         sBright = new Widgets.HSlider(s, Icon.SUN, BentoViews.boxBg(s, false, 0), 0xFFFAC775, 0xFF412402);
-        sBright.setCb(this::setBrightness);
-        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, dp(56));
+        sBright.setCb((v, done) -> {
+            setBrightness(v, done);
+            paintAuto(false); // seret = kecerahan manual
+        });
+        LinearLayout brow = new LinearLayout(s);
+        brow.addView(sBright, new LinearLayout.LayoutParams(0, dp(56), 1f));
+        // butang kecerahan auto (adaptive brightness)
+        autoBox = new FrameLayout(s);
+        TextView at = Ui.line(s, 13, 700, Color.WHITE);
+        at.setText("A");
+        at.setGravity(Gravity.CENTER);
+        TextView al = Ui.line(s, 9, 600, Color.argb(220, 255, 255, 255));
+        al.setText(R.string.bento_auto);
+        al.setGravity(Gravity.CENTER);
+        LinearLayout ac = new LinearLayout(s);
+        ac.setOrientation(LinearLayout.VERTICAL);
+        ac.setGravity(Gravity.CENTER);
+        ac.addView(new Icon(s, Icon.SUN, Color.WHITE), new LinearLayout.LayoutParams(dp(20), dp(20)));
+        ac.addView(al);
+        autoBox.addView(ac, new FrameLayout.LayoutParams(-1, -1));
+        autoBox.setOnClickListener(v -> toggleAutoBrightness());
+        Ui.press(autoBox);
+        LinearLayout.LayoutParams abl = new LinearLayout.LayoutParams(dp(68), dp(56));
+        abl.leftMargin = g;
+        brow.addView(autoBox, abl);
+        paintAuto(Settings.System.getInt(s.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == 1);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
         bl.topMargin = g;
-        b.addView(sBright, bl);
-        sheet.drops.add(sBright);
+        b.addView(brow, bl);
+        sheet.drops.add(brow);
 
         // ---- baris 3: bateri (besar) | (lampu, pesawat) + waktu solat ----
         LinearLayout r3 = new LinearLayout(s);
@@ -1567,6 +1592,28 @@ final class Panels {
         fll.topMargin = dp(14);
         b.addView(foot, fll);
         sheet.drops.add(foot);
+    }
+
+    private FrameLayout autoBox;
+
+    private void paintAuto(boolean on) {
+        if (autoBox != null) autoBox.setBackground(BentoViews.boxBg(s, on, 0xFFEF9F27));
+    }
+
+    /** Hidup/matikan kecerahan auto (adaptive brightness). */
+    private void toggleAutoBrightness() {
+        android.content.ContentResolver cr = s.getContentResolver();
+        boolean on = Settings.System.getInt(cr, Settings.System.SCREEN_BRIGHTNESS_MODE, 0) != 1;
+        boolean ok = false;
+        try {
+            if (Settings.System.canWrite(s)) ok = Settings.System.putInt(cr, Settings.System.SCREEN_BRIGHTNESS_MODE, on ? 1 : 0);
+        } catch (Exception ignored) {
+        }
+        if (!ok && Shell.granted()) Shell.run("settings put system screen_brightness_mode " + (on ? 1 : 0));
+        else if (!ok) Toast.makeText(s, R.string.need_shizuku, Toast.LENGTH_SHORT).show();
+        paintAuto(on);
+        Haptics.toggle(s, on);
+        Toast.makeText(s, on ? R.string.bento_auto_on : R.string.bento_auto_off, Toast.LENGTH_SHORT).show();
     }
 
     /** Kotak suis: seluruh kotak boleh ditekan; warna kotak ikut keadaan suis. Lebar = ikon + nama di sebelah. */
@@ -2855,6 +2902,7 @@ final class Panels {
 
     void openNotifications() {
         if (open == SHADE) return;
+        bnCount = null; // ditetapkan semula oleh gaya Bento
         bd = new LiquidGlass.Backdrop();
         LiquidGlass.current = bd;
         dark = Ui.darkGlass(s);
@@ -2872,6 +2920,10 @@ final class Panels {
         col.setOnClickListener(v -> close());
         sv.addView(col, new ScrollView.LayoutParams(-1, -2));
 
+        if (s.prefs.getInt(Prefs.PANEL_STYLE, 1) == 2) {
+            openBentoNotifications(col, sv, w);
+            return;
+        }
         col.addView(header(), new LinearLayout.LayoutParams(w, -2));
 
         int tw = (w - 5 * gap) / 6, th = dp(52);
@@ -2947,6 +2999,10 @@ final class Panels {
 
     private void fillNotifications() {
         if (ncList == null || open != SHADE) return;
+        if (bnCount != null) {
+            fillBentoNotifications();
+            return;
+        }
         ncList.removeAllViews();
         NotifListener l = NotifListener.inst;
         List<StatusBarNotification> list = new ArrayList<>();
@@ -3023,6 +3079,401 @@ final class Panels {
 
     private final java.util.Set<String> openGroups = new java.util.HashSet<>();
     private long lastEdgeTap;
+
+    // ===================== Notifikasi Bento =====================
+
+    private TextView bnCount;
+    private LinearLayout bnBar;
+    private int bnFilter; // 0 semua, 1 mesej, 2 app lain
+    private boolean bnAnimate;
+    private int bnStyle;
+
+    private void openBentoNotifications(LinearLayout col, ScrollView sv, int w) {
+        final int g = dp(8);
+        bnAnimate = true;
+        bnStyle = new java.util.Random().nextInt(4);
+        bnFilter = 0;
+        tWifi = null;
+
+        // ---- dua kotak atas: jam | ringkasan ----
+        LinearLayout top = new LinearLayout(s);
+        LinearLayout clk = new LinearLayout(s);
+        clk.setOrientation(LinearLayout.VERTICAL);
+        clk.setPadding(dp(14), dp(12), dp(14), dp(12));
+        clk.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.argb(110, 55, 138, 221), Color.argb(70, 12, 68, 124)}));
+        ((GradientDrawable) clk.getBackground()).setCornerRadius(dp(22));
+        java.util.Date now = new java.util.Date();
+        TextView d1 = Ui.line(s, 11, 500, Color.argb(200, 255, 255, 255));
+        d1.setText(new java.text.SimpleDateFormat("EEEE, d MMM", java.util.Locale.getDefault()).format(now));
+        TextView d2 = Ui.line(s, 32, 650, Color.WHITE);
+        d2.setText(new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(s) ? "HH:mm" : "h:mm",
+                java.util.Locale.getDefault()).format(now));
+        d2.setLetterSpacing(-0.02f);
+        TextView d3 = Ui.line(s, 11, 500, Color.argb(210, 255, 255, 255));
+        StringBuilder info = new StringBuilder();
+        try {
+            Data.Weather wx = Data.weather(s);
+            if (wx != null) info.append(Math.round(wx.temp)).append("°  ·  ");
+        } catch (Throwable ignored) {
+        }
+        int lvl = Ui.battery(s);
+        if (lvl >= 0) info.append(Ui.charging(s) ? "⚡ " : "").append(lvl).append("%");
+        d3.setText(info);
+        clk.addView(d1);
+        clk.addView(d2);
+        clk.addView(d3);
+        top.addView(clk, new LinearLayout.LayoutParams(0, dp(104), 1.15f));
+
+        LinearLayout sum = new LinearLayout(s);
+        sum.setOrientation(LinearLayout.VERTICAL);
+        sum.setPadding(dp(14), dp(12), dp(14), dp(12));
+        sum.setBackground(BentoViews.boxBg(s, false, 0));
+        TextView s1 = Ui.line(s, 11, 500, Color.argb(160, 255, 255, 255));
+        s1.setText(R.string.bento_notifs);
+        bnCount = Ui.line(s, 32, 650, Color.WHITE);
+        bnCount.setText("0");
+        bnBar = new LinearLayout(s);
+        bnBar.setClipToOutline(true);
+        bnBar.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(3)); }
+        });
+        sum.addView(s1);
+        sum.addView(bnCount);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, dp(5));
+        bl.topMargin = dp(8);
+        sum.addView(bnBar, bl);
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(0, dp(104), 1f);
+        sl.leftMargin = g;
+        top.addView(sum, sl);
+        col.addView(top, new LinearLayout.LayoutParams(w, -2));
+
+        // ---- tab penapis ----
+        LinearLayout tabs = new LinearLayout(s);
+        int[] names = {R.string.bento_all, R.string.bento_msgs, R.string.bento_other};
+        for (int i = 0; i < 3; i++) {
+            final int idx = i;
+            TextView t = Ui.line(s, 12, 600, Color.WHITE);
+            t.setText(names[i]);
+            t.setGravity(Gravity.CENTER);
+            t.setPadding(dp(14), dp(7), dp(14), dp(7));
+            t.setTag(i);
+            t.setOnClickListener(v -> {
+                bnFilter = idx;
+                for (int j = 0; j < tabs.getChildCount(); j++) paintTab((TextView) tabs.getChildAt(j), j == idx);
+                Haptics.tick(s);
+                fillNotifications();
+            });
+            paintTab(t, i == 0);
+            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-2, -2);
+            if (i > 0) tl.leftMargin = dp(6);
+            tabs.addView(t, tl);
+        }
+        LinearLayout.LayoutParams tbl = new LinearLayout.LayoutParams(w, -2);
+        tbl.topMargin = dp(12);
+        col.addView(tabs, tbl);
+
+        View media = mediaCard();
+        if (media != null) {
+            LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(w, dp(118));
+            ml.topMargin = dp(10);
+            col.addView(media, ml);
+        }
+
+        ncList = new LinearLayout(s);
+        ncList.setOrientation(LinearLayout.VERTICAL);
+        ncList.setClipChildren(false);
+        col.addView(ncList, new LinearLayout.LayoutParams(w, -2));
+
+        // ---- butang bawah sama besar ----
+        LinearLayout foot = new LinearLayout(s);
+        View man = chip(s.getString(R.string.manage), v -> launch(new Intent("android.settings.NOTIFICATION_SETTINGS")));
+        foot.addView(man, new LinearLayout.LayoutParams(0, dp(44), 1f));
+        View clr = chip(s.getString(R.string.clear_all), v -> clearBento());
+        clr.setBackground(BentoViews.boxBg(s, true, 0xFFE24B4A));
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        cl.leftMargin = g;
+        foot.addView(clr, cl);
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(w, -2);
+        fl.topMargin = dp(12);
+        col.addView(foot, fl);
+        col.addView(handle());
+
+        open = SHADE;
+        fillNotifications();
+        LiquidGlass.current = null;
+        show(SHADE, sv, sv);
+        startTorchWatch();
+        // kotak atas & tab ikut animasi masuk yang sama
+        bnEnter(top, 0);
+        bnEnter(tabs, 1);
+        bnEnter(foot, 6);
+    }
+
+    private void paintTab(TextView t, boolean on) {
+        t.setBackground(on ? Ui.round(Color.WHITE, dp(16)) : BentoViews.boxBg(s, false, 0));
+        t.setTextColor(on ? 0xFF121119 : Color.WHITE);
+    }
+
+    private static final java.util.Set<String> MSG_APPS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "com.whatsapp", "com.whatsapp.w4b", "org.telegram.messenger", "com.instagram.android", "com.facebook.orca",
+            "com.google.android.apps.messaging", "org.thoughtcrime.securesms", "jp.naver.line.android", "com.discord",
+            "com.snapchat.android", "com.twitter.android", "com.tencent.mm"));
+
+    private static boolean isMsg(StatusBarNotification x) {
+        Notification n = x.getNotification();
+        return Notification.CATEGORY_MESSAGE.equals(n.category) || MSG_APPS.contains(x.getPackageName())
+                || (n.extras != null && n.extras.containsKey(Notification.EXTRA_MESSAGES));
+    }
+
+    private int pkgColor(String pkg) {
+        switch (pkg) {
+            case "com.whatsapp": case "com.whatsapp.w4b": return 0xFF25D366;
+            case "org.telegram.messenger": return 0xFF2AABEE;
+            case "com.instagram.android": return 0xFFE1306C;
+            case "com.facebook.orca": return 0xFF0A7CFF;
+            case "com.google.android.gm": return 0xFFEA4335;
+            case "com.google.android.youtube": return 0xFFFF0000;
+        }
+        int[] pal = {0xFF1D9E75, 0xFF7F77DD, 0xFFEF9F27, 0xFFD4537E, 0xFF378ADD, 0xFF639922};
+        return pal[Math.abs(pkg.hashCode()) % pal.length];
+    }
+
+    /** Animasi masuk (gaya bertukar setiap kali panel dibuka). */
+    private void bnEnter(View v, int i) {
+        if (v == null) return;
+        long delay = 60 + i * 55L;
+        v.setAlpha(0f);
+        switch (bnStyle) {
+            case 1: v.setTranslationX(-dp(50)); break;
+            case 2:
+                v.setCameraDistance(dp(900) * s.getResources().getDisplayMetrics().density);
+                v.setRotationX(75);
+                break;
+            case 3: v.setTranslationY(dp(46)); break;
+            default:
+                v.setScaleX(0.9f);
+                v.setScaleY(0.9f);
+                v.setTranslationY(-dp(16));
+        }
+        v.animate().alpha(1f).translationX(0).translationY(0).rotationX(0).scaleX(1f).scaleY(1f)
+                .setStartDelay(delay).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+    }
+
+    private void clearBento() {
+        if (ncList == null) return;
+        int n = ncList.getChildCount();
+        for (int i = 0; i < n; i++) {
+            View c = ncList.getChildAt(n - 1 - i);
+            c.animate().translationX(dp(420)).alpha(0f).setStartDelay(i * 60L).setDuration(260).setInterpolator(Ui.EXIT).start();
+        }
+        s.h.postDelayed(() -> {
+            NotifListener l = NotifListener.inst;
+            if (l != null) {
+                try { l.cancelAllNotifications(); } catch (Exception ignored) {}
+            }
+            s.h.postDelayed(this::fillNotifications, 300);
+        }, 220 + n * 60L);
+    }
+
+    private TextView bnSection(String left, String right, View.OnClickListener onRight) {
+        LinearLayout h = new LinearLayout(s);
+        h.setGravity(Gravity.CENTER_VERTICAL);
+        h.setPadding(dp(6), dp(14), dp(6), dp(8));
+        TextView a = Ui.line(s, 11, 650, Color.argb(160, 255, 255, 255));
+        a.setText(left);
+        a.setLetterSpacing(0.06f);
+        h.addView(a, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView b = Ui.line(s, 11, 600, Color.argb(160, 255, 255, 255));
+        b.setText(right);
+        if (onRight != null) {
+            b.setOnClickListener(onRight);
+            b.setPadding(dp(8), dp(4), 0, dp(4));
+        }
+        h.addView(b);
+        ncList.addView(h, new LinearLayout.LayoutParams(-1, -2));
+        return a;
+    }
+
+    private void fillBentoNotifications() {
+        ncList.removeAllViews();
+        NotifListener l = NotifListener.inst;
+        List<StatusBarNotification> all = new ArrayList<>();
+        if (l != null) {
+            try {
+                StatusBarNotification[] arr = l.getActiveNotifications();
+                if (arr != null) all.addAll(Arrays.asList(arr));
+            } catch (Exception ignored) {
+            }
+        }
+        all.removeIf(x -> x.isOngoing()
+                || (x.getNotification().flags & Notification.FLAG_GROUP_SUMMARY) != 0
+                || x.getPackageName().equals(s.getPackageName()));
+        all.sort((a, b) -> Long.compare(b.getPostTime(), a.getPostTime()));
+
+        // ringkasan: jumlah & bar warna ikut app (sebelum penapis)
+        bnCount.setText(String.valueOf(all.size()));
+        bnBar.removeAllViews();
+        java.util.LinkedHashMap<String, Integer> cnt = new java.util.LinkedHashMap<>();
+        for (StatusBarNotification x : all) cnt.merge(x.getPackageName(), 1, Integer::sum);
+        if (cnt.isEmpty()) {
+            View e = new View(s);
+            e.setBackgroundColor(Color.argb(40, 255, 255, 255));
+            bnBar.addView(e, new LinearLayout.LayoutParams(0, -1, 1f));
+        }
+        for (java.util.Map.Entry<String, Integer> en : cnt.entrySet()) {
+            View seg = new View(s);
+            seg.setBackgroundColor(pkgColor(en.getKey()));
+            bnBar.addView(seg, new LinearLayout.LayoutParams(0, -1, en.getValue()));
+        }
+
+        List<StatusBarNotification> list = new ArrayList<>();
+        for (StatusBarNotification x : all) {
+            boolean m = isMsg(x);
+            if (bnFilter == 0 || (bnFilter == 1 && m) || (bnFilter == 2 && !m)) list.add(x);
+        }
+        int idx = 2;
+        if (list.isEmpty()) {
+            TextView e = Ui.text(s, 14, 500, Color.argb(180, 255, 255, 255));
+            e.setText(R.string.no_notifications);
+            e.setGravity(Gravity.CENTER);
+            e.setPadding(0, dp(28), 0, dp(28));
+            e.setBackground(BentoViews.boxBg(s, false, 0));
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+            p.topMargin = dp(12);
+            ncList.addView(e, p);
+            if (bnAnimate) bnEnter(e, idx);
+            bnAnimate = false;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        List<StatusBarNotification> fresh = new ArrayList<>(), older = new ArrayList<>();
+        for (StatusBarNotification x : list) (now - x.getPostTime() < 3600_000L ? fresh : older).add(x);
+
+        // ---- BARU: kad penuh (dikumpul ikut app, boleh balas / kembang) ----
+        if (!fresh.isEmpty()) {
+            bnSection(s.getString(R.string.bento_new), ago(fresh.get(0).getPostTime()), null);
+            java.util.LinkedHashMap<String, List<StatusBarNotification>> groups = new java.util.LinkedHashMap<>();
+            for (StatusBarNotification x : fresh) {
+                List<StatusBarNotification> gg = groups.get(x.getPackageName());
+                if (gg == null) groups.put(x.getPackageName(), gg = new ArrayList<>());
+                gg.add(x);
+            }
+            for (java.util.Map.Entry<String, List<StatusBarNotification>> en : groups.entrySet()) {
+                String pkg = en.getKey();
+                List<StatusBarNotification> gg = en.getValue();
+                View v;
+                if (gg.size() == 1 || openGroups.contains(pkg)) {
+                    for (StatusBarNotification x : gg) {
+                        View c = card(x, true, true);
+                        if (c == null) continue;
+                        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+                        p.bottomMargin = dp(8);
+                        ncList.addView(c, p);
+                        if (bnAnimate) bnEnter(c, idx++);
+                    }
+                    continue;
+                }
+                v = stack(pkg, gg);
+                if (v == null) continue;
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+                p.bottomMargin = dp(16);
+                ncList.addView(v, p);
+                if (bnAnimate) bnEnter(v, idx++);
+            }
+        }
+
+        // ---- LEBIH AWAL: satu kotak, baris ringkas dengan garis pemisah ----
+        if (!older.isEmpty()) {
+            final List<StatusBarNotification> old = older;
+            bnSection(s.getString(R.string.bento_earlier), s.getString(R.string.bento_clear_x), v -> {
+                NotifListener nl = NotifListener.inst;
+                if (nl != null) for (StatusBarNotification x : old) {
+                    try { nl.cancelNotification(x.getKey()); } catch (Exception ignored) {}
+                }
+                s.h.postDelayed(this::fillNotifications, 250);
+            });
+            LinearLayout box = new LinearLayout(s);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setBackground(BentoViews.boxBg(s, false, 0));
+            box.setClipToOutline(true);
+            box.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(22)); }
+            });
+            int shown = 0;
+            for (StatusBarNotification x : old) {
+                if (shown >= 12) break;
+                View row = bnRow(x);
+                if (row == null) continue;
+                if (shown > 0) {
+                    View div = new View(s);
+                    div.setBackgroundColor(Color.argb(22, 255, 255, 255));
+                    LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(-1, Math.max(1, dp(0.7f)));
+                    dl.leftMargin = dp(58);
+                    dl.rightMargin = dp(14);
+                    box.addView(div, dl);
+                }
+                box.addView(row, new LinearLayout.LayoutParams(-1, -2));
+                shown++;
+            }
+            ncList.addView(box, new LinearLayout.LayoutParams(-1, -2));
+            if (bnAnimate) bnEnter(box, idx++);
+        }
+        addPromos();
+        bnAnimate = false;
+    }
+
+    /** Baris ringkas: ikon app | tajuk + mesej · app | masa. Tekan = buka, leret = buang. */
+    private View bnRow(StatusBarNotification x) {
+        Notification n = x.getNotification();
+        android.os.Bundle ex = n.extras;
+        CharSequence t = ex == null ? null : ex.getCharSequence(Notification.EXTRA_TITLE);
+        CharSequence body = ex == null ? null : ex.getCharSequence(Notification.EXTRA_TEXT);
+        if (android.text.TextUtils.isEmpty(t) && android.text.TextUtils.isEmpty(body)) return null;
+        LinearLayout r = new LinearLayout(s);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(12), dp(11), dp(14), dp(11));
+        ImageView ic = new ImageView(s);
+        ic.setImageDrawable(s.appIcon(x.getPackageName()));
+        ic.setClipToOutline(true);
+        ic.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(10)); }
+        });
+        r.addView(ic, new LinearLayout.LayoutParams(dp(34), dp(34)));
+        LinearLayout mid = new LinearLayout(s);
+        mid.setOrientation(LinearLayout.VERTICAL);
+        mid.setPadding(dp(12), 0, dp(8), 0);
+        TextView a = Ui.line(s, 14, 600, Color.WHITE);
+        a.setText(android.text.TextUtils.isEmpty(t) ? appName(x.getPackageName()) : t);
+        a.setSingleLine(true);
+        a.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        TextView b = Ui.line(s, 12, 500, Color.argb(200, 255, 255, 255));
+        b.setText((android.text.TextUtils.isEmpty(body) ? "" : body + " · ") + appName(x.getPackageName()));
+        b.setSingleLine(true);
+        b.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        mid.addView(a);
+        mid.addView(b);
+        r.addView(mid, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView tm = Ui.line(s, 11, 500, Color.argb(140, 255, 255, 255));
+        tm.setText(ago(x.getPostTime()));
+        r.addView(tm);
+        r.setOnClickListener(v -> openApp(x, n));
+        r.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(Color.argb(50, 255, 255, 255)), null, null));
+        swipeToDismiss(r, x);
+        return r;
+    }
+
+    private String ago(long t) {
+        long m = Math.max(0, (System.currentTimeMillis() - t) / 60000);
+        if (m < 1) return s.getString(R.string.bento_now);
+        if (m < 60) return m + "m";
+        if (m < 24 * 60) return (m / 60) + s.getString(R.string.bento_h);
+        return (m / 1440) + s.getString(R.string.bento_d);
+    }
 
     /** Tindanan "Promosi" di bawah notifikasi biasa. */
     private void addPromos() {
