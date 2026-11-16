@@ -164,6 +164,12 @@ public final class DepthRenderer {
 
     public static void draw(Context ctx, Canvas c, int w, int h, Bitmap bg, Bitmap fg,
                             SharedPreferences p, boolean showClock) {
+        draw(ctx, c, w, h, bg, fg, p, showClock, showClock);
+    }
+
+    /** @param clockOn false = gaya lock screen sama, tetapi tanpa jam (untuk animasi jam larut semasa slide). */
+    public static void draw(Context ctx, Canvas c, int w, int h, Bitmap bg, Bitmap fg,
+                            SharedPreferences p, boolean showClock, boolean clockOn) {
         Paint bmp = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
         RectF bgRect = null;
         // gaya timbul: 0 biasa, 1 bingkai pecah, 2 bayang timbul, 3 gabung
@@ -208,7 +214,7 @@ public final class DepthRenderer {
             c.drawColor(Color.rgb(28, 36, 48));
         }
 
-        if (showClock) drawClock(ctx, c, w, h, bg, bgRect, p);
+        if (showClock && clockOn) drawClock(ctx, c, w, h, bg, bgRect, p);
 
         if (fg != null) {
             RectF fr = centerCrop(fg, w, h);

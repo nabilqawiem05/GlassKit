@@ -66,7 +66,7 @@ public class LockActivity extends Activity {
     private static final java.util.concurrent.ExecutorService DATA =
             java.util.concurrent.Executors.newSingleThreadExecutor(r -> new Thread(r, "gk-lock-data"));
     /** Bingkai terakhir dikongsi antara instance: lock screen muncul serta-merta, tiada skrin hitam. */
-    private static Bitmap lastFrame;
+    private static Bitmap lastFrame, lastBase, lastBaseSoft;
     private static String lastKey;
     private static final LiquidGlass.Backdrop lastBd = new LiquidGlass.Backdrop();
     private static final java.util.concurrent.ExecutorService RENDER =
@@ -90,6 +90,7 @@ public class LockActivity extends Activity {
     private int W, H, statusH;
 
     private ImageView wall;
+    private ImageView wallBase; // bingkai sama tanpa jam (di bawah): jam larut semasa slide
     private ImageView wallBlur; // salinan kabur (dikira sekali) — dipudar masuk semasa slide
     private FrameLayout ui;
     private GaugeRow gauges;
@@ -265,6 +266,9 @@ public class LockActivity extends Activity {
         LiquidGlass.current = bd;
         Root root = new Root(this);
         root.setBackgroundColor(Color.BLACK);
+        wallBase = new ImageView(this);
+        wallBase.setScaleType(ImageView.ScaleType.FIT_XY);
+        root.addView(wallBase, new FrameLayout.LayoutParams(-1, -1));
         wall = new ImageView(this);
         wall.setScaleType(ImageView.ScaleType.FIT_XY);
         root.addView(wall, new FrameLayout.LayoutParams(-1, -1));
@@ -278,7 +282,8 @@ public class LockActivity extends Activity {
                 frame = lastFrame;
                 wall.setImageBitmap(frame);
                 copyBd(lastBd, bd);
-                wallBlur.setImageBitmap(bd.soft);
+                wallBase.setImageBitmap(lastBase);
+                wallBlur.setImageBitmap(lastBaseSoft != null ? lastBaseSoft : bd.soft);
             }
         }
 
@@ -460,6 +465,10 @@ public class LockActivity extends Activity {
         wall.setRenderEffect(null);
         wallBlur.animate().cancel();
         wallBlur.setAlpha(0f);
+        wallBase.animate().cancel();
+        wallBase.setAlpha(1f);
+        wallBase.setScaleX(1f);
+        wallBase.setScaleY(1f);
         wallBlur.setScaleX(1f);
         wallBlur.setScaleY(1f);
         unlockSpring.stop();
@@ -600,6 +609,13 @@ public class LockActivity extends Activity {
     }
 
     /** Lukis bingkai wallpaper + jam di thread latar; UI tidak tersekat. Bingkai lama kekal sehingga yang baru siap. */
+    private volatile Bitmap baseOut, baseSoftOut;
+
+    private static float smooth(float a, float b, float x) {
+        float t = Math.max(0f, Math.min(1f, (x - a) / (b - a)));
+        return t * t * (3 - 2 * t);
+    }
+
     void render() {
         try {
             placeGauges();
@@ -623,6 +639,15 @@ public class LockActivity extends Activity {
                 out = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
                 DepthRenderer.draw(app, new Canvas(out), w, hh, bgB, fgB, prefs, true);
                 nb.set(out, w, hh);
+                try {
+                    Bitmap b0 = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
+                    DepthRenderer.draw(app, new Canvas(b0), w, hh, bgB, fgB, prefs, true, false);
+                    baseOut = b0;
+                    baseSoftOut = GlassArt.blur(b0, 240, 6);
+                } catch (Throwable ignored) {
+                    baseOut = null;
+                    baseSoftOut = null;
+                }
                 if (fgB != null) {
                     RectF sbx = DepthRenderer.subjectBox(fgB, DepthRenderer.centerCrop(fgB, w, hh));
                     float sc = (float) app.getResources().getDisplayMetrics().widthPixels / w;
@@ -647,12 +672,15 @@ public class LockActivity extends Activity {
                 CrashLog.write(app, t);
             }
             final Bitmap done = out;
+            final Bitmap base = baseOut, baseSoft = baseSoftOut;
             h.post(() -> {
                 renderBusy = false;
                 if (done != null) {
                     frame = done;
                     synchronized (lastBd) {
                         lastFrame = done;
+                        lastBase = base;
+                        lastBaseSoft = baseSoft;
                         lastKey = key;
                         copyBd(nb, lastBd);
                     }
@@ -660,7 +688,8 @@ public class LockActivity extends Activity {
                         wall.setImageBitmap(done);
                         if (gauges != null) gauges.invalidate();
                         copyBd(nb, bd);
-                        wallBlur.setImageBitmap(bd.soft);
+                        wallBase.setImageBitmap(base);
+                        wallBlur.setImageBitmap(baseSoft != null ? baseSoft : bd.soft);
                         LiquidGlass.invalidateTree(ui);
                         gauges.invalidate();
                     }
@@ -1627,8 +1656,9 @@ public class LockActivity extends Activity {
             applyUnlock(Math.max(uProg, 0.6f), Math.min(uDy, -H * 0.2f));
             ui.animate().translationY(-H * 0.3f).alpha(0f).setInterpolator(Ui.EXIT).setDuration(170).start();
             wallBlur.setVisibility(View.VISIBLE);
-            wallBlur.animate().scaleX(1.24f).scaleY(1.24f).alpha(0f).setInterpolator(Ui.EASE).setDuration(240).start();
-            wall.animate().scaleX(1.24f).scaleY(1.24f).alpha(0f).setInterpolator(Ui.EASE).setDuration(240).withEndAction(() -> {
+            wallBlur.animate().scaleX(1.18f).scaleY(1.18f).alpha(0f).setInterpolator(Ui.EASE).setDuration(260).start();
+            wallBase.animate().scaleX(1.18f).scaleY(1.18f).alpha(0f).setInterpolator(Ui.EASE).setDuration(260).start();
+            wall.animate().scaleX(1.18f).scaleY(1.18f).alpha(0f).setInterpolator(Ui.EASE).setDuration(260).withEndAction(() -> {
                 if (r != null) r.run();
                 // simpan aktiviti di belakang supaya dibuka semula serta-merta (tiada skrin hitam)
                 boolean moved = false;
@@ -1657,22 +1687,28 @@ public class LockActivity extends Activity {
         uProg = p;
         float q = Math.max(0f, Math.min(1.2f, p));
         boolean zoom = prefs == null || prefs.getBoolean(Prefs.LOCK_ZOOM, true);
-        float sc = 1f + (zoom ? 0.16f : 0.04f) * q;
+        // wallpaper: zoom lembut ikut jari
+        float sc = 1f + (zoom ? 0.10f : 0.03f) * smooth(0f, 1f, q) + (zoom ? 0.02f * Math.max(0f, q - 1f) : 0f);
         wall.setScaleX(sc);
         wall.setScaleY(sc);
         wall.setTranslationY(0);
-        // kabur murah: pudar masuk salinan kabur yang sudah dikira (tiada kabur GPU penuh setiap bingkai)
-        float ba = zoom ? Math.min(1f, q * 1.5f) : 0f;
+        wallBase.setScaleX(sc);
+        wallBase.setScaleY(sc);
+        // jam larut keluar dahulu (lapisan tanpa jam di bawah), tiada bertindih dengan kabur
+        boolean hasBase = wallBase.getDrawable() != null;
+        wall.setAlpha(hasBase ? 1f - smooth(0f, 0.55f, q) : 1f);
+        // kabur lembut masuk kemudian (salinan kabur sedia ada — ringan)
+        float ba = zoom ? 0.8f * smooth(0.18f, 1f, q) : 0f;
         wallBlur.setScaleX(sc);
         wallBlur.setScaleY(sc);
         wallBlur.setAlpha(ba);
         wallBlur.setVisibility(ba > 0.003f ? View.VISIBLE : View.INVISIBLE);
-        // UI dilukis sebagai satu lapisan GPU semasa bergerak (alpha/translate murah)
+        // UI: naik ikut jari, mengecil sedikit dan pudar cepat (tiada hantu separa telus lama)
         int lt = q > 0.001f ? View.LAYER_TYPE_HARDWARE : View.LAYER_TYPE_NONE;
         if (ui.getLayerType() != lt) ui.setLayerType(lt, null);
-        ui.setTranslationY(dy);
-        ui.setAlpha(Math.max(0f, 1f - q * 1.35f));
-        float us = 1f - 0.05f * Math.min(1f, q);
+        ui.setTranslationY(dy * 0.85f);
+        ui.setAlpha(1f - smooth(0f, 0.45f, q));
+        float us = 1f - 0.07f * smooth(0f, 1f, q);
         ui.setScaleX(us);
         ui.setScaleY(us);
     }
@@ -1704,7 +1740,9 @@ public class LockActivity extends Activity {
             wall.setScaleY(sc);
             wallBlur.setScaleX(sc);
             wallBlur.setScaleY(sc);
-            wallBlur.setAlpha(Math.min(1f, q * 1.5f));
+            wallBlur.setAlpha(0.8f * smooth(0.18f, 1f, q));
+            wallBase.setScaleX(sc);
+            wallBase.setScaleY(sc);
             reveal.setScaleX(sc);
             reveal.setScaleY(sc);
             reveal.set(f);
