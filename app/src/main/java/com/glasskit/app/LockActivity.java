@@ -71,9 +71,11 @@ public class LockActivity extends Activity {
     private static final LiquidGlass.Backdrop lastBd = new LiquidGlass.Backdrop();
     private static final java.util.concurrent.ExecutorService RENDER =
             java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
-                Thread t = new Thread(r, "gk-lock-render");
-                t.setPriority(Thread.NORM_PRIORITY - 1);
-                return t;
+                // keutamaan latar: lukisan jam tidak merebut CPU dari animasi
+                return new Thread(() -> {
+                    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+                    r.run();
+                }, "gk-lock-render");
             });
     private boolean renderBusy, renderAgain;
     private int lastBatt = -2;
@@ -476,7 +478,8 @@ public class LockActivity extends Activity {
         if (prefs.getBoolean(Prefs.LOCK_ZOOM, true)) {
             applyUnlock(0.32f, 0f);
             unlockSpring.value = 0.32f;
-            unlockSpring.to(0f, 0f, null);
+            uiLayer(true);
+            unlockSpring.to(0f, 0f, () -> uiLayer(false));
         } else {
             applyUnlock(0f, 0f);
         }
@@ -610,6 +613,12 @@ public class LockActivity extends Activity {
 
     /** Lukis bingkai wallpaper + jam di thread latar; UI tidak tersekat. Bingkai lama kekal sehingga yang baru siap. */
     private volatile Bitmap baseOut, baseSoftOut;
+
+    /** Lapisan GPU untuk UI semasa animasi: dibina sekali di awal sentuhan, dibuang bila spring berhenti. */
+    private void uiLayer(boolean on) {
+        int lt = on ? View.LAYER_TYPE_HARDWARE : View.LAYER_TYPE_NONE;
+        if (ui != null && ui.getLayerType() != lt) ui.setLayerType(lt, null);
+    }
 
     private static float smooth(float a, float b, float x) {
         float t = Math.max(0f, Math.min(1f, (x - a) / (b - a)));
@@ -1704,8 +1713,6 @@ public class LockActivity extends Activity {
         wallBlur.setAlpha(ba);
         wallBlur.setVisibility(ba > 0.003f ? View.VISIBLE : View.INVISIBLE);
         // UI: naik ikut jari, mengecil sedikit dan pudar cepat (tiada hantu separa telus lama)
-        int lt = q > 0.001f ? View.LAYER_TYPE_HARDWARE : View.LAYER_TYPE_NONE;
-        if (ui.getLayerType() != lt) ui.setLayerType(lt, null);
         ui.setTranslationY(dy * 0.85f);
         ui.setAlpha(1f - smooth(0f, 0.45f, q));
         float us = 1f - 0.07f * smooth(0f, 1f, q);
@@ -1767,7 +1774,7 @@ public class LockActivity extends Activity {
         wall.animate().cancel();
         wall.setAlpha(1f);
         unlockSpring.value = uProg;
-        unlockSpring.to(0f, 0f, null);
+        unlockSpring.to(0f, 0f, () -> uiLayer(false));
     }
 
     private boolean inside(View v, MotionEvent e) {
@@ -1792,7 +1799,7 @@ public class LockActivity extends Activity {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     removeCallbacks(clockHold);
-                    if (clockEdit == null && clockHit(e.getRawX(), e.getRawY())) postDelayed(clockHold, 520);
+                    // sunting saiz jam di lock screen dibuang (laraskan dalam app GlassKit)
                     break;
                 case MotionEvent.ACTION_MOVE:
                     if (Math.hypot(e.getRawX() - x0, e.getRawY() - y0) > dp(10)) removeCallbacks(clockHold);
@@ -1833,6 +1840,7 @@ public class LockActivity extends Activity {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     unlockSpring.stop();
+                    uiLayer(true); // bina lapisan sebelum jari bergerak (tiada sentakan bingkai pertama)
                     y0 = e.getRawY();
                     if (e.getRawY() > H * 0.76f && Math.abs(e.getRawX() - W / 2f) < W * 0.14f) {
                         lastSensorTouch = System.currentTimeMillis();
@@ -1840,7 +1848,10 @@ public class LockActivity extends Activity {
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dy = Math.min(0, e.getRawY() - y0);
-                    if (!dragging) unlockSpring.stop();
+                    if (!dragging) {
+                        unlockSpring.stop();
+                        uiLayer(true);
+                    }
                     dragging = true;
                     uDy = dy;
                     // wallpaper zoom & kabur ikut jari; UI naik dan pudar
@@ -1855,7 +1866,7 @@ public class LockActivity extends Activity {
                     vt.recycle();
                     vt = null;
                     boolean go = dragging && e.getActionMasked() == MotionEvent.ACTION_UP
-                            && (dy < -dp(120) || (vy < -dp(900) && dy < -dp(40)));
+                            && (dy < -dp(90) || (vy < -dp(700) && dy < -dp(30)));
                     if (go) unlock(null);
                     else springBack();
                     dragging = false;
