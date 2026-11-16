@@ -1309,7 +1309,16 @@ public class MainActivity extends Activity {
 
     // ======================= Gambar =======================
 
+    /** Pilih gambar terus dari galeri / album (Photo Picker Android), bukan pengurus fail. */
     private void pick(int req) {
+        try {
+            Intent p = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+            p.setType("image/*");
+            startActivityForResult(p, req);
+            return;
+        } catch (Exception ignored) {
+            // tiada Photo Picker: guna pemilih fail
+        }
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("image/*");
