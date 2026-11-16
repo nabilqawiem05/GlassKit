@@ -400,7 +400,8 @@ final class CallOverlay {
     private void buildIos(CharSequence name, String subtitle, Drawable photo, boolean birthday) {
         Posters.Poster poster = Posters.match(s, name);
         Bitmap ph = poster != null ? Posters.photo(s, poster) : null;
-        if (ph == null) ph = toBitmap(photo, dp(320));
+        // gambar bukan bitmap (ikon adaptif): lukis kecil supaya dipapar sebagai gambar bulat tajam, bukan poster kabur
+        if (ph == null) ph = toBitmap(photo, 400);
         TextView[] nv = new TextView[1];
         root = CallIos.build(s, bd, name, subtitle, ph, birthday, what -> {
             switch (what) {

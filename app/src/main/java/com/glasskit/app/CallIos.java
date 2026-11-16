@@ -40,46 +40,92 @@ final class CallIos {
         root.setBackgroundColor(Color.BLACK);
         int W = s.screenW, H = s.screenH;
 
-        // ---- poster ----
+        // ---- poster / latar ----
+        // Gambar besar (≥ 480px) = poster penuh tajam. Gambar kecil (cth. profil WhatsApp) TIDAK dibesarkan
+        // (jadi kabur) — sebaliknya latar warna terang + gambar bulat tajam di tengah, seperti iPhone.
+        boolean posterMode = photo != null && Math.min(photo.getWidth(), photo.getHeight()) >= 480;
         ImageView poster = new ImageView(s);
         poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        Bitmap src = photo;
-        if (src != null && src.getWidth() < 500) src = GlassArt.blur(src, 420, 1); // gambar kecil: lembutkan piksel
-        if (src != null) {
-            poster.setImageBitmap(src);
-            bd.set(src, W, H);
+        Bitmap wall = DepthRenderer.load(DepthRenderer.bgFile(s));
+        if (posterMode) {
+            poster.setImageBitmap(photo);
+            bd.set(photo, W, H);
         } else {
-            // tiada gambar: poster monogram, warna dari wallpaper
-            Bitmap wall = DepthRenderer.load(DepthRenderer.bgFile(s));
             int base = wall != null ? DepthRenderer.autoColor(wall) : 0xFF7F77DD;
             float[] hsv = new float[3];
             Color.colorToHSV(base, hsv);
-            hsv[1] = Math.min(1f, hsv[1] + 0.25f);
-            hsv[2] = 0.55f;
+            hsv[1] = Math.max(0.55f, Math.min(1f, hsv[1] + 0.35f)); // warna terang, bukan pudar
+            hsv[2] = 0.78f;
             int c1 = Color.HSVToColor(hsv);
-            hsv[2] = 0.22f;
+            hsv[0] = (hsv[0] + 28) % 360;
+            hsv[2] = 0.42f;
             int c2 = Color.HSVToColor(hsv);
-            poster.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{c1, c2}));
+            hsv[0] = (hsv[0] + 300) % 360;
+            hsv[2] = 0.18f;
+            int c3 = Color.HSVToColor(hsv);
+            GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{c1, c2, c3});
+            poster.setBackground(g);
             if (wall != null) bd.set(wall, W, H);
         }
         root.addView(poster, new FrameLayout.LayoutParams(-1, -1));
-        if (src == null) {
-            TextView mono = Ui.text(s, 120, 600, Color.argb(235, 255, 255, 255));
-            mono.setText(initials(name));
-            mono.setGravity(Gravity.CENTER);
-            root.addView(mono, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        if (!posterMode) {
+            // cahaya lembut di belakang gambar bulat + gelang deringan
+            FrameLayout ava = new FrameLayout(s);
+            ava.setClipChildren(false);
+            int d = Ui.dp(s, 168);
+            for (int i = 0; i < 3; i++) {
+                View ring = new View(s);
+                GradientDrawable rg = new GradientDrawable();
+                rg.setShape(GradientDrawable.OVAL);
+                rg.setStroke(Ui.dp(s, 2), Color.argb(150, 255, 255, 255));
+                ring.setBackground(rg);
+                ava.addView(ring, new FrameLayout.LayoutParams(d, d, Gravity.CENTER));
+                ObjectAnimator ra = ObjectAnimator.ofPropertyValuesHolder(ring,
+                        PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.9f), PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.9f),
+                        PropertyValuesHolder.ofFloat(View.ALPHA, 0.9f, 0f));
+                ra.setDuration(2400);
+                ra.setStartDelay(i * 800L);
+                ra.setRepeatCount(ValueAnimator.INFINITE);
+                ra.setInterpolator(new android.view.animation.DecelerateInterpolator());
+                ra.start();
+            }
+            View pic;
+            if (photo != null) {
+                ImageView iv = new ImageView(s);
+                iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                iv.setImageBitmap(photo);
+                pic = iv;
+            } else {
+                TextView mono = Ui.text(s, 64, 600, Color.WHITE);
+                mono.setText(initials(name));
+                mono.setGravity(Gravity.CENTER);
+                pic = mono;
+            }
+            GradientDrawable pb = new GradientDrawable();
+            pb.setShape(GradientDrawable.OVAL);
+            pb.setColor(Color.argb(70, 255, 255, 255));
+            pb.setStroke(Ui.dp(s, 3), Color.argb(200, 255, 255, 255));
+            pic.setBackground(pb);
+            circle(s, pic);
+            pic.setElevation(Ui.dp(s, 12));
+            ava.addView(pic, new FrameLayout.LayoutParams(d, d, Gravity.CENTER));
+            FrameLayout.LayoutParams al = new FrameLayout.LayoutParams(-1, d * 2, Gravity.CENTER);
+            al.topMargin = -Ui.dp(s, 20);
+            root.addView(ava, al);
         }
-        // zoom perlahan (Ken Burns)
-        ObjectAnimator kb = ObjectAnimator.ofPropertyValuesHolder(poster,
-                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.1f), PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.1f));
-        kb.setDuration(9000);
-        kb.setRepeatCount(ValueAnimator.INFINITE);
-        kb.setRepeatMode(ValueAnimator.REVERSE);
-        kb.start();
+        // zoom perlahan (Ken Burns) — poster sahaja
+        if (posterMode) {
+            ObjectAnimator kb = ObjectAnimator.ofPropertyValuesHolder(poster,
+                    PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.08f), PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.08f));
+            kb.setDuration(9000);
+            kb.setRepeatCount(ValueAnimator.INFINITE);
+            kb.setRepeatMode(ValueAnimator.REVERSE);
+            kb.start();
+        }
 
         View shade = new View(s);
         shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{
-                Color.argb(110, 0, 0, 0), Color.argb(10, 0, 0, 0), Color.argb(0, 0, 0, 0), Color.argb(150, 0, 0, 0)}));
+                Color.argb(70, 0, 0, 0), Color.argb(0, 0, 0, 0), Color.argb(0, 0, 0, 0), Color.argb(110, 0, 0, 0)}));
         root.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
         if (birthday) root.addView(new Fireworks(s), new FrameLayout.LayoutParams(-1, -1));
@@ -122,15 +168,19 @@ final class CallIos {
         // ---- butang ----
         LinearLayout bottom = new LinearLayout(s);
         bottom.setOrientation(LinearLayout.VERTICAL);
-        bottom.setPadding(Ui.dp(s, 36), 0, Ui.dp(s, 36), Ui.dp(s, 56));
+        bottom.setClipChildren(false);
+        bottom.setClipToPadding(false);
+        root.setClipChildren(false);
+        bottom.setPadding(Ui.dp(s, 30), 0, Ui.dp(s, 30), Ui.dp(s, 60));
         LinearLayout row1 = new LinearLayout(s);
         row1.addView(small(s, bd, Icon.BELL, R.string.call_silence, v -> act.run(2)));
         row1.addView(new View(s), new LinearLayout.LayoutParams(0, 1, 1f));
         row1.addView(small(s, bd, -1, R.string.call_minimize, v -> act.run(3)));
         bottom.addView(row1, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout row2 = new LinearLayout(s);
+        row2.setClipChildren(false);
         LinearLayout dec = big(s, bd, 0xFFFF3B30, true, R.string.call_decline, v -> act.run(0));
-        LinearLayout acc = big(s, bd, 0xFF30D158, false, R.string.call_accept, v -> act.run(1));
+        LinearLayout acc = big(s, bd, 0xFF34C759, false, R.string.call_accept, v -> act.run(1));
         row2.addView(dec);
         row2.addView(new View(s), new LinearLayout.LayoutParams(0, 1, 1f));
         row2.addView(acc);
@@ -143,8 +193,10 @@ final class CallIos {
         // ---- masuk ----
         root.setAlpha(0f);
         root.animate().alpha(1f).setDuration(240).start();
-        poster.setScaleX(1.15f);
-        poster.setScaleY(1.15f);
+        if (posterMode) {
+            poster.setScaleX(1.15f);
+            poster.setScaleY(1.15f);
+        }
         top.setTranslationY(-Ui.dp(s, 30));
         top.setAlpha(0f);
         top.animate().translationY(0).alpha(1f).setStartDelay(80).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
@@ -220,21 +272,40 @@ final class CallIos {
         LinearLayout col = new LinearLayout(s);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.setClipChildren(false);
+        col.setClipToPadding(false);
+        col.setPadding(Ui.dp(s, 8), Ui.dp(s, 8), Ui.dp(s, 8), 0); // ruang untuk denyutan & bayang
         FrameLayout b = new FrameLayout(s);
-        b.setBackground(new LiquidGlass.Surface(s, Ui.dp(s, 40), false, bd, color));
+        // bulatan padat: atas lebih cerah, bawah warna penuh (macam butang iPhone), tepi putih halus
+        int light = blend(color, Color.WHITE, 0.28f);
+        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{light, color});
+        g.setShape(GradientDrawable.OVAL);
+        g.setStroke(Math.max(1, Ui.dp(s, 1)), Color.argb(90, 255, 255, 255));
+        b.setBackground(g);
         Icon ic = new Icon(s, Icon.PHONE, Color.WHITE);
         if (hang) ic.setRotation(135);
         b.addView(ic, new FrameLayout.LayoutParams(Ui.dp(s, 34), Ui.dp(s, 34), Gravity.CENTER));
-        b.setElevation(Ui.dp(s, 6));
+        b.setElevation(Ui.dp(s, 10));
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            b.setOutlineSpotShadowColor(color);
+            b.setOutlineAmbientShadowColor(color);
+        }
         circle(s, b);
         b.setOnClickListener(l);
         Ui.press(b);
-        col.addView(b, new LinearLayout.LayoutParams(Ui.dp(s, 80), Ui.dp(s, 80)));
+        col.addView(b, new LinearLayout.LayoutParams(Ui.dp(s, 78), Ui.dp(s, 78)));
         TextView t = Ui.text(s, 14, 600, Color.WHITE);
         t.setText(label);
-        t.setPadding(0, Ui.dp(s, 8), 0, 0);
+        t.setShadowLayer(Ui.dp(s, 4), 0, Ui.dp(s, 1), Color.argb(120, 0, 0, 0));
+        t.setPadding(0, Ui.dp(s, 12), 0, 0);
         col.addView(t);
         return col;
+    }
+
+    private static int blend(int a, int b, float t) {
+        return Color.rgb(Math.round(Color.red(a) + (Color.red(b) - Color.red(a)) * t),
+                Math.round(Color.green(a) + (Color.green(b) - Color.green(a)) * t),
+                Math.round(Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t));
     }
 
     /** Butang jawab "bernafas": membesar sedikit dan kembali, berulang. */
