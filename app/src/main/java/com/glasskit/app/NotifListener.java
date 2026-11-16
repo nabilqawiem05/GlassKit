@@ -35,6 +35,7 @@ public class NotifListener extends NotificationListenerService {
         if (p != null) p.onNotifsChanged();
         if (p != null && p.call != null && sbn != null) p.call.onRemoved(sbn.getKey());
         if (p != null && sbn != null) p.onLiveRemoved(sbn.getKey());
+        if (p != null && sbn != null) p.onAlarmRemoved(sbn.getKey());
     }
 
     @Override
@@ -46,6 +47,12 @@ public class NotifListener extends NotificationListenerService {
 
         Notification n = sbn.getNotification();
         Bundle ex = n.extras;
+
+        // penggera / pemasa berbunyi: beri laluan kepada skrin penggera (jangan tutup dengan lock screen)
+        if (PillService.isAlarm(sbn)) {
+            p.onAlarm(sbn);
+            return;
+        }
 
         if (CallOverlay.isCall(n)) {
             if (p.call != null) p.call.onCallNotification(sbn);

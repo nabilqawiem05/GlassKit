@@ -367,6 +367,11 @@ public class LockActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (PillService.inst != null && PillService.inst.alarmActive()) {
+            // penggera sedang berbunyi: beri laluan kepada skrin penggera
+            moveTaskToBack(true);
+            return;
+        }
         visible = true;
         holdUntil = 0;
         // tanggalkan penutup selepas bingkai pertama aktiviti ini dilukis

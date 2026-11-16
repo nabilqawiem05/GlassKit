@@ -66,6 +66,10 @@ final class LockCover {
     /** Dipanggil ketika skrin dihidupkan. */
     void onScreenOn() {
         if (!shown) return;
+        if (s.alarmActive()) {
+            hide(); // penggera berbunyi: jangan tutup skrin penggera
+            return;
+        }
         s.h.removeCallbacks(timeout);
         s.h.postDelayed(timeout, 6000);
         if (LockActivity.visible) s.h.postDelayed(this::hide, 180);

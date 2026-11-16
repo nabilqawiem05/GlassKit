@@ -1958,8 +1958,69 @@ public class PillService extends AccessibilityService
         }
     }
 
+    // ===================== Penggera: utamakan skrin penggera =====================
+    private long alarmUntil;
+    private String alarmKey;
+
+    static boolean isAlarm(StatusBarNotification sbn) {
+        Notification n = sbn.getNotification();
+        if (n.fullScreenIntent == null) return false;
+        String pkg = sbn.getPackageName();
+        return Notification.CATEGORY_ALARM.equals(n.category) || pkg.contains("deskclock") || pkg.contains(".clock");
+    }
+
+    /** Ada bunyi penggera sedang dimainkan (mana-mana app jam). */
+    boolean alarmPlaying() {
+        try {
+            android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+            for (android.media.AudioPlaybackConfiguration c : am.getActivePlaybackConfigurations()) {
+                if (c.getAudioAttributes().getUsage() == android.media.AudioAttributes.USAGE_ALARM) return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    boolean alarmActive() { return System.currentTimeMillis() < alarmUntil || alarmPlaying(); }
+
+    void onAlarm(StatusBarNotification sbn) {
+        alarmUntil = System.currentTimeMillis() + 15 * 60_000L;
+        alarmKey = sbn.getKey();
+        h.removeCallbacks(lockWatch);
+        h.removeCallbacks(ensureLock);
+        if (lockCover != null) lockCover.hide();
+        hideBanner(false);
+        LockActivity la = LockActivity.inst;
+        if (la != null && LockActivity.visible) {
+            try { la.moveTaskToBack(true); } catch (Throwable ignored) {}
+        }
+        // bawa skrin penggera ke depan
+        try {
+            ActivityOptions o = ActivityOptions.makeBasic();
+            if (Build.VERSION.SDK_INT >= 34) {
+                o.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+            }
+            sbn.getNotification().fullScreenIntent.send(this, 0, null, null, null, null, o.toBundle());
+        } catch (Throwable ignored) {
+        }
+    }
+
+    void onAlarmRemoved(String key) {
+        if (key == null || !key.equals(alarmKey)) return;
+        alarmKey = null;
+        alarmUntil = 0;
+        // penggera ditutup: kembalikan lock screen GlassKit jika masih berkunci
+        if (prefs != null && prefs.getBoolean(Prefs.LOCK_ON, false)) {
+            h.postDelayed(ensureLock, 700);
+            lockMiss = 0;
+            h.removeCallbacks(lockWatch);
+            h.postDelayed(lockWatch, 1000);
+        }
+    }
+
     private boolean lockNeeded() {
         if (prefs == null || !prefs.getBoolean(Prefs.LOCK_ON, false) || LockActivity.visible) return false;
+        if (alarmActive()) return false;
         if (NightstandActivity.visible) return false;
         if (System.currentTimeMillis() < LockActivity.holdUntil) return false;
         KeyguardManager km = getSystemService(KeyguardManager.class);
