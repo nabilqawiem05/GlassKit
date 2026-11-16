@@ -667,4 +667,5 @@
     <string name="call_silence">Silence</string>
     <string name="call_minimize">Minimise</string>
     <string name="call_birthday">🎂 It\'s %s\'s birthday today</string>
+    <string name="lock_top_blur">Blur top of wallpaper (iPhone style)</string>
 </resources>

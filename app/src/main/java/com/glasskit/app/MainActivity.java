@@ -626,6 +626,7 @@ public class MainActivity extends Activity {
         slider(clk, 60, 600, prefs.getInt(Prefs.CLOCK_H, 100), val -> prefs.edit().putInt(Prefs.CLOCK_H, val).apply());
         button(clk, getString(R.string.btn_auto_pos), false, v -> autoPlace(true));
 
+        toggle(clk, R.string.lock_top_blur, Prefs.LOCK_TOP_BLUR, true);
         toggle(clk, R.string.hide_stock, Prefs.HIDE_STOCK, false);
         label(clk, R.string.lbl_hide_h);
         slider(clk, 60, 260, prefs.getInt(Prefs.HIDE_H, 130), val -> prefs.edit().putInt(Prefs.HIDE_H, val).apply());

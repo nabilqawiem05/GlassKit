@@ -602,7 +602,7 @@ public class LockActivity extends Activity {
 
     private static final String[] RENDER_KEYS = {Prefs.CLOCK_SIZE, Prefs.CLOCK_Y, Prefs.CLOCK_COLOR, Prefs.CLOCK_FONT,
             Prefs.CLOCK_W, Prefs.CLOCK_H, Prefs.CLOCK_GLASS, Prefs.WALL_MOOD, Prefs.CLOCK_LAYOUT, Prefs.CLOCK_SHAPE,
-            Prefs.POP_STYLE, Prefs.CLOCK_AUTO, Prefs.LOCK_HIJRI, Prefs.HIJRI_ADJ};
+            Prefs.POP_STYLE, Prefs.CLOCK_AUTO, Prefs.LOCK_HIJRI, Prefs.HIJRI_ADJ, Prefs.LOCK_TOP_BLUR};
 
     /** Tandatangan tetapan yang mempengaruhi lukisan sahaja (bukan semua prefs). */
     private String renderSig() {

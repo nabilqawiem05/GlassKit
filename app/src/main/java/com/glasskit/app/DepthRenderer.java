@@ -209,6 +209,7 @@ public final class DepthRenderer {
                 c.drawRoundRect(frame, rr, rr, st);
             } else {
                 c.drawBitmap(bg, null, bgRect, bmp);
+                if (showClock && p.getBoolean(Prefs.LOCK_TOP_BLUR, true)) topBlur(c, w, h, bg, bgRect);
                 if (shadowOn) {
                     // latar sedikit kabur & gelap supaya subjek "terangkat"
                     Paint sp = new Paint(bmp);
@@ -249,6 +250,37 @@ public final class DepthRenderer {
         if (p.getBoolean(Prefs.WALL_MOOD, false)) {
             try { Mood.apply(ctx, c, w, h); } catch (Throwable ignored) {}
         }
+    }
+
+    /**
+     * Kabur atas gaya iPhone: wallpaper di belakang jam & widget dikaburkan secara beransur
+     * (paling kabur di atas, jernih di bawah ~55% skrin), dengan gelap lembut supaya teks jelas.
+     * Subjek dilukis kemudian, jadi kekal tajam.
+     */
+    static void topBlur(Canvas c, int w, int h, Bitmap bg, RectF bgRect) {
+        Paint bp = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+        Paint mask = new Paint();
+        mask.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
+        // lapisan 1: kabur sederhana, pudar hingga 55%
+        Bitmap mid = cached(bg, "topMid", () -> GlassArt.blur(bg, 420, 4));
+        int sc = c.saveLayer(0, 0, w, h * 0.56f, null);
+        c.drawBitmap(mid, null, bgRect, bp);
+        mask.setShader(new LinearGradient(0, 0, 0, h * 0.56f,
+                new int[]{0xFF000000, 0xFF000000, 0x00000000}, new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h * 0.56f, mask);
+        c.restoreToCount(sc);
+        // lapisan 2: kabur kuat di bahagian paling atas, pudar hingga 32%
+        Bitmap strong = cached(bg, "topStrong", () -> GlassArt.blur(bg, 200, 7));
+        sc = c.saveLayer(0, 0, w, h * 0.32f, null);
+        c.drawBitmap(strong, null, bgRect, bp);
+        mask.setShader(new LinearGradient(0, 0, 0, h * 0.32f,
+                new int[]{0xFF000000, 0xB0000000, 0x00000000}, new float[]{0f, 0.4f, 1f}, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h * 0.32f, mask);
+        c.restoreToCount(sc);
+        // gelap lembut di atas supaya jam & tarikh mudah dibaca
+        Paint dim = new Paint();
+        dim.setShader(new LinearGradient(0, 0, 0, h * 0.45f, Color.argb(70, 0, 0, 0), Color.argb(0, 0, 0, 0), Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h * 0.45f, dim);
     }
 
     /** Lukis tarikh + jam sahaja (digunakan juga oleh lapisan jam 3D). */
