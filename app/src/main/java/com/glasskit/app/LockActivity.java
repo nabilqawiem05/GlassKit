@@ -1708,8 +1708,9 @@ public class LockActivity extends Activity {
         };
         if (lockAnim.state() == UnlockAnim.LOCKED) {
             // dibuka melalui bouncer (cap jari / PIN): main animasi cap jari dulu
-            ui.animate().translationY(0).alpha(1f).setDuration(150).start();
-            lockAnim.play(UnlockAnim.FINGER, () -> h.postDelayed(exit, 250));
+            // animasi cap jari pendek, dan keluar ke home bermula serentak (tiada tunggu ~1.7 saat)
+            lockAnim.play(UnlockAnim.FINGER, null, 320);
+            h.postDelayed(exit, 140);
         } else {
             exit.run();
         }

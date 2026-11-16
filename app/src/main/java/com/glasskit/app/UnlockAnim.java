@@ -44,13 +44,15 @@ class UnlockAnim extends View {
     }
 
     /** Main animasi (FACE atau FINGER) kemudian tunjuk kunci terbuka. */
-    void play(int kind, Runnable then) {
+    void play(int kind, Runnable then) { play(kind, then, 900); }
+
+    void play(int kind, Runnable then, long ms) {
         if (state == FACE || state == FINGER) return;
         after = then;
         state = kind;
         if (anim != null) anim.cancel();
         anim = ValueAnimator.ofFloat(0f, 1f);
-        anim.setDuration(900);
+        anim.setDuration(ms);
         anim.setInterpolator(new DecelerateInterpolator());
         anim.addUpdateListener(a -> {
             t = (float) a.getAnimatedValue();
