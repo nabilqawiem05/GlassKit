@@ -1471,23 +1471,48 @@ public class MainActivity extends Activity {
                 .addOnFailureListener(e -> status.setText(getString(R.string.st_cut_fail, String.valueOf(e.getMessage()))));
     }
 
+    private static final java.util.concurrent.ExecutorService PREVIEW =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> new Thread(r, "gk-preview"));
+    private boolean pvBusy, pvAgain;
+
+    /** Pratonton dilukis di thread latar (dulu di thread utama: punca "GlassKit isn't responding"). */
     private void renderPreview() {
         if (preview == null) return;
-        int w = 540, h = Math.round(540f * getResources().getDisplayMetrics().heightPixels
-                / getResources().getDisplayMetrics().widthPixels);
-        long ver = prefs.getLong(Prefs.IMG_VER, 0);
-        if (ver != cacheVer) {
-            cacheVer = ver;
-            cacheBg = DepthRenderer.load(DepthRenderer.bgFile(this));
-            cacheFg = DepthRenderer.load(DepthRenderer.fgFile(this));
-        }
-        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(out);
-        DepthRenderer.draw(this, c, w, h, cacheBg, cacheFg, prefs, true);
-        preview.setImageBitmap(out);
         if (TextUtils.isEmpty(status.getText()) && !DepthRenderer.bgFile(this).exists()) {
             status.setText(R.string.st_start);
         }
+        if (pvBusy) {
+            pvAgain = true;
+            return;
+        }
+        pvBusy = true;
+        final int w = 540, h = Math.round(540f * getResources().getDisplayMetrics().heightPixels
+                / getResources().getDisplayMetrics().widthPixels);
+        final android.content.Context app = getApplicationContext();
+        PREVIEW.execute(() -> {
+            Bitmap out = null;
+            try {
+                long ver = prefs.getLong(Prefs.IMG_VER, 0);
+                if (ver != cacheVer) {
+                    cacheVer = ver;
+                    cacheBg = DepthRenderer.load(DepthRenderer.bgFile(app));
+                    cacheFg = DepthRenderer.load(DepthRenderer.fgFile(app));
+                }
+                out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                DepthRenderer.draw(app, new Canvas(out), w, h, cacheBg, cacheFg, prefs, true);
+            } catch (Throwable t) {
+                CrashLog.write(app, t);
+            }
+            final Bitmap done = out;
+            runOnUiThread(() -> {
+                pvBusy = false;
+                if (done != null && preview != null && !isDestroyed()) preview.setImageBitmap(done);
+                if (pvAgain) {
+                    pvAgain = false;
+                    if (!isDestroyed()) renderPreview();
+                }
+            });
+        });
     }
 
     private void setWallpaper() {

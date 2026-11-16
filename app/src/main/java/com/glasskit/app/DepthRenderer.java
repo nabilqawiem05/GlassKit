@@ -33,11 +33,20 @@ public final class DepthRenderer {
 
     private static Bitmap blurSrc, blurOut, sharpSrc, sharpOut;
 
-    private static synchronized Bitmap sharp(Bitmap bg) {
-        if (bg == sharpSrc && sharpOut != null) return sharpOut;
-        sharpOut = GlassArt.blur(bg, 480, 5); // kaca beku: latar dalam digit dikaburkan lembut
-        sharpSrc = bg;
-        return sharpOut;
+    // Kunci berasingan & kerja berat DI LUAR kunci: thread lain (UI, wallpaper) tidak pernah menunggu lama.
+    private static final Object L_SHARP = new Object(), L_BLUR = new Object(), L_LOAD = new Object(),
+            L_AUTO = new Object(), L_PATH = new Object();
+
+    private static Bitmap sharp(Bitmap bg) {
+        synchronized (L_SHARP) {
+            if (bg == sharpSrc && sharpOut != null) return sharpOut;
+        }
+        Bitmap o = GlassArt.blur(bg, 480, 5); // kaca beku: latar dalam digit dikaburkan lembut
+        synchronized (L_SHARP) {
+            sharpOut = o;
+            sharpSrc = bg;
+        }
+        return o;
     }
 
     public static File bgFile(Context c) { return new File(c.getFilesDir(), "bg.jpg"); }
@@ -46,8 +55,9 @@ public final class DepthRenderer {
     private static final java.util.HashMap<String, Object[]> loaded = new java.util.HashMap<>();
 
     /** Muat (dengan cache dikongsi, ikut masa ubah fail) supaya lock screen & wallpaper guna bitmap yang sama. */
-    public static synchronized Bitmap load(File f) {
+    public static Bitmap load(File f) {
         if (!f.exists()) return null;
+        synchronized (L_LOAD) {
         try {
             Object[] e = loaded.get(f.getPath());
             long mt = f.lastModified() ^ f.length();
@@ -57,6 +67,7 @@ public final class DepthRenderer {
             return b;
         } catch (Throwable t) {
             return null;
+        }
         }
     }
 
@@ -80,11 +91,16 @@ public final class DepthRenderer {
         return new RectF(l, t, l + dw, t + dh);
     }
 
-    private static synchronized Bitmap blurred(Bitmap bg) {
-        if (bg == blurSrc && blurOut != null) return blurOut;
-        blurOut = GlassArt.blur(bg, 260, 7);
-        blurSrc = bg;
-        return blurOut;
+    private static Bitmap blurred(Bitmap bg) {
+        synchronized (L_BLUR) {
+            if (bg == blurSrc && blurOut != null) return blurOut;
+        }
+        Bitmap o = GlassArt.blur(bg, 260, 7);
+        synchronized (L_BLUR) {
+            blurOut = o;
+            blurSrc = bg;
+        }
+        return o;
     }
 
     /** Laluan jam (sudah diregang ikut lebar/tinggi). Garis dasar kekal di y. */
@@ -99,7 +115,7 @@ public final class DepthRenderer {
                 + "|" + p.getInt(Prefs.CLOCK_W, 100) + "|" + p.getInt(Prefs.CLOCK_H, 100) + "|" + p.getInt(Prefs.CLOCK_FONT, 0)
                 + "|" + p.getInt(Prefs.CLOCK_LAYOUT, 0) + "|" + shape
                 + "|" + (shape != 0 ? System.identityHashCode(ClockShape.of(ctx, w, h)) : 0);
-        synchronized (DepthRenderer.class) {
+        synchronized (L_PATH) {
             if (key.equals(pathKey) && pathCache != null) return new Path(pathCache);
         }
         Path made = buildClockPath(ctx, p, w, h);
@@ -110,7 +126,7 @@ public final class DepthRenderer {
             if (u.op(made, new Path(), Path.Op.UNION) && !u.isEmpty()) made = u;
         } catch (Throwable ignored) {
         }
-        synchronized (DepthRenderer.class) {
+        synchronized (L_PATH) {
             pathKey = key;
             pathCache = new Path(made);
         }
@@ -378,8 +394,10 @@ public final class DepthRenderer {
     private static int autoCol = Color.WHITE;
 
     /** Warna jam lembut diambil dari wallpaper (pastel, cukup terang untuk dibaca). */
-    static synchronized int autoColor(Bitmap bg) {
-        if (bg == autoSrc) return autoCol;
+    static int autoColor(Bitmap bg) {
+        synchronized (L_AUTO) {
+            if (bg == autoSrc) return autoCol;
+        }
         int c = Color.WHITE;
         try {
             android.app.WallpaperColors wc = android.app.WallpaperColors.fromBitmap(bg);
@@ -391,8 +409,10 @@ public final class DepthRenderer {
             c = hslToRgb(hsl);
         } catch (Throwable ignored) {
         }
-        autoSrc = bg;
-        autoCol = c;
+        synchronized (L_AUTO) {
+            autoSrc = bg;
+            autoCol = c;
+        }
         return c;
     }
 
@@ -484,18 +504,24 @@ public final class DepthRenderer {
 
     interface Make { Bitmap make(); }
 
-    private static synchronized Bitmap cached(Bitmap src, String tag, Make m) {
-        Object[] e = popCache.get(tag);
-        if (e != null && e[0] == src) return (Bitmap) e[1];
-        Bitmap b = m.make();
-        popCache.put(tag, new Object[]{src, b});
+    private static Bitmap cached(Bitmap src, String tag, Make m) {
+        synchronized (popCache) {
+            Object[] e = popCache.get(tag);
+            if (e != null && e[0] == src) return (Bitmap) e[1];
+        }
+        Bitmap b = m.make(); // kerja berat di luar kunci
+        synchronized (popCache) {
+            popCache.put(tag, new Object[]{src, b});
+        }
         return b;
     }
 
     /** Bayang kabur subjek (dikira pada separuh saiz supaya ringan). */
-    private static synchronized Object[] shadowOf(Bitmap fg) {
-        Object[] e = popCache.get("shadow");
-        if (e != null && e[0] == fg) return new Object[]{e[1], e[2]};
+    private static Object[] shadowOf(Bitmap fg) {
+        synchronized (popCache) {
+            Object[] e = popCache.get("shadow");
+            if (e != null && e[0] == fg) return new Object[]{e[1], e[2]};
+        }
         float k = Math.min(1f, 900f / fg.getWidth());
         Bitmap small = k < 1f ? Bitmap.createScaledBitmap(fg, Math.round(fg.getWidth() * k), Math.round(fg.getHeight() * k), true) : fg;
         Paint bp = new Paint();
@@ -506,7 +532,9 @@ public final class DepthRenderer {
         // simpan dalam koordinat imej asal (skala balik)
         Bitmap full = Bitmap.createScaledBitmap(a, Math.round(a.getWidth() / k), Math.round(a.getHeight() / k), true);
         int[] offFull = {Math.round(off[0] / k), Math.round(off[1] / k)};
-        popCache.put("shadow", new Object[]{fg, full, offFull});
+        synchronized (popCache) {
+            popCache.put("shadow", new Object[]{fg, full, offFull});
+        }
         return new Object[]{full, offFull};
     }
 

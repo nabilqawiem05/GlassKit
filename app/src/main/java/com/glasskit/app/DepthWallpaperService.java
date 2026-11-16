@@ -24,12 +24,16 @@ public class DepthWallpaperService extends WallpaperService {
 
     class DepthEngine extends Engine implements SharedPreferences.OnSharedPreferenceChangeListener {
         private final Handler handler = new Handler(Looper.getMainLooper());
+        // lukisan berat di thread sendiri: thread utama tidak pernah tersekat (elak ANR & wallpaper ditetap semula)
+        private android.os.HandlerThread drawThread;
+        private Handler bg2;
+        private volatile boolean drawBusy, drawAgain;
         private SharedPreferences prefs;
         private KeyguardManager km;
         private Bitmap bg, fg;
         private long loadedVer = Long.MIN_VALUE;
-        private boolean visible;
-        private int width, height;
+        private volatile boolean visible;
+        private volatile int width, height;
         private boolean registered;
         private Bitmap frame;
 
@@ -47,6 +51,9 @@ public class DepthWallpaperService extends WallpaperService {
             super.onCreate(surfaceHolder);
             prefs = Prefs.get(DepthWallpaperService.this);
             prefs.registerOnSharedPreferenceChangeListener(this);
+            drawThread = new android.os.HandlerThread("gk-wall", android.os.Process.THREAD_PRIORITY_DISPLAY);
+            drawThread.start();
+            bg2 = new Handler(drawThread.getLooper());
             km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
 
             IntentFilter f = new IntentFilter();
@@ -68,6 +75,7 @@ public class DepthWallpaperService extends WallpaperService {
         public void onDestroy() {
             super.onDestroy();
             handler.removeCallbacksAndMessages(null);
+            if (drawThread != null) drawThread.quitSafely();
             if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(this);
             if (registered) {
                 try { unregisterReceiver(receiver); } catch (Exception ignored) {}
@@ -97,7 +105,10 @@ public class DepthWallpaperService extends WallpaperService {
 
         @Override
         public void onSharedPreferenceChanged(SharedPreferences sp, String key) {
-            drawFrame();
+            // hanya tetapan yang mengubah gambar (bukan setiap tetapan yang ditulis)
+            if (key == null || key.startsWith("clock") || key.equals(Prefs.IMG_VER) || key.equals(Prefs.POP_STYLE)
+                    || key.equals(Prefs.WALL_MOOD) || key.equals(Prefs.LOCK_ONLY) || key.equals(Prefs.LOCK_HIJRI)
+                    || key.equals(Prefs.HIJRI_ADJ) || key.equals(Prefs.LOCK_TOP_BLUR)) drawFrame();
         }
 
         @Override
@@ -109,7 +120,7 @@ public class DepthWallpaperService extends WallpaperService {
             return null;
         }
 
-        private void ensureLoaded() {
+        private synchronized void ensureLoaded() {
             long ver = prefs.getLong(Prefs.IMG_VER, 0);
             if (ver == loadedVer) return;
             loadedVer = ver;
@@ -118,7 +129,28 @@ public class DepthWallpaperService extends WallpaperService {
             try { notifyColorsChanged(); } catch (Exception ignored) {}
         }
 
+        /** Jadualkan lukisan di thread latar (digabung: jika sibuk, lukis sekali lagi selepas siap). */
         private void drawFrame() {
+            if (!visible || width == 0 || height == 0 || bg2 == null) return;
+            if (drawBusy) {
+                drawAgain = true;
+                return;
+            }
+            drawBusy = true;
+            bg2.post(() -> {
+                try {
+                    drawNow();
+                } catch (Throwable ignored) {
+                }
+                drawBusy = false;
+                if (drawAgain) {
+                    drawAgain = false;
+                    handler.post(this::drawFrame);
+                }
+            });
+        }
+
+        private void drawNow() {
             if (!visible || width == 0 || height == 0) return;
             ensureLoaded();
             boolean locked = km != null && km.isKeyguardLocked();

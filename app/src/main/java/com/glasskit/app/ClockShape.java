@@ -55,11 +55,18 @@ final class ClockShape {
         }
     }
 
-    private static Bitmap kBg, kFg;
-    private static int kW, kH;
-    private static Scene last;
+    private static volatile Bitmap kBg, kFg;
+    private static volatile int kW, kH;
+    private static volatile Scene last;
+    private static final Object L = new Object();
 
-    static synchronized Scene of(Context ctx, int w, int h) {
+    static Scene of(Context ctx, int w, int h) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            // thread UI: jangan sekali-kali muat fail / analisis (elak ANR); guna hasil terakhir sahaja
+            Scene s = last;
+            return s != null && kW == w && kH == h ? s : null;
+        }
+        synchronized (L) {
         try {
             Bitmap bg = DepthRenderer.load(DepthRenderer.bgFile(ctx));
             Bitmap fg = DepthRenderer.load(DepthRenderer.fgFile(ctx));
@@ -74,6 +81,7 @@ final class ClockShape {
             return s;
         } catch (Throwable t) {
             return null;
+        }
         }
     }
 
