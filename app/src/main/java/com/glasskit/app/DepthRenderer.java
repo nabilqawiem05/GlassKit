@@ -103,6 +103,13 @@ public final class DepthRenderer {
             if (key.equals(pathKey) && pathCache != null) return new Path(pathCache);
         }
         Path made = buildClockPath(ctx, p, w, h);
+        try {
+            // font ada kontur bertindih (cth. palang "4", "1"); kaca melukis tepi setiap kontur,
+            // jadi satukan dahulu supaya tiada garis/kotak di dalam digit
+            Path u = new Path();
+            if (u.op(made, new Path(), Path.Op.UNION) && !u.isEmpty()) made = u;
+        } catch (Throwable ignored) {
+        }
         synchronized (DepthRenderer.class) {
             pathKey = key;
             pathCache = new Path(made);

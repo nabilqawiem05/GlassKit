@@ -353,7 +353,6 @@ public class MainActivity extends Activity {
         toggle(isl, R.string.isl_bt_on, Prefs.ISL_BT, true);
         toggle(isl, R.string.isl_ringer_on, Prefs.ISL_RINGER, true);
         toggle(isl, R.string.isl_privacy_on, Prefs.ISL_PRIVACY, true);
-        toggle(isl, R.string.isl_shot_on, Prefs.ISL_SHOT, false);
         toggle(isl, R.string.isl_camring, Prefs.ISL_RING, true);
         note(isl, getString(R.string.isl_ring_note));
         note(isl, getString(R.string.live_note));

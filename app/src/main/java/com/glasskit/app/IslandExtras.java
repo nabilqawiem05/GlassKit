@@ -263,7 +263,7 @@ final class IslandExtras {
     private final Runnable checkShot = new Runnable() {
         @Override
         public void run() {
-            boolean thumbOn = s.prefs.getBoolean(Prefs.ISL_SHOT, false);
+            boolean thumbOn = false; // pratonton stok Android sudah ada: elak dua pratonton bertindih
             if (!thumbOn && !s.prefs.getBoolean(Prefs.SOUND_SHOT, true)) return;
             long since = System.currentTimeMillis() / 1000 - 20;
             try (Cursor c = s.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
