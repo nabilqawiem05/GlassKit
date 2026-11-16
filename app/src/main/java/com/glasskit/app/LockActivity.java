@@ -476,10 +476,19 @@ public class LockActivity extends Activity {
         unlockSpring.stop();
         // masuk gaya iPhone: wallpaper bermula sedikit zoom & kabur, kemudian "zoom out" ke tempatnya
         if (prefs.getBoolean(Prefs.LOCK_ZOOM, true)) {
-            applyUnlock(0.32f, 0f);
-            unlockSpring.value = 0.32f;
+            // keadaan mula ditetapkan serta-merta; animasi bermula selepas 2 bingkai (selepas kerja berat
+            // onResume & lukisan pertama), supaya lantunan licin dari bingkai pertama — tiada sangkut
+            final float start = 0.26f;
+            applyUnlock(start, start * -H * 0.45f);
+            unlockSpring.value = start;
             uiLayer(true);
-            unlockSpring.to(0f, 0f, () -> uiLayer(false));
+            entering = true;
+            final View dv = getWindow().getDecorView();
+            dv.postOnAnimation(() -> dv.postOnAnimation(() -> {
+                if (!entering) return;
+                unlockSpring.value = start;
+                unlockSpring.to(0f, 0f, this::entranceDone);
+            }));
         } else {
             applyUnlock(0f, 0f);
         }
@@ -613,6 +622,17 @@ public class LockActivity extends Activity {
 
     /** Lukis bingkai wallpaper + jam di thread latar; UI tidak tersekat. Bingkai lama kekal sehingga yang baru siap. */
     private volatile Bitmap baseOut, baseSoftOut;
+    private boolean entering;
+    private Runnable pendingFrame;
+
+    /** Animasi masuk selesai: buang lapisan GPU & pasang bingkai baharu yang ditangguh. */
+    private void entranceDone() {
+        entering = false;
+        uiLayer(false);
+        Runnable r = pendingFrame;
+        pendingFrame = null;
+        if (r != null) r.run();
+    }
 
     /** Lapisan GPU untuk UI semasa animasi: dibina sekali di awal sentuhan, dibuang bila spring berhenti. */
     private void uiLayer(boolean on) {
@@ -682,6 +702,13 @@ public class LockActivity extends Activity {
             }
             final Bitmap done = out;
             final Bitmap base = baseOut, baseSoft = baseSoftOut;
+            // muat naik ke GPU di latar (elak sentakan bila ImageView mula melukis)
+            try {
+                if (done != null) done.prepareToDraw();
+                if (base != null) base.prepareToDraw();
+                if (baseSoft != null) baseSoft.prepareToDraw();
+            } catch (Throwable ignored) {
+            }
             h.post(() -> {
                 renderBusy = false;
                 if (done != null) {
@@ -693,15 +720,18 @@ public class LockActivity extends Activity {
                         lastKey = key;
                         copyBd(nb, lastBd);
                     }
-                    if (!isDestroyed()) {
+                    Runnable apply = () -> {
+                        if (isDestroyed()) return;
                         wall.setImageBitmap(done);
-                        if (gauges != null) gauges.invalidate();
                         copyBd(nb, bd);
                         wallBase.setImageBitmap(base);
                         wallBlur.setImageBitmap(baseSoft != null ? baseSoft : bd.soft);
                         LiquidGlass.invalidateTree(ui);
-                        gauges.invalidate();
-                    }
+                        if (gauges != null) gauges.invalidate();
+                    };
+                    // semasa animasi masuk: tangguh tukar bingkai supaya lantunan tidak tersentak
+                    if (entering) pendingFrame = apply;
+                    else apply.run();
                 }
                 if (renderAgain) {
                     renderAgain = false;
@@ -1840,6 +1870,7 @@ public class LockActivity extends Activity {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     unlockSpring.stop();
+                    if (entering) entranceDone();
                     uiLayer(true); // bina lapisan sebelum jari bergerak (tiada sentakan bingkai pertama)
                     y0 = e.getRawY();
                     if (e.getRawY() > H * 0.76f && Math.abs(e.getRawX() - W / 2f) < W * 0.14f) {
@@ -1850,6 +1881,7 @@ public class LockActivity extends Activity {
                     float dy = Math.min(0, e.getRawY() - y0);
                     if (!dragging) {
                         unlockSpring.stop();
+                        if (entering) entranceDone();
                         uiLayer(true);
                     }
                     dragging = true;
