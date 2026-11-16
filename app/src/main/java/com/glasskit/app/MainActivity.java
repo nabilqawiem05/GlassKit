@@ -475,8 +475,11 @@ public class MainActivity extends Activity {
         toggle(sb, R.string.sbar_on, Prefs.SBAR_ON, false);
         toggle(sb, R.string.sbar_pct, Prefs.SBAR_PCT, true);
         label(sb, R.string.sbar_style);
-        segmented(sb, new int[]{R.string.sbar_capsule, R.string.sbar_minimal, R.string.sbar_island, R.string.sbar_chips, R.string.sbar_tint},
-                prefs.getInt(Prefs.SBAR_STYLE, 0), i -> prefs.edit().putInt(Prefs.SBAR_STYLE, i).apply());
+        // cip boleh skrol (6 gaya tidak muat dalam satu baris segmen)
+        int[] sbOrder = {5, 0, 1, 2, 3, 4};
+        int[] sbNames = {R.string.sbar_iphone, R.string.sbar_capsule, R.string.sbar_minimal, R.string.sbar_island,
+                R.string.sbar_chips, R.string.sbar_tint};
+        choiceChips(sb, sbOrder, sbNames, prefs.getInt(Prefs.SBAR_STYLE, 0), i -> prefs.edit().putInt(Prefs.SBAR_STYLE, i).apply());
         LinearLayout sr = new LinearLayout(this);
         sb.addView(sr);
         addPair(sr, button(null, getString(R.string.btn_hide_sys), false, v -> {
@@ -992,6 +995,38 @@ public class MainActivity extends Activity {
     }
 
     /** Pilihan fon jam dengan pratonton "12:30" dalam setiap gaya. */
+    /** Baris cip pilihan (boleh skrol mendatar). values[k] disimpan, names[k] dipaparkan. */
+    private void choiceChips(LinearLayout parent, int[] values, int[] names, int selected, IntCb cb) {
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);
+        hs.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        for (int k = 0; k < values.length; k++) {
+            final int val = values[k];
+            TextView t = Ui.text(this, 14, 600, Color.WHITE);
+            t.setText(names[k]);
+            t.setGravity(Gravity.CENTER);
+            t.setPadding(dp(16), dp(10), dp(16), dp(10));
+            t.setTag(val);
+            t.setBackground(val == selected ? Ui.round(Color.argb(235, 255, 255, 255), dp(20)) : Ui.round(Color.argb(40, 255, 255, 255), dp(20)));
+            t.setTextColor(val == selected ? Color.BLACK : Color.WHITE);
+            t.setOnClickListener(v -> {
+                for (int j = 0; j < row.getChildCount(); j++) {
+                    TextView o = (TextView) row.getChildAt(j);
+                    boolean on = (int) o.getTag() == val;
+                    o.setBackground(on ? Ui.round(Color.argb(235, 255, 255, 255), dp(20)) : Ui.round(Color.argb(40, 255, 255, 255), dp(20)));
+                    o.setTextColor(on ? Color.BLACK : Color.WHITE);
+                }
+                cb.on(val);
+            });
+            Ui.press(t);
+            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(-2, -2);
+            l.rightMargin = dp(8);
+            row.addView(t, l);
+        }
+        hs.addView(row);
+        parent.addView(hs, new LinearLayout.LayoutParams(-1, -2));
+    }
+
     /** Pilihan jam ikut bentuk wallpaper: Biasa, A–F. */
     private void shapeChips(LinearLayout parent) {
         android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);

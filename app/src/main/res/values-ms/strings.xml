@@ -663,4 +663,5 @@
     <string name="lock_top_blur">Kabur bahagian atas wallpaper (gaya iPhone)</string>
     <string name="sbar_chips">Cip</string>
     <string name="sbar_tint">Warna</string>
+    <string name="sbar_iphone">iPhone</string>
 </resources>

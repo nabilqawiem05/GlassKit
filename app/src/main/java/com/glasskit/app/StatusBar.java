@@ -32,7 +32,7 @@ import java.util.Set;
 
 /** Status bar tersuai: jam, ikon notifikasi, signal, Wi-Fi, bateri pil. 3 gaya. */
 class StatusBar extends View {
-    static final int CAPSULE = 0, MINIMAL = 1, ISLAND = 2, CHIPS = 3, TINT = 4;
+    static final int CAPSULE = 0, MINIMAL = 1, ISLAND = 2, CHIPS = 3, TINT = 4, IPHONE = 5;
     // G · cip pintar
     private Data.Weather wx;
     private int ringer = 2; // AudioManager.RINGER_MODE_NORMAL
@@ -93,10 +93,13 @@ class StatusBar extends View {
         style = prefs.getInt(Prefs.SBAR_STYLE, CAPSULE);
         showPct = prefs.getBoolean(Prefs.SBAR_PCT, true);
         dark = Ui.darkGlass(c);
-        setLayerType(style == MINIMAL ? LAYER_TYPE_SOFTWARE : LAYER_TYPE_HARDWARE, null);
-        text.setShadowLayer(style == MINIMAL ? dp(3) : 0, 0, dp(0.6f), Color.argb(130, 0, 0, 0));
+        boolean bare = style == MINIMAL || style == IPHONE;
+        setLayerType(bare ? LAYER_TYPE_SOFTWARE : LAYER_TYPE_HARDWARE, null);
+        text.setShadowLayer(bare ? dp(3) : 0, 0, dp(0.6f), Color.argb(130, 0, 0, 0));
+        text.setTypeface(Ui.font(style == IPHONE ? 700 : 650));
+        text.setTextSize(dp(style == IPHONE ? 16.5f : 14.5f));
         // B · minimal: bayang halus pada ikon juga supaya jelas atas wallpaper terang
-        if (style == MINIMAL) {
+        if (bare) {
             fill.setShadowLayer(dp(2.4f), 0, dp(0.5f), Color.argb(110, 0, 0, 0));
             stroke.setShadowLayer(dp(2.4f), 0, dp(0.5f), Color.argb(110, 0, 0, 0));
             sp.setShadowLayer(dp(2.4f), 0, dp(0.5f), Color.argb(120, 0, 0, 0));
@@ -269,6 +272,10 @@ class StatusBar extends View {
             drawChips(c);
             return;
         }
+        if (style == IPHONE) {
+            drawIphone(c);
+            return;
+        }
         int w = getWidth();
         float cy = centerY > 0 ? centerY : getHeight() / 2f;
         float pad = dp(14), cpad = dp(11);
@@ -407,6 +414,46 @@ class StatusBar extends View {
         postInvalidateDelayed(1000 - now % 1000 + 5);
     }
 
+    // ===================== iPhone =====================
+
+    /**
+     * Gaya iPhone: tiada pil, tiada ikon notifikasi. Masa di TENGAH ruang kiri (antara tepi skrin & island),
+     * isyarat + Wi-Fi + bateri (peratus di dalam) berkumpul di TENGAH ruang kanan.
+     */
+    private void drawIphone(Canvas c) {
+        int w = getWidth();
+        float cy = centerY > 0 ? centerY : getHeight() / 2f;
+        float cx = islandCx > 0 ? islandCx : w / 2f;
+        float edge = dp(10), g = gapHalf > 0 ? gapHalf + dp(6) : dp(60);
+        // kiri
+        float leftMid = (edge + (cx - g)) / 2f;
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float base = cy - (fm.ascent + fm.descent) / 2f;
+        c.drawText(time, leftMid - text.measureText(time) / 2f, base, text);
+        // kanan
+        float cw = (cell >= 0 || airplane ? dp(16) + dp(6) : 0) + (wifi >= 0 ? dp(17) + dp(6) : 0)
+                + (hotspot ? dp(17) + dp(6) : 0) + (dnd ? dp(13) + dp(6) : 0) + batteryWidth();
+        float rightMid = ((cx + g) + (w - edge)) / 2f;
+        float x = rightMid - cw / 2f;
+        if (dnd) {
+            drawMoon(c, x, cy);
+            x += dp(13) + dp(6);
+        }
+        if (cell >= 0 || airplane) {
+            if (airplane) drawPlane(c, x, cy); else drawCell(c, x, cy, cell);
+            x += dp(16) + dp(6);
+        }
+        if (wifi >= 0) {
+            drawWifi(c, x, cy, wifi);
+            x += dp(17) + dp(6);
+        }
+        if (hotspot) {
+            drawHotspot(c, x, cy);
+            x += dp(17) + dp(6);
+        }
+        drawBattery(c, x, cy);
+    }
+
     // ===================== G · cip pintar =====================
 
     private void chip(Canvas c, float l, float r, float cy) {
@@ -437,7 +484,7 @@ class StatusBar extends View {
         float sBase = cy - (sf.ascent + sf.descent) / 2f;
         int is = Math.round(dp(15));
 
-        // ---- kiri: masa | notifikasi | cuaca ----
+        // ---- kiri: masa | cuaca | notifikasi (cuaca diutamakan bila ruang sempit) ----
         float tw = text.measureText(time);
         float x = pad;
         chip(c, x, x + tw + 2 * in, cy);
@@ -447,6 +494,14 @@ class StatusBar extends View {
                 + (moreNotifs > 0 ? sp.measureText("+" + moreNotifs) + dp(3) : 0);
         String wt = wx != null ? Math.round(wx.temp) + "°" : null;
         float ww = wt != null ? dp(15) + dp(4) + sp.measureText(wt) + 2 * dp(8) : 0;
+        if (wt != null && x + ww <= leftLimit) {
+            chip(c, x, x + ww, cy);
+            drawWeatherGlyph(c, x + dp(8), cy, dp(15), wx.code);
+            sp.setColor(Color.WHITE);
+            c.drawText(wt, x + dp(8) + dp(15) + dp(4), sBase, sp);
+            x += ww + gap;
+        }
+
         if (nw > 0 && x + nw <= leftLimit) {
             chip(c, x, x + nw, cy);
             float ix = x + dp(8);
@@ -461,13 +516,6 @@ class StatusBar extends View {
             }
             x += nw + gap;
         }
-        if (wt != null && x + ww <= leftLimit) {
-            chip(c, x, x + ww, cy);
-            drawWeatherGlyph(c, x + dp(8), cy, dp(15), wx.code);
-            sp.setColor(Color.WHITE);
-            c.drawText(wt, x + dp(8) + dp(15) + dp(4), sBase, sp);
-        }
-
         // ---- kanan (dari tepi): bateri | isyarat | senyap ----
         float rx = w - pad;
         float bw = batteryWidth() + 2 * dp(8);
