@@ -109,9 +109,9 @@ public final class DepthRenderer {
         }
         if (p.getInt(Prefs.CLOCK_LAYOUT, 0) == 2) {
             // Tinggi · gaya iPhone: atas digit kekal, tarik ke bawah = digit memanjang, garis tidak menebal
-            float wd = size * 0.50f * sx;
+            float wd = size * 0.62f * sx;
             float top = y - size * 0.72f;
-            return TallClock.build(time, w / 2f, top, wd, size * 0.72f * sy, size * 0.50f * 0.30f * Math.min(1.3f, sx));
+            return TallClock.build(time, w / 2f, top, wd, size * 0.72f * sy, size * 0.62f * 0.27f * Math.min(1.3f, sx));
         }
         Path path = new Path();
         if (p.getInt(Prefs.CLOCK_LAYOUT, 0) == 1) {
