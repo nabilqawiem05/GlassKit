@@ -104,8 +104,13 @@ public final class DepthRenderer {
         int shape = p.getInt(Prefs.CLOCK_SHAPE, 0);
         if (shape != ClockShape.NONE) {
             // jam ikut bentuk wallpaper (A–F); jika tidak sesuai, guna susunan biasa
-            Path sp = ClockShape.build(shape, ClockShape.of(ctx, w, h), tp, time, size, y, sx, sy, w, h);
-            if (sp != null) return sp;
+            // kedudukan asal ikut gambar; slider/seretan "atas-bawah" mengalih dari situ (28% = asal)
+            float base = h * 0.28f;
+            Path sp = ClockShape.build(shape, ClockShape.of(ctx, w, h), tp, time, size, base, sx, sy, w, h);
+            if (sp != null) {
+                sp.offset(0, y - base);
+                return sp;
+            }
         }
         if (p.getInt(Prefs.CLOCK_LAYOUT, 0) == 2) {
             // Tinggi · gaya iPhone: atas digit kekal, tarik ke bawah = digit memanjang, garis tidak menebal

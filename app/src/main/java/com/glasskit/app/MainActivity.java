@@ -567,7 +567,7 @@ public class MainActivity extends Activity {
         label(clk, R.string.lbl_size);
         slider(clk, 10, 45, prefs.getInt(Prefs.CLOCK_SIZE, 30), val -> prefs.edit().putInt(Prefs.CLOCK_SIZE, val).apply());
         label(clk, R.string.lbl_pos);
-        slider(clk, 12, 70, prefs.getInt(Prefs.CLOCK_Y, 28), val -> prefs.edit().putInt(Prefs.CLOCK_Y, val).apply());
+        slider(clk, 8, 70, prefs.getInt(Prefs.CLOCK_Y, 28), val -> prefs.edit().putInt(Prefs.CLOCK_Y, val).apply());
 
         label(clk, R.string.lbl_color);
         LinearLayout cr = new LinearLayout(this);

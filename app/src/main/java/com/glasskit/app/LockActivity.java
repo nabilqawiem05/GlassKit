@@ -729,8 +729,8 @@ public class LockActivity extends Activity {
         private final android.graphics.Paint line = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
         private final android.graphics.Paint knob = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
         private RectF box = new RectF();
-        private int mode; // 0 tiada, 1 tinggi, 2 lebar
-        private float sx, sy, h0, w0, bh0, bw0;
+        private int mode; // 0 tiada, 1 tinggi, 2 lebar, 3 alih atas/bawah
+        private float sx, sy, h0, w0, bh0, bw0, y0;
         private int lastStep = -1;
         private long lastApply;
 
@@ -778,7 +778,7 @@ public class LockActivity extends Activity {
                     boolean nearBottom = Math.abs(y - box.bottom) < dp(36) && x > box.left && x < box.right;
                     boolean nearRight = Math.abs(x - box.right) < dp(36) && y > box.top && y < box.bottom;
                     boolean inside = box.contains(x, y);
-                    mode = nearBottom ? 1 : nearRight ? 2 : inside ? 1 : 0;
+                    mode = nearBottom ? 1 : nearRight ? 2 : inside ? 3 : 0;
                     if (mode == 0) {
                         endClockEdit();
                         return true;
@@ -787,6 +787,7 @@ public class LockActivity extends Activity {
                     sy = e.getRawY();
                     h0 = prefs.getInt(Prefs.CLOCK_H, 100);
                     w0 = prefs.getInt(Prefs.CLOCK_W, 100);
+                    y0 = prefs.getInt(Prefs.CLOCK_Y, 28);
                     bh0 = box.height();
                     bw0 = box.width();
                     Haptics.tap(getContext());
@@ -803,11 +804,17 @@ public class LockActivity extends Activity {
                         float f = Math.max(0.3f, (bw0 + 2 * (e.getRawX() - sx)) / bw0);
                         v = Math.round(Math.max(60, Math.min(170, w0 * f)));
                         k = Prefs.CLOCK_W;
+                    } else if (mode == 3) {
+                        // alih jam: ikut jari, dalam % tinggi skrin
+                        float scale = (float) getResources().getDisplayMetrics().widthPixels / W;
+                        float dPct = (e.getRawY() - sy) / scale / H * 100f;
+                        v = Math.round(Math.max(8, Math.min(70, y0 + dPct)));
+                        k = Prefs.CLOCK_Y;
                     } else return true;
-                    int step = v / 5;
+                    int step = mode == 3 ? v : v / 5;
                     if (step != lastStep) {
                         lastStep = step;
-                        if (v == 60 || v == hMax() || (mode == 2 && v == 170)) Haptics.edge(getContext());
+                        if ((mode != 3 && (v == 60 || v == hMax())) || (mode == 3 && (v == 8 || v == 70)) || (mode == 2 && v == 170)) Haptics.edge(getContext());
                         else Haptics.tick(getContext());
                     }
                     long now = System.currentTimeMillis();
