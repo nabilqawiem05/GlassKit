@@ -668,4 +668,6 @@
     <string name="call_minimize">Minimise</string>
     <string name="call_birthday">🎂 It\'s %s\'s birthday today</string>
     <string name="lock_top_blur">Blur top of wallpaper (iPhone style)</string>
+    <string name="sbar_chips">Chips</string>
+    <string name="sbar_tint">Tinted</string>
 </resources>

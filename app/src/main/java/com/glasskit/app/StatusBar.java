@@ -3,6 +3,7 @@ package com.glasskit.app;
 import android.app.Notification;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
@@ -31,7 +32,14 @@ import java.util.Set;
 
 /** Status bar tersuai: jam, ikon notifikasi, signal, Wi-Fi, bateri pil. 3 gaya. */
 class StatusBar extends View {
-    static final int CAPSULE = 0, MINIMAL = 1, ISLAND = 2;
+    static final int CAPSULE = 0, MINIMAL = 1, ISLAND = 2, CHIPS = 3, TINT = 4;
+    // G · cip pintar
+    private Data.Weather wx;
+    private int ringer = 2; // AudioManager.RINGER_MODE_NORMAL
+    // H · warna wallpaper
+    private static volatile int tintCol;
+    private static volatile long tintVer = Long.MIN_VALUE;
+    private static volatile boolean tintBusy;
 
     private final SharedPreferences prefs;
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -87,6 +95,25 @@ class StatusBar extends View {
         dark = Ui.darkGlass(c);
         setLayerType(style == MINIMAL ? LAYER_TYPE_SOFTWARE : LAYER_TYPE_HARDWARE, null);
         text.setShadowLayer(style == MINIMAL ? dp(3) : 0, 0, dp(0.6f), Color.argb(130, 0, 0, 0));
+        // B · minimal: bayang halus pada ikon juga supaya jelas atas wallpaper terang
+        if (style == MINIMAL) {
+            fill.setShadowLayer(dp(2.4f), 0, dp(0.5f), Color.argb(110, 0, 0, 0));
+            stroke.setShadowLayer(dp(2.4f), 0, dp(0.5f), Color.argb(110, 0, 0, 0));
+            sp.setShadowLayer(dp(2.4f), 0, dp(0.5f), Color.argb(120, 0, 0, 0));
+        } else {
+            fill.clearShadowLayer();
+            stroke.clearShadowLayer();
+            sp.clearShadowLayer();
+        }
+        if (style == CHIPS) {
+            try { wx = Data.weather(c); } catch (Throwable t) { wx = null; }
+            try {
+                ringer = c.getSystemService(android.media.AudioManager.class).getRingerMode();
+            } catch (Throwable t) {
+                ringer = 2;
+            }
+        }
+        if (style == TINT) loadTint(c);
 
         boolean is24 = android.text.format.DateFormat.is24HourFormat(c);
         time = new SimpleDateFormat(is24 ? "HH:mm" : "h:mm", Locale.getDefault()).format(new Date());
@@ -192,8 +219,17 @@ class StatusBar extends View {
         return sp.measureText(speed) + dp(7);
     }
 
+    private String pctText() { return battery + "%"; }
+
+    private float pctOutsideWidth() {
+        if (style != MINIMAL || !showPct || battery < 0) return 0;
+        sp.setTextSize(dp(12));
+        sp.setTypeface(Ui.font(650));
+        return sp.measureText(pctText()) + dp(5);
+    }
+
     private float rightWidth() {
-        float w = batteryWidth() + speedWidth();
+        float w = batteryWidth() + speedWidth() + pctOutsideWidth();
         if (wifi >= 0) w += dp(17) + dp(6);
         if (hotspot) w += dp(17) + dp(6);
         if (cell >= 0 || airplane) w += dp(16) + dp(6);
@@ -229,6 +265,10 @@ class StatusBar extends View {
 
     @Override
     protected void onDraw(Canvas c) {
+        if (style == CHIPS) {
+            drawChips(c);
+            return;
+        }
         int w = getWidth();
         float cy = centerY > 0 ? centerY : getHeight() / 2f;
         float pad = dp(14), cpad = dp(11);
@@ -245,7 +285,10 @@ class StatusBar extends View {
             rx = w - pad - (style == MINIMAL ? dp(6) : cpad) - rw;
         }
 
-        if (style != MINIMAL) {
+        if (style == TINT) {
+            tintCapsule(c, lx - cpad, lx + lw + cpad, cy);
+            tintCapsule(c, rx - cpad, rx + rw + cpad, cy);
+        } else if (style != MINIMAL) {
             capsule(c, lx - cpad, lx + lw + cpad, cy);
             capsule(c, rx - cpad, rx + rw + cpad, cy);
         }
@@ -253,7 +296,8 @@ class StatusBar extends View {
         // ---- kiri: jam + ikon notifikasi ----
         Paint.FontMetrics fm = text.getFontMetrics();
         float base = cy - (fm.ascent + fm.descent) / 2f;
-        c.drawText(time, lx, base, text);
+        if (style == TINT) drawBlinkTime(c, lx, base);
+        else c.drawText(time, lx, base, text);
         float x = lx + text.measureText(time) + dp(8);
         int is = Math.round(dp(16));
         for (Drawable d : notifs) {
@@ -293,7 +337,219 @@ class StatusBar extends View {
             drawHotspot(c, x, cy);
             x += dp(17) + dp(6);
         }
+        if (pctOutsideWidth() > 0) {
+            sp.setColor(battery <= 20 && !charging ? 0xFFFF6961 : Color.WHITE);
+            Paint.FontMetrics pf = sp.getFontMetrics();
+            c.drawText(pctText(), x, cy - (pf.ascent + pf.descent) / 2f, sp);
+            x += pctOutsideWidth();
+        }
         drawBattery(c, x, cy);
+    }
+
+    // ===================== H · warna ikut wallpaper =====================
+
+    /** Warna wallpaper dikira di thread latar (tidak sekali-kali di thread UI). */
+    private void loadTint(Context c) {
+        long ver = prefs.getLong(Prefs.IMG_VER, 0);
+        if (ver == tintVer || tintBusy) return;
+        tintBusy = true;
+        final Context app = c.getApplicationContext();
+        new Thread(() -> {
+            int col = 0;
+            try {
+                Bitmap bg = DepthRenderer.load(DepthRenderer.bgFile(app));
+                if (bg != null) col = DepthRenderer.autoColor(bg);
+            } catch (Throwable ignored) {
+            }
+            tintCol = col;
+            tintVer = ver;
+            tintBusy = false;
+            postInvalidate();
+        }, "gk-sbtint").start();
+    }
+
+    private void tintCapsule(Canvas c, float l, float r, float cy) {
+        int base = tintCol != 0 ? tintCol : 0xFF85B7EB;
+        float[] hsv = new float[3];
+        Color.colorToHSV(base, hsv);
+        hsv[1] = Math.min(1f, hsv[1] * 1.25f + 0.1f);
+        hsv[2] = 0.36f;
+        int deep = Color.HSVToColor(hsv);
+        float hh = dp(13.5f);
+        RectF rf = new RectF(l, cy - hh, r, cy + hh);
+        cap.setShader(null);
+        cap.setColor((deep & 0x00FFFFFF) | (solid ? 0xFF000000 : 0xA8000000));
+        c.drawRoundRect(rf, hh, hh, cap);
+        cap.setShader(new LinearGradient(0, rf.top, 0, rf.bottom,
+                new int[]{Color.argb(55, 255, 255, 255), Color.argb(0, 255, 255, 255)}, new float[]{0f, 0.6f}, Shader.TileMode.CLAMP));
+        c.drawRoundRect(rf, hh, hh, cap);
+        capEdge.setColor((base & 0x00FFFFFF) | 0x99000000);
+        c.drawRoundRect(rf, hh, hh, capEdge);
+        capEdge.setColor(Color.argb(55, 255, 255, 255));
+    }
+
+    /** Masa dengan titik dua berkelip setiap saat. */
+    private void drawBlinkTime(Canvas c, float x, float base) {
+        int k = time.indexOf(':');
+        if (k < 0) {
+            c.drawText(time, x, base, text);
+            return;
+        }
+        String a = time.substring(0, k), b = time.substring(k + 1);
+        c.drawText(a, x, base, text);
+        float ax = x + text.measureText(a);
+        long now = System.currentTimeMillis();
+        int al = text.getAlpha();
+        text.setAlpha((now / 1000) % 2 == 0 ? 255 : 70);
+        c.drawText(":", ax, base, text);
+        text.setAlpha(al);
+        c.drawText(b, ax + text.measureText(":"), base, text);
+        postInvalidateDelayed(1000 - now % 1000 + 5);
+    }
+
+    // ===================== G · cip pintar =====================
+
+    private void chip(Canvas c, float l, float r, float cy) {
+        float hh = dp(12.5f);
+        RectF rf = new RectF(l, cy - hh, r, cy + hh);
+        cap.setShader(null);
+        cap.setColor(solid ? Color.rgb(24, 24, 28) : dark ? Color.argb(150, 18, 18, 22) : Color.argb(80, 20, 20, 26));
+        c.drawRoundRect(rf, hh, hh, cap);
+        cap.setShader(new LinearGradient(0, rf.top, 0, rf.bottom,
+                new int[]{Color.argb(dark ? 40 : 70, 255, 255, 255), Color.argb(0, 255, 255, 255)}, new float[]{0f, 0.7f}, Shader.TileMode.CLAMP));
+        c.drawRoundRect(rf, hh, hh, cap);
+        capEdge.setColor(Color.argb(80, 255, 255, 255));
+        c.drawRoundRect(rf, hh, hh, capEdge);
+        capEdge.setColor(Color.argb(55, 255, 255, 255));
+    }
+
+    private void drawChips(Canvas c) {
+        int w = getWidth();
+        float cy = centerY > 0 ? centerY : getHeight() / 2f;
+        float pad = dp(12), gap = dp(5), in = dp(9);
+        float cx = islandCx > 0 ? islandCx : w / 2f;
+        float leftLimit = cx - gapHalf - dp(6), rightLimit = cx + gapHalf + dp(6);
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float base = cy - (fm.ascent + fm.descent) / 2f;
+        sp.setTextSize(dp(12));
+        sp.setTypeface(Ui.font(650));
+        Paint.FontMetrics sf = sp.getFontMetrics();
+        float sBase = cy - (sf.ascent + sf.descent) / 2f;
+        int is = Math.round(dp(15));
+
+        // ---- kiri: masa | notifikasi | cuaca ----
+        float tw = text.measureText(time);
+        float x = pad;
+        chip(c, x, x + tw + 2 * in, cy);
+        c.drawText(time, x + in, base, text);
+        x += tw + 2 * in + gap;
+        float nw = notifs.isEmpty() ? 0 : notifs.size() * is + (notifs.size() - 1) * dp(4) + 2 * dp(8)
+                + (moreNotifs > 0 ? sp.measureText("+" + moreNotifs) + dp(3) : 0);
+        String wt = wx != null ? Math.round(wx.temp) + "°" : null;
+        float ww = wt != null ? dp(15) + dp(4) + sp.measureText(wt) + 2 * dp(8) : 0;
+        if (nw > 0 && x + nw <= leftLimit) {
+            chip(c, x, x + nw, cy);
+            float ix = x + dp(8);
+            for (Drawable d : notifs) {
+                d.setBounds(Math.round(ix), Math.round(cy - is / 2f), Math.round(ix) + is, Math.round(cy + is / 2f));
+                d.draw(c);
+                ix += is + dp(4);
+            }
+            if (moreNotifs > 0) {
+                sp.setColor(Color.argb(230, 255, 255, 255));
+                c.drawText("+" + moreNotifs, ix - dp(1), sBase, sp);
+            }
+            x += nw + gap;
+        }
+        if (wt != null && x + ww <= leftLimit) {
+            chip(c, x, x + ww, cy);
+            drawWeatherGlyph(c, x + dp(8), cy, dp(15), wx.code);
+            sp.setColor(Color.WHITE);
+            c.drawText(wt, x + dp(8) + dp(15) + dp(4), sBase, sp);
+        }
+
+        // ---- kanan (dari tepi): bateri | isyarat | senyap ----
+        float rx = w - pad;
+        float bw = batteryWidth() + 2 * dp(8);
+        chip(c, rx - bw, rx, cy);
+        drawBattery(c, rx - bw + dp(8), cy);
+        rx -= bw + gap;
+        float sw = speedWidth() + (cell >= 0 || airplane ? dp(16) : 0) + (wifi >= 0 ? dp(6) + dp(17) : 0)
+                + (hotspot ? dp(6) + dp(17) : 0);
+        if (sw > 0 && rx - sw - 2 * dp(8) >= rightLimit) {
+            float l = rx - sw - 2 * dp(8);
+            chip(c, l, rx, cy);
+            float sx = l + dp(8);
+            if (speed != null) {
+                sp.setColor(Color.WHITE);
+                c.drawText(speed, sx, sBase, sp);
+                sx += speedWidth();
+            }
+            if (cell >= 0 || airplane) {
+                if (airplane) drawPlane(c, sx, cy); else drawCell(c, sx, cy, cell);
+                sx += dp(16) + dp(6);
+            }
+            if (wifi >= 0) {
+                drawWifi(c, sx, cy, wifi);
+                sx += dp(17) + dp(6);
+            }
+            if (hotspot) drawHotspot(c, sx, cy);
+            rx = l - gap;
+        }
+        boolean quiet = dnd || ringer != 2;
+        if (quiet && rx - dp(13) - 2 * dp(8) >= rightLimit) {
+            float l = rx - dp(13) - 2 * dp(8);
+            chip(c, l, rx, cy);
+            if (dnd) drawMoon(c, l + dp(8), cy);
+            else drawBellOff(c, l + dp(8) + dp(6.5f), cy, ringer == 0 ? 0xFFFF453A : 0xFFFF9F0A);
+        }
+    }
+
+    /** Loceng dengan garis (senyap = merah, getar = oren) — warna sama seperti jubin deringan panel. */
+    private void drawBellOff(Canvas c, float cx, float cy, int col) {
+        float s = dp(6.5f);
+        path.reset();
+        path.moveTo(cx - s * 0.75f, cy + s * 0.45f);
+        path.quadTo(cx - s * 0.75f, cy - s * 0.95f, cx, cy - s * 0.95f);
+        path.quadTo(cx + s * 0.75f, cy - s * 0.95f, cx + s * 0.75f, cy + s * 0.45f);
+        path.close();
+        fill.setColor(col);
+        c.drawPath(path, fill);
+        c.drawCircle(cx, cy + s * 0.7f, s * 0.18f, fill);
+        stroke.setColor(Color.WHITE);
+        stroke.setStrokeWidth(dp(1.4f));
+        c.drawLine(cx - s, cy - s, cx + s, cy + s, stroke);
+    }
+
+    /** Ikon cuaca ringkas: matahari, awan, atau awan hujan (kod WMO). */
+    private void drawWeatherGlyph(Canvas c, float x, float cy, float size, int code) {
+        float cx = x + size / 2f;
+        if (code <= 1) {
+            fill.setColor(0xFFFFD60A);
+            c.drawCircle(cx, cy, size * 0.24f, fill);
+            stroke.setColor(0xFFFFD60A);
+            stroke.setStrokeWidth(dp(1.3f));
+            for (int i = 0; i < 8; i++) {
+                double a = i * Math.PI / 4;
+                c.drawLine(cx + (float) Math.cos(a) * size * 0.34f, cy + (float) Math.sin(a) * size * 0.34f,
+                        cx + (float) Math.cos(a) * size * 0.47f, cy + (float) Math.sin(a) * size * 0.47f, stroke);
+            }
+            return;
+        }
+        boolean rain = code >= 51;
+        float oy = rain ? -size * 0.12f : 0;
+        fill.setColor(Color.WHITE);
+        c.drawCircle(cx - size * 0.16f, cy + oy + size * 0.06f, size * 0.2f, fill);
+        c.drawCircle(cx + size * 0.08f, cy + oy - size * 0.06f, size * 0.26f, fill);
+        c.drawRoundRect(cx - size * 0.38f, cy + oy + size * 0.02f, cx + size * 0.4f, cy + oy + size * 0.26f, size * 0.12f, size * 0.12f, fill);
+        if (rain) {
+            stroke.setColor(0xFF64D2FF);
+            stroke.setStrokeWidth(dp(1.3f));
+            for (int i = -1; i <= 1; i++) {
+                float dx = cx + i * size * 0.22f;
+                c.drawLine(dx, cy + size * 0.24f, dx - size * 0.06f, cy + size * 0.42f, stroke);
+            }
+        }
     }
 
     private void drawCell(Canvas c, float x, float cy, int level) {
@@ -354,7 +610,7 @@ class StatusBar extends View {
         fill.setColor(Color.argb(110, 255, 255, 255));
         c.drawRoundRect(body.right + dp(1.2f), cy - dp(2.3f), body.right + dp(2.6f), cy + dp(2.3f), dp(1), dp(1), fill);
 
-        if (showPct && battery >= 0) {
+        if (showPct && battery >= 0 && style != MINIMAL) {
             pct.setColor(lvl > 45 || charging ? Color.argb(235, 0, 0, 0) : Color.WHITE);
             Paint.FontMetrics fm = pct.getFontMetrics();
             c.drawText(String.valueOf(battery), body.centerX(), cy - (fm.ascent + fm.descent) / 2f, pct);

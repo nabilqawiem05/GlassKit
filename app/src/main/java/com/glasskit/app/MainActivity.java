@@ -475,7 +475,7 @@ public class MainActivity extends Activity {
         toggle(sb, R.string.sbar_on, Prefs.SBAR_ON, false);
         toggle(sb, R.string.sbar_pct, Prefs.SBAR_PCT, true);
         label(sb, R.string.sbar_style);
-        segmented(sb, new int[]{R.string.sbar_capsule, R.string.sbar_minimal, R.string.sbar_island},
+        segmented(sb, new int[]{R.string.sbar_capsule, R.string.sbar_minimal, R.string.sbar_island, R.string.sbar_chips, R.string.sbar_tint},
                 prefs.getInt(Prefs.SBAR_STYLE, 0), i -> prefs.edit().putInt(Prefs.SBAR_STYLE, i).apply());
         LinearLayout sr = new LinearLayout(this);
         sb.addView(sr);

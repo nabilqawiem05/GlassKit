@@ -661,4 +661,6 @@
     <string name="call_minimize">Kecilkan</string>
     <string name="call_birthday">🎂 Hari jadi %s hari ini</string>
     <string name="lock_top_blur">Kabur bahagian atas wallpaper (gaya iPhone)</string>
+    <string name="sbar_chips">Cip</string>
+    <string name="sbar_tint">Warna</string>
 </resources>
