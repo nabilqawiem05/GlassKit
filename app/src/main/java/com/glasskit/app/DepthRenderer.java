@@ -88,7 +88,29 @@ public final class DepthRenderer {
     }
 
     /** Laluan jam (sudah diregang ikut lebar/tinggi). Garis dasar kekal di y. */
+    private static String pathKey;
+    private static Path pathCache;
+
+    /** Laluan jam dengan cache (dipanggil berkali-kali di UI thread: tolok, sentuhan, sunting). */
     static Path clockPath(Context ctx, SharedPreferences p, int w, int h) {
+        String time = new SimpleDateFormat(DateFormat.is24HourFormat(ctx) ? "HH:mm" : "h:mm", Locale.getDefault()).format(new Date());
+        int shape = p.getInt(Prefs.CLOCK_SHAPE, 0);
+        String key = time + "|" + w + "x" + h + "|" + p.getInt(Prefs.CLOCK_SIZE, 30) + "|" + p.getInt(Prefs.CLOCK_Y, 28)
+                + "|" + p.getInt(Prefs.CLOCK_W, 100) + "|" + p.getInt(Prefs.CLOCK_H, 100) + "|" + p.getInt(Prefs.CLOCK_FONT, 0)
+                + "|" + p.getInt(Prefs.CLOCK_LAYOUT, 0) + "|" + shape
+                + "|" + (shape != 0 ? System.identityHashCode(ClockShape.of(ctx, w, h)) : 0);
+        synchronized (DepthRenderer.class) {
+            if (key.equals(pathKey) && pathCache != null) return new Path(pathCache);
+        }
+        Path made = buildClockPath(ctx, p, w, h);
+        synchronized (DepthRenderer.class) {
+            pathKey = key;
+            pathCache = new Path(made);
+        }
+        return made;
+    }
+
+    private static Path buildClockPath(Context ctx, SharedPreferences p, int w, int h) {
         float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
         float y = h * p.getInt(Prefs.CLOCK_Y, 28) / 100f;
         float sx = p.getInt(Prefs.CLOCK_W, 100) / 100f;
@@ -135,7 +157,7 @@ public final class DepthRenderer {
             tp.getTextPath(time, 0, time.length(), w / 2f, y, path);
         }
         Matrix m = new Matrix();
-        m.setScale(sx, sy, w / 2f, y);
+        m.setScale(sx, sy, w / 2f, y - size * 0.72f); // atas kekal: tarik tinggi memanjang ke bawah
         path.transform(m);
         return path;
     }
@@ -206,13 +228,9 @@ public final class DepthRenderer {
                         fr.left + (off[0] + sh.getWidth()) * sx, fr.top + (off[1] + sh.getHeight()) * sy);
                 sr.offset(w * 0.022f, h * 0.012f);
                 c.drawBitmap(sh, null, sr, shp);
-                // subjek dibesarkan sedikit dari tengahnya & diangkat
-                RectF bb = subjectBox(fg, fr);
-                float cx = bb.centerX(), cy = bb.centerY();
-                c.scale(1.035f, 1.035f, cx, cy);
-                c.translate(-w * 0.006f, -h * 0.004f);
             }
-            c.drawBitmap(fg, null, fr, bmp);
+            Bitmap clean = bg != null ? cached(fg, "edge", () -> refineEdge(fg, bg)) : fg;
+            c.drawBitmap(clean, null, fr, bmp);
             c.restore();
         }
         if (p.getBoolean(Prefs.WALL_MOOD, false)) {
@@ -358,6 +376,57 @@ public final class DepthRenderer {
         return Color.rgb(Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255));
     }
 
+    /**
+     * Tepi subjek bersih: topeng dikaburkan sedikit lalu ditajamkan semula (smoothstep) supaya tepi
+     * "tangga" jadi licin, dan warna diambil dari gambar asal (tiada pinggir gelap/putih).
+     */
+    static Bitmap refineEdge(Bitmap fg, Bitmap bg) {
+        try {
+            int fw = fg.getWidth(), fh = fg.getHeight();
+            Bitmap src = bg;
+            if (bg.getWidth() != fw || bg.getHeight() != fh) src = Bitmap.createScaledBitmap(bg, fw, fh, true);
+            int[] col = new int[fw * fh];
+            src.getPixels(col, 0, fw, 0, 0, fw, fh);
+            int[] fp = new int[fw * fh];
+            fg.getPixels(fp, 0, fw, 0, 0, fw, fh);
+            float[] a = new float[fw * fh], t = new float[fw * fh];
+            for (int i = 0; i < a.length; i++) a[i] = (fp[i] >>> 24) / 255f;
+            fp = null;
+            int r = Math.max(1, Math.round(fw * 0.0016f));
+            // kabur kotak dua laluan (mendatar, menegak), dua kali ≈ gaussian
+            for (int pass = 0; pass < 2; pass++) {
+                for (int y = 0; y < fh; y++) {
+                    int row = y * fw;
+                    float sum = 0;
+                    for (int x = -r; x <= r; x++) sum += a[row + Math.max(0, Math.min(fw - 1, x))];
+                    for (int x = 0; x < fw; x++) {
+                        t[row + x] = sum / (2 * r + 1);
+                        sum += a[row + Math.min(fw - 1, x + r + 1)] - a[row + Math.max(0, x - r)];
+                    }
+                }
+                for (int x = 0; x < fw; x++) {
+                    float sum = 0;
+                    for (int y = -r; y <= r; y++) sum += t[Math.max(0, Math.min(fh - 1, y)) * fw + x];
+                    for (int y = 0; y < fh; y++) {
+                        a[y * fw + x] = sum / (2 * r + 1);
+                        sum += t[Math.min(fh - 1, y + r + 1) * fw + x] - t[Math.max(0, y - r) * fw + x];
+                    }
+                }
+            }
+            for (int i = 0; i < a.length; i++) {
+                float v = (a[i] - 0.42f) / 0.26f; // ambang sedikit ke dalam: buang sisa latar di tepi
+                v = v <= 0 ? 0 : v >= 1 ? 1 : v * v * (3 - 2 * v);
+                int al = Math.round(v * 255);
+                col[i] = al == 0 ? 0 : (al << 24) | (col[i] & 0x00FFFFFF);
+            }
+            Bitmap out = Bitmap.createBitmap(fw, fh, Bitmap.Config.ARGB_8888);
+            out.setPixels(col, 0, fw, 0, 0, fw, fh);
+            return out;
+        } catch (Throwable e) {
+            return fg;
+        }
+    }
+
     /** Kedudukan bingkai gaya "Bingkai" (di bawah kepala subjek). */
     static RectF popFrame(Bitmap fg, int w, int h) {
         float top = subjectTop(fg, w, h);
@@ -438,7 +507,8 @@ public final class DepthRenderer {
         if (top < 0) return false;
         float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
         float capH = size * 0.72f * p.getInt(Prefs.CLOCK_H, 100) / 100f;
-        float baseline = top + capH * 0.42f;
+        // atas digit = y - 0.72·size, bawah = atas + capH; 42% bawah digit tersorok di belakang kepala
+        float baseline = top + capH * 0.42f - capH + size * 0.72f;
         int pct = Math.round(baseline / h * 100f);
         pct = Math.max(12, Math.min(70, pct));
         p.edit().putInt(Prefs.CLOCK_Y, pct).apply();

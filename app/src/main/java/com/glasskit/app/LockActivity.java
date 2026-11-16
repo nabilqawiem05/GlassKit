@@ -90,6 +90,7 @@ public class LockActivity extends Activity {
     private int W, H, statusH;
 
     private ImageView wall;
+    private ImageView wallBlur; // salinan kabur (dikira sekali) — dipudar masuk semasa slide
     private FrameLayout ui;
     private GaugeRow gauges;
     private LinearLayout bottom, notifList, musicBox;
@@ -267,11 +268,17 @@ public class LockActivity extends Activity {
         wall = new ImageView(this);
         wall.setScaleType(ImageView.ScaleType.FIT_XY);
         root.addView(wall, new FrameLayout.LayoutParams(-1, -1));
+        wallBlur = new ImageView(this);
+        wallBlur.setScaleType(ImageView.ScaleType.FIT_XY);
+        wallBlur.setAlpha(0f);
+        wallBlur.setVisibility(View.INVISIBLE);
+        root.addView(wallBlur, new FrameLayout.LayoutParams(-1, -1));
         synchronized (lastBd) {
             if (lastFrame != null && lastFrame.getWidth() == W && lastFrame.getHeight() == H) {
                 frame = lastFrame;
                 wall.setImageBitmap(frame);
                 copyBd(lastBd, bd);
+                wallBlur.setImageBitmap(bd.soft);
             }
         }
 
@@ -450,6 +457,11 @@ public class LockActivity extends Activity {
         wall.setTranslationY(0);
         wall.setScaleX(1f);
         wall.setScaleY(1f);
+        wall.setRenderEffect(null);
+        wallBlur.animate().cancel();
+        wallBlur.setAlpha(0f);
+        wallBlur.setScaleX(1f);
+        wallBlur.setScaleY(1f);
         unlockSpring.stop();
         // masuk gaya iPhone: wallpaper bermula sedikit zoom & kabur, kemudian "zoom out" ke tempatnya
         if (prefs.getBoolean(Prefs.LOCK_ZOOM, true)) {
@@ -567,11 +579,24 @@ public class LockActivity extends Activity {
         to.luminance = from.luminance;
     }
 
+    private static final String[] RENDER_KEYS = {Prefs.CLOCK_SIZE, Prefs.CLOCK_Y, Prefs.CLOCK_COLOR, Prefs.CLOCK_FONT,
+            Prefs.CLOCK_W, Prefs.CLOCK_H, Prefs.CLOCK_GLASS, Prefs.WALL_MOOD, Prefs.CLOCK_LAYOUT, Prefs.CLOCK_SHAPE,
+            Prefs.POP_STYLE, Prefs.CLOCK_AUTO, Prefs.LOCK_HIJRI, Prefs.HIJRI_ADJ};
+
+    /** Tandatangan tetapan yang mempengaruhi lukisan sahaja (bukan semua prefs). */
+    private String renderSig() {
+        StringBuilder sb = new StringBuilder();
+        java.util.Map<String, ?> all = prefs.getAll();
+        for (String k : RENDER_KEYS) sb.append(all.get(k)).append(',');
+        sb.append(Ui.darkGlass(this));
+        return Integer.toHexString(sb.toString().hashCode());
+    }
+
     private String frameKey() {
         java.util.Calendar c = java.util.Calendar.getInstance();
         return prefs.getLong(Prefs.IMG_VER, 0) + "|" + c.get(java.util.Calendar.DAY_OF_YEAR) + "|"
                 + c.get(java.util.Calendar.HOUR_OF_DAY) + ":" + c.get(java.util.Calendar.MINUTE) + "|"
-                + prefs.getAll().hashCode() + "|" + W + "x" + H + "|" + java.util.Locale.getDefault();
+                + renderSig() + "|" + W + "x" + H + "|" + java.util.Locale.getDefault();
     }
 
     /** Lukis bingkai wallpaper + jam di thread latar; UI tidak tersekat. Bingkai lama kekal sehingga yang baru siap. */
@@ -635,6 +660,7 @@ public class LockActivity extends Activity {
                         wall.setImageBitmap(done);
                         if (gauges != null) gauges.invalidate();
                         copyBd(nb, bd);
+                        wallBlur.setImageBitmap(bd.soft);
                         LiquidGlass.invalidateTree(ui);
                         gauges.invalidate();
                     }
@@ -734,7 +760,7 @@ public class LockActivity extends Activity {
         private int lastStep = -1;
         private long lastApply;
 
-        int hMax() { return prefs.getInt(Prefs.CLOCK_LAYOUT, 0) == 2 ? 600 : 240; }
+        int hMax() { return 600; }
 
         ClockEdit(Context c) {
             super(c);
@@ -1599,8 +1625,10 @@ public class LockActivity extends Activity {
             }
             unlockSpring.stop();
             applyUnlock(Math.max(uProg, 0.6f), Math.min(uDy, -H * 0.2f));
-            ui.animate().translationY(-H * 0.3f).alpha(0f).setInterpolator(Ui.EXIT).setDuration(200).start();
-            wall.animate().scaleX(1.24f).scaleY(1.24f).alpha(0f).setInterpolator(Ui.EASE).setDuration(300).withEndAction(() -> {
+            ui.animate().translationY(-H * 0.3f).alpha(0f).setInterpolator(Ui.EXIT).setDuration(170).start();
+            wallBlur.setVisibility(View.VISIBLE);
+            wallBlur.animate().scaleX(1.24f).scaleY(1.24f).alpha(0f).setInterpolator(Ui.EASE).setDuration(240).start();
+            wall.animate().scaleX(1.24f).scaleY(1.24f).alpha(0f).setInterpolator(Ui.EASE).setDuration(240).withEndAction(() -> {
                 if (r != null) r.run();
                 // simpan aktiviti di belakang supaya dibuka semula serta-merta (tiada skrin hitam)
                 boolean moved = false;
@@ -1633,15 +1661,15 @@ public class LockActivity extends Activity {
         wall.setScaleX(sc);
         wall.setScaleY(sc);
         wall.setTranslationY(0);
-        if (zoom && android.os.Build.VERSION.SDK_INT >= 31) {
-            float r = Math.min(70f, 70f * q);
-            if (Math.abs(r - lastBlur) > 1.5f || (r < 0.5f) != (lastBlur < 0.5f)) {
-                lastBlur = r;
-                android.graphics.RenderEffect re = r < 0.5f ? null
-                        : android.graphics.RenderEffect.createBlurEffect(r, r, android.graphics.Shader.TileMode.CLAMP);
-                wall.setRenderEffect(re);
-            }
-        }
+        // kabur murah: pudar masuk salinan kabur yang sudah dikira (tiada kabur GPU penuh setiap bingkai)
+        float ba = zoom ? Math.min(1f, q * 1.5f) : 0f;
+        wallBlur.setScaleX(sc);
+        wallBlur.setScaleY(sc);
+        wallBlur.setAlpha(ba);
+        wallBlur.setVisibility(ba > 0.003f ? View.VISIBLE : View.INVISIBLE);
+        // UI dilukis sebagai satu lapisan GPU semasa bergerak (alpha/translate murah)
+        int lt = q > 0.001f ? View.LAYER_TYPE_HARDWARE : View.LAYER_TYPE_NONE;
+        if (ui.getLayerType() != lt) ui.setLayerType(lt, null);
         ui.setTranslationY(dy);
         ui.setAlpha(Math.max(0f, 1f - q * 1.35f));
         float us = 1f - 0.05f * Math.min(1f, q);
@@ -1674,15 +1702,11 @@ public class LockActivity extends Activity {
             float sc = 1f + 0.16f * q;
             wall.setScaleX(sc);
             wall.setScaleY(sc);
+            wallBlur.setScaleX(sc);
+            wallBlur.setScaleY(sc);
+            wallBlur.setAlpha(Math.min(1f, q * 1.5f));
             reveal.setScaleX(sc);
             reveal.setScaleY(sc);
-            if (android.os.Build.VERSION.SDK_INT >= 31) {
-                float rr = 70f * q;
-                android.graphics.RenderEffect re = rr < 0.5f ? null
-                        : android.graphics.RenderEffect.createBlurEffect(rr, rr, android.graphics.Shader.TileMode.CLAMP);
-                wall.setRenderEffect(re);
-                reveal.setRenderEffect(re);
-            }
             reveal.set(f);
             if (lastPopFrame == null) reveal.setAlpha(f);
         });
