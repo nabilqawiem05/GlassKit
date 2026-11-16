@@ -31,6 +31,8 @@ final class ClockShape {
         float cx, cy;          // saiz sel grid dalam piksel skrin
         float[] top;           // y skrin bahagian atas subjek bagi setiap lajur, -1 = tiada
         float[] horizon;       // y skrin garis ufuk bagi setiap lajur
+        float[] rawHz;         // ufuk mentah (sebelum dilicinkan)
+        boolean[] valid;       // lajur yang ufuknya jelas & tidak dilindungi subjek
         float horizonMid;
         boolean horizonOk;
         Bitmap skyMask;        // ALPHA_8 gw x gh, 255 = langit
@@ -170,6 +172,12 @@ final class ClockShape {
             n++;
         }
         float conf = n > 0 ? sum / n : 0;
+        s.valid = new boolean[gw];
+        s.rawHz = new float[gw];
+        for (int x = 0; x < gw; x++) {
+            s.rawHz[x] = (y0 + path[x]) * s.cy;
+            s.valid[x] = !blocked[x] && score[x][path[x]] > 22f;
+        }
         s.horizonOk = n >= gw * 0.3f && conf > 30f;
         float[] hz = new float[gw];
         for (int x = 0; x < gw; x++) hz[x] = (y0 + path[x]) * s.cy;
@@ -237,6 +245,61 @@ final class ClockShape {
         return o;
     }
 
+    /** Padanan kuadratik teguh y = c0 + c1·u + c2·4u² (u = (x - w/2)/w), buang titik terpencil. */
+    private static double[] robustQuad(Scene s, int w) {
+        boolean[] use = s.valid.clone();
+        double[] c = null;
+        for (int it = 0; it < 4; it++) {
+            double[][] A = new double[3][3];
+            double[] B = new double[3];
+            int cnt = 0;
+            for (int i = 0; i < s.gw; i++) {
+                if (!use[i]) continue;
+                double u = ((i + 0.5) * s.cx - w / 2.0) / w;
+                double[] f = {1, u, 4 * u * u};
+                for (int a = 0; a < 3; a++) {
+                    for (int b = 0; b < 3; b++) A[a][b] += f[a] * f[b];
+                    B[a] += f[a] * s.rawHz[i];
+                }
+                cnt++;
+            }
+            if (cnt < s.gw * 0.2) return c;
+            double[] sol = solve3(A, B);
+            if (sol == null) return c;
+            c = sol;
+            // buang titik dengan baki besar (contoh: dahan, orang, awan)
+            double[] res = new double[s.gw];
+            java.util.ArrayList<Double> rs = new java.util.ArrayList<>();
+            for (int i = 0; i < s.gw; i++) {
+                double u = ((i + 0.5) * s.cx - w / 2.0) / w;
+                res[i] = Math.abs(s.rawHz[i] - (c[0] + c[1] * u + c[2] * 4 * u * u));
+                if (use[i]) rs.add(res[i]);
+            }
+            java.util.Collections.sort(rs);
+            double med = rs.get(rs.size() / 2);
+            double lim = Math.max(s.cy * 1.5, med * 2.0);
+            for (int i = 0; i < s.gw; i++) if (use[i] && res[i] > lim) use[i] = false;
+        }
+        return c;
+    }
+
+    private static double[] solve3(double[][] A, double[] B) {
+        double[][] m = new double[3][4];
+        for (int i = 0; i < 3; i++) { System.arraycopy(A[i], 0, m[i], 0, 3); m[i][3] = B[i]; }
+        for (int col = 0; col < 3; col++) {
+            int piv = col;
+            for (int r = col + 1; r < 3; r++) if (Math.abs(m[r][col]) > Math.abs(m[piv][col])) piv = r;
+            if (Math.abs(m[piv][col]) < 1e-9) return null;
+            double[] t = m[col]; m[col] = m[piv]; m[piv] = t;
+            for (int r = 0; r < 3; r++) {
+                if (r == col) continue;
+                double k = m[r][col] / m[col][col];
+                for (int q = col; q < 4; q++) m[r][q] -= k * m[col][q];
+            }
+        }
+        return new double[]{m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]};
+    }
+
     private static Path glyph(Paint tp, String ch, float sx, float sy) {
         Path g = new Path();
         tp.getTextPath(ch, 0, ch.length(), 0, 0, g); // Align.CENTER: tengah di x=0, garis dasar y=0
@@ -283,46 +346,49 @@ final class ClockShape {
                 return out;
             }
             case LINE: {
-                // B · jam melengkung mengikut garisan paling jelas dalam gambar
-                float[] cv = new float[s.gw];
+                // B · jam melengkung lembut mengikut garisan utama gambar.
+                // Lengkung kuadratik (padanan teguh, buang titik terpencil seperti dahan) + lengkung pelangi
+                // kecil, dengan had kecuraman: tiada lipatan tajam, digit tidak bertindih.
                 boolean ok = s.horizonOk && s.horizonMid > h * 0.16f && s.horizonMid < h * 0.74f;
-                float[] src = ok ? smooth(smooth(s.horizon, 6), 6) : null;
-                for (int i = 0; i < s.gw; i++) {
-                    float xs = (i + 0.5f) * s.cx;
-                    if (ok) cv[i] = src[i] - size * 0.05f;
+                double c0 = y, c1 = 0, c2 = 0;
+                if (ok) {
+                    double[] fit = robustQuad(s, w);
+                    if (fit != null) { c0 = fit[0] - size * 0.06f; c1 = fit[1]; c2 = fit[2]; }
+                }
+                c1 = Math.max(-0.12 * w, Math.min(0.12 * w, c1));
+                c2 = Math.max(-0.6 * size, Math.min(0.6 * size, c2)) + size * 0.9; // + lengkung pelangi
+                float sp = 1.05f; // jarak tambahan supaya digit tidak bersentuh pada lengkung
+                float half = total * sx * sp / 2f;
+                // lalukan sepanjang lengkung; anggaran panjang lengkok dengan langkah kecil
+                Path line = new Path();
+                int steps = 160;
+                float[] xs = new float[steps + 1], ys = new float[steps + 1], len = new float[steps + 1];
+                float xa = w / 2f - half * 1.6f, xb = w / 2f + half * 1.6f;
+                for (int i = 0; i <= steps; i++) {
+                    xs[i] = xa + (xb - xa) * i / steps;
+                    double u = (xs[i] - w / 2f) / w;
+                    ys[i] = (float) (c0 + c1 * u + c2 * u * u * 4);
+                    if (i == 0) line.moveTo(xs[i], ys[i]);
                     else {
-                        float d = (xs - w / 2f) / (w / 2f);
-                        cv[i] = y + d * d * h * 0.05f;
+                        line.lineTo(xs[i], ys[i]);
+                        len[i] = len[i - 1] + (float) Math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1]);
                     }
                 }
-                Path line = new Path();
-                line.moveTo(-w * 0.2f, cv[0]);
-                float cum = 0, center = -1, lx = -w * 0.2f, ly = cv[0];
-                for (int i = 0; i < s.gw; i++) {
-                    float xs = (i + 0.5f) * s.cx;
-                    line.lineTo(xs, cv[i]);
-                    float seg = (float) Math.hypot(xs - lx, cv[i] - ly);
-                    if (center < 0 && xs >= w / 2f) center = cum + seg - (xs - w / 2f);
-                    cum += seg;
-                    lx = xs;
-                    ly = cv[i];
-                }
-                line.lineTo(w * 1.2f, cv[s.gw - 1]);
+                float center = len[steps / 2];
                 PathMeasure pm = new PathMeasure(line, false);
-                float d = center - total * sx / 2f;
+                float d = center - half;
                 float[] pos = new float[2], tan = new float[2];
                 for (int i = 0; i < n; i++) {
-                    float dd = d + wd[i] * sx / 2f;
+                    float dd = d + wd[i] * sx * sp / 2f;
                     pm.getPosTan(Math.max(0, Math.min(pm.getLength(), dd)), pos, tan);
-                    double ang = Math.atan2(tan[1], tan[0]);
-                    ang = Math.max(-0.6, Math.min(0.6, ang));
+                    double ang = Math.max(-0.38, Math.min(0.38, Math.atan2(tan[1], tan[0])));
                     Path g = glyph(tp, time.substring(i, i + 1), sx, sy);
                     Matrix m = new Matrix();
                     m.setRotate((float) Math.toDegrees(ang));
                     m.postTranslate(pos[0], pos[1]);
                     g.transform(m);
                     out.addPath(g);
-                    d += wd[i] * sx;
+                    d += wd[i] * sx * sp;
                 }
                 return out;
             }
