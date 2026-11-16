@@ -89,6 +89,8 @@ final class CameraRing {
         if (v == null) return;
         v.mode = RingView.GLOW;
         v.color = pkgColor;
+        v.live = true; // neon hidup: bernafas, kelip, cahaya beredar
+        v.comet = null;
         if (!pulse) {
             v.level = 0.55f;
             v.invalidate();
@@ -113,6 +115,7 @@ final class CameraRing {
         ensure(cx, cy, rad);
         if (v == null) return;
         v.mode = RingView.CHARGE;
+        v.live = false;
         v.color = level <= 20 ? 0xFFFF453A : 0xFF30D158;
         final float target = Math.max(0.03f, level / 100f);
         anim = ValueAnimator.ofFloat(0f, 1f);
@@ -192,6 +195,12 @@ final class CameraRing {
         static final int GLOW = 0, CHARGE = 1;
         int mode, color = Color.WHITE;
         float level, sweep;
+        boolean live;
+        android.graphics.Shader comet;
+        private int cometColor;
+        private long flickUntil, nextFlick;
+        private final java.util.Random rnd = new java.util.Random();
+        private final android.graphics.Matrix m = new android.graphics.Matrix();
         final int rad;
         final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         final RectF r = new RectF();
@@ -219,10 +228,66 @@ final class CameraRing {
                 c.drawCircle(cx, cy, rr, p);
                 p.setColor((color & 0x00FFFFFF) | (a << 24));
                 c.drawArc(r, -90, 360 * sweep, false, p);
-            } else {
+            } else if (!live) {
                 p.setColor((color & 0x00FFFFFF) | (a << 24));
                 c.drawCircle(cx, cy, rr, p);
+            } else {
+                drawNeon(c, cx, cy, rr, d);
             }
+        }
+
+        /** Neon hidup: bernafas perlahan, sekali-sekala berkelip seperti tiub neon, dan satu cahaya beredar. */
+        private void drawNeon(Canvas c, float cx, float cy, float rr, float d) {
+            long now = android.os.SystemClock.uptimeMillis();
+            float breath = 0.62f + 0.30f * (float) Math.sin(now / 2600.0 * Math.PI * 2);
+            // kelip neon: rawak setiap 4–9 saat, ~260ms corak padam-nyala
+            if (nextFlick == 0) nextFlick = now + 3000 + rnd.nextInt(5000);
+            if (now >= nextFlick) {
+                flickUntil = now + 260;
+                nextFlick = now + 4000 + rnd.nextInt(5000);
+            }
+            float flick = 1f;
+            if (now < flickUntil) {
+                long k = (flickUntil - now) / 45;
+                flick = (k % 2 == 0) ? 0.25f : 1f;
+            }
+            float lv = Math.max(0.05f, Math.min(1f, Math.max(level, 0f) > 0.6f ? level : breath)) * flick;
+            int a = Math.round(255 * lv);
+            int rgb = color & 0x00FFFFFF;
+            // halo luar lembut (bernafas)
+            p.setShader(null);
+            p.setStrokeWidth(9 * d);
+            p.setColor(rgb | (Math.round(a * 0.18f) << 24));
+            c.drawCircle(cx, cy, rr + 2f * d, p);
+            p.setStrokeWidth(4.5f * d);
+            p.setColor(rgb | (Math.round(a * 0.30f) << 24));
+            c.drawCircle(cx, cy, rr + 0.5f * d, p);
+            // tiub neon
+            p.setStrokeWidth(2.4f * d);
+            p.setColor(rgb | (a << 24));
+            c.drawCircle(cx, cy, rr, p);
+            // cahaya beredar (ekor pudar), satu pusingan ~3.2 saat
+            if (comet == null || cometColor != color) {
+                cometColor = color;
+                int hi = blend(color, Color.WHITE, 0.55f);
+                comet = new android.graphics.SweepGradient(cx, cy,
+                        new int[]{0x00FFFFFF & hi, 0x00FFFFFF & hi, hi, 0x00FFFFFF & hi},
+                        new float[]{0f, 0.72f, 0.97f, 1f});
+            }
+            m.setRotate((now % 3200) / 3200f * 360f, cx, cy);
+            comet.setLocalMatrix(m);
+            p.setShader(comet);
+            p.setAlpha(Math.round(255 * Math.min(1f, flick)));
+            p.setStrokeWidth(3.2f * d);
+            c.drawCircle(cx, cy, rr, p);
+            p.setShader(null);
+            postInvalidateOnAnimation();
+        }
+
+        private static int blend(int a, int b, float t) {
+            return Color.rgb(Math.round(Color.red(a) + (Color.red(b) - Color.red(a)) * t),
+                    Math.round(Color.green(a) + (Color.green(b) - Color.green(a)) * t),
+                    Math.round(Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t));
         }
     }
 }
