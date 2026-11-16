@@ -664,4 +664,7 @@
     <string name="sbar_chips">Cip</string>
     <string name="sbar_tint">Warna</string>
     <string name="sbar_iphone">iPhone</string>
+    <string name="panel_bento">Bento</string>
+    <string name="bento_battery">Bateri</string>
+    <string name="bento_steps">Langkah hari ini</string>
 </resources>

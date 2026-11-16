@@ -646,7 +646,10 @@ final class Panels {
             set(false, null);
         }
 
+        java.util.function.Consumer<Boolean> hook; // Bento: warnakan kotak ikut keadaan
+
         void set(boolean on, String state) {
+            if (hook != null) hook.accept(on);
             if (round) {
                 android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
                 g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
@@ -762,7 +765,8 @@ final class Panels {
 
     void openControl() {
         if (open == QS) return;
-        if (s.prefs.getInt(Prefs.PANEL_STYLE, 1) == 1) {
+        int ps = s.prefs.getInt(Prefs.PANEL_STYLE, 1);
+        if (ps == 1 || ps == 2) {
             openLiquid();
             return;
         }
@@ -982,6 +986,7 @@ final class Panels {
     private class LiquidSheet extends FrameLayout implements android.hardware.SensorEventListener {
         final LinearLayout body;
         final java.util.List<View> drops = new java.util.ArrayList<>();
+        int dropStyle; // 0 lantun, 1 gelombang dari kiri, 2 terbalik, 3 naik dari bawah (Bento: bertukar setiap buka)
         float melt = 0f;          // 0 = island, 1 = penuh
         float wobble = 0f;        // ayunan tepi bawah semasa mendap
         float tx, ty;             // condongan (-1..1)
@@ -1070,12 +1075,45 @@ final class Panels {
             for (int i = 0; i < drops.size(); i++) {
                 View d = drops.get(i);
                 float t = clamp01((q - 0.28f - i * 0.012f) / 0.45f);
-                d.setAlpha(t);
-                d.setScaleX(0.5f + 0.5f * t);
-                d.setScaleY(0.5f + 0.5f * t);
-                d.setTranslationY(-dp(26) * (1f - t));
+                pose(d, t);
             }
             invalidate();
+        }
+
+        /** Keadaan kotak pada kemajuan t (0 = belum muncul, 1 = di tempat) ikut gaya masuk. */
+        void pose(View d, float t) {
+            float u = 1f - t;
+            d.setAlpha(t);
+            switch (dropStyle) {
+                case 1: // gelombang dari kiri
+                    d.setTranslationX(-dp(56) * u);
+                    d.setTranslationY(0);
+                    d.setRotationX(0);
+                    d.setScaleX(0.9f + 0.1f * t);
+                    d.setScaleY(0.9f + 0.1f * t);
+                    break;
+                case 2: // terbalik masuk
+                    d.setCameraDistance(dp(900) * getResources().getDisplayMetrics().density);
+                    d.setRotationX(80 * u);
+                    d.setTranslationX(0);
+                    d.setTranslationY(-dp(12) * u);
+                    d.setScaleX(1f);
+                    d.setScaleY(1f);
+                    break;
+                case 3: // naik dari bawah
+                    d.setTranslationY(dp(52) * u);
+                    d.setTranslationX(0);
+                    d.setRotationX(0);
+                    d.setScaleX(0.94f + 0.06f * t);
+                    d.setScaleY(0.94f + 0.06f * t);
+                    break;
+                default: // lantun
+                    d.setTranslationX(0);
+                    d.setRotationX(0);
+                    d.setScaleX(0.5f + 0.5f * t);
+                    d.setScaleY(0.5f + 0.5f * t);
+                    d.setTranslationY(-dp(26) * u);
+            }
         }
 
         void enter() {
@@ -1083,12 +1121,7 @@ final class Panels {
             setPivotY(0);
             melt = 0f;
             body.setAlpha(0f);
-            for (View d : drops) {
-                d.setAlpha(0f);
-                d.setScaleX(0.2f);
-                d.setScaleY(0.2f);
-                d.setTranslationY(-dp(36));
-            }
+            for (View d : drops) pose(d, 0f);
             setScaleX(0.35f);
             animate().scaleX(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
@@ -1109,9 +1142,9 @@ final class Panels {
             body.animate().alpha(1f).setStartDelay(160).setDuration(260).start();
             for (int i = 0; i < drops.size(); i++) {
                 View d = drops.get(i);
-                d.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0)
+                d.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0).translationX(0).rotationX(0)
                         .setInterpolator(Ui.SPRING)
-                        .setStartDelay(180 + i * 28L).setDuration(Ui.SPRING_MS).start();
+                        .setStartDelay(180 + i * (dropStyle == 0 ? 28L : 45L)).setDuration(Ui.SPRING_MS).start();
             }
         }
 
@@ -1325,6 +1358,11 @@ final class Panels {
         java.util.Set<String> hiddenT = hiddenTiles();
         List<Tile> shown = new ArrayList<>();
         for (String k : keys) if (!hiddenT.contains(k)) shown.add(map.get(k));
+        if (s.prefs.getInt(Prefs.PANEL_STYLE, 1) == 2) {
+            fillBento(sheet, gap, map, shown);
+            return;
+        }
+        sheet.dropStyle = 0;
         int nGrid = Math.min(9, shown.size());
 
         LinearLayout mid = new LinearLayout(s);
@@ -1416,6 +1454,277 @@ final class Panels {
         b.addView(foot, fll);
         sheet.drops.add(foot);
 
+    }
+
+    // ===================== Bento =====================
+
+    /**
+     * Panel Bento: kotak pelbagai saiz berjajar kemas. Cuaca & bateri ialah kotak besar beranimasi yang
+     * bertukar isi (cuaca ↔ kalendar, bateri ↔ langkah). Gaya animasi masuk bertukar setiap kali dibuka.
+     */
+    private void fillBento(LiquidSheet sheet, int gapIgnored, java.util.Map<String, Tile> map, List<Tile> shown) {
+        LinearLayout b = sheet.body;
+        sheet.dropStyle = new java.util.Random().nextInt(4);
+        final int g = dp(8), u = dp(78);
+        sBright = null;
+        vBright = vVolume = null;
+
+        Tile wifi = map.get("wifi"), bt = map.get("bt"), rot = map.get("rotate"), torch = map.get("torch"), plane = map.get("plane");
+        java.util.Set<Tile> fixed = new java.util.HashSet<>(java.util.Arrays.asList(wifi, bt, rot, torch, plane));
+
+        // ---- baris 1: cuaca (besar) | Wi-Fi + (BT, putar) ----
+        LinearLayout r1 = new LinearLayout(s);
+        r1.addView(weatherBox(), new LinearLayout.LayoutParams(0, 2 * u + g, 1f));
+        LinearLayout c1 = new LinearLayout(s);
+        c1.setOrientation(LinearLayout.VERTICAL);
+        c1.addView(tileBox(wifi, true), new LinearLayout.LayoutParams(-1, u));
+        LinearLayout r1b = new LinearLayout(s);
+        r1b.addView(tileBox(bt, false), new LinearLayout.LayoutParams(0, -1, 1f));
+        LinearLayout.LayoutParams sp1 = new LinearLayout.LayoutParams(0, -1, 1f);
+        sp1.leftMargin = g;
+        r1b.addView(tileBox(rot, false), sp1);
+        LinearLayout.LayoutParams r1bl = new LinearLayout.LayoutParams(-1, u);
+        r1bl.topMargin = g;
+        c1.addView(r1b, r1bl);
+        LinearLayout.LayoutParams c1l = new LinearLayout.LayoutParams(0, 2 * u + g, 1f);
+        c1l.leftMargin = g;
+        r1.addView(c1, c1l);
+        LinearLayout.LayoutParams r1l = new LinearLayout.LayoutParams(-1, -2);
+        r1l.topMargin = dp(12);
+        b.addView(r1, r1l);
+        sheet.drops.add(r1.getChildAt(0));
+        sheet.drops.add(c1.getChildAt(0));
+        sheet.drops.add(r1b);
+
+        // ---- baris 2: kecerahan penuh ----
+        sBright = new Widgets.HSlider(s, Icon.SUN, BentoViews.boxBg(s, false, 0), 0xFFFAC775, 0xFF412402);
+        sBright.setCb(this::setBrightness);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, dp(56));
+        bl.topMargin = g;
+        b.addView(sBright, bl);
+        sheet.drops.add(sBright);
+
+        // ---- baris 3: bateri (besar) | (lampu, pesawat) + waktu solat ----
+        LinearLayout r3 = new LinearLayout(s);
+        r3.addView(batteryBox(), new LinearLayout.LayoutParams(0, 2 * u + g, 1f));
+        LinearLayout c3 = new LinearLayout(s);
+        c3.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout r3a = new LinearLayout(s);
+        r3a.addView(tileBox(torch, false), new LinearLayout.LayoutParams(0, -1, 1f));
+        LinearLayout.LayoutParams sp3 = new LinearLayout.LayoutParams(0, -1, 1f);
+        sp3.leftMargin = g;
+        r3a.addView(tileBox(plane, false), sp3);
+        c3.addView(r3a, new LinearLayout.LayoutParams(-1, u));
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, u);
+        pl.topMargin = g;
+        c3.addView(prayerBox(), pl);
+        LinearLayout.LayoutParams c3l = new LinearLayout.LayoutParams(0, 2 * u + g, 1f);
+        c3l.leftMargin = g;
+        r3.addView(c3, c3l);
+        LinearLayout.LayoutParams r3l = new LinearLayout.LayoutParams(-1, -2);
+        r3l.topMargin = g;
+        b.addView(r3, r3l);
+        sheet.drops.add(r3.getChildAt(0));
+        sheet.drops.add(r3a);
+        sheet.drops.add(c3.getChildAt(1));
+
+        // ---- baris 4: muzik ----
+        View media = mediaCard(true);
+        LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-1, dp(118));
+        ml.topMargin = g;
+        b.addView(media, ml);
+        sheet.drops.add(media);
+
+        // ---- suis lain: kotak kecil, 4 sebaris ----
+        List<Tile> rest = new ArrayList<>();
+        for (Tile t : shown) if (!fixed.contains(t)) rest.add(t);
+        for (int i = 0; i < rest.size(); i += 4) {
+            LinearLayout row = new LinearLayout(s);
+            for (int j = i; j < i + 4; j++) {
+                LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(0, u, 1f);
+                if (j > i) l.leftMargin = g;
+                if (j < rest.size()) row.addView(tileBox(rest.get(j), false), l);
+                else row.addView(new View(s), l);
+            }
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+            rl.topMargin = g;
+            b.addView(row, rl);
+            sheet.drops.add(row);
+        }
+
+        LinearLayout foot = new LinearLayout(s);
+        foot.addView(chip(s.getString(R.string.system_panel), v -> {
+            close();
+            s.h.postDelayed(() -> s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS), 450);
+        }), new LinearLayout.LayoutParams(0, dp(42), 1f));
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(0, dp(42), 1f);
+        fl.leftMargin = g;
+        foot.addView(chip(s.getString(R.string.cc_settings), v -> launch(new Intent(s, MainActivity.class))), fl);
+        LinearLayout.LayoutParams fe = new LinearLayout.LayoutParams(dp(84), dp(42));
+        fe.leftMargin = g;
+        foot.addView(chip(s.getString(R.string.tile_edit), v -> showTileEditor()), fe);
+        LinearLayout.LayoutParams fll = new LinearLayout.LayoutParams(-1, -2);
+        fll.topMargin = dp(14);
+        b.addView(foot, fll);
+        sheet.drops.add(foot);
+    }
+
+    /** Kotak suis: seluruh kotak boleh ditekan; warna kotak ikut keadaan suis. Lebar = ikon + nama di sebelah. */
+    private View tileBox(Tile t, boolean wide) {
+        final FrameLayout box = new FrameLayout(s);
+        if (t == null) return box;
+        if (t.v.getParent() instanceof ViewGroup) ((ViewGroup) t.v.getParent()).removeView(t.v);
+        ViewGroup.LayoutParams dl = t.disc.getLayoutParams();
+        if (dl != null) {
+            dl.width = dp(44);
+            dl.height = dp(44);
+            t.disc.setLayoutParams(dl);
+        }
+        if (t.label != null) {
+            t.label.setTextSize(10.5f);
+            t.label.setVisibility(wide ? View.GONE : View.VISIBLE);
+        }
+        final int col = t.onColor;
+        t.hook = on -> box.setBackground(BentoViews.boxBg(s, on, col));
+        box.setBackground(BentoViews.boxBg(s, false, col));
+        if (wide) {
+            LinearLayout row = new LinearLayout(s);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12), 0, dp(12), 0);
+            row.addView(t.v, new LinearLayout.LayoutParams(-2, -2));
+            TextView nm = Ui.line(s, 15, 600, Color.WHITE);
+            nm.setText(t.name);
+            nm.setPadding(dp(10), 0, 0, 0);
+            row.addView(nm, new LinearLayout.LayoutParams(0, -2, 1f));
+            box.addView(row, new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            box.addView(t.v, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        }
+        // seluruh kotak ikut tindakan bulatan (tekan & tekan lama)
+        box.setOnClickListener(v -> t.disc.performClick());
+        box.setOnLongClickListener(v -> t.disc.performLongClick());
+        android.graphics.drawable.GradientDrawable mask = new android.graphics.drawable.GradientDrawable();
+        mask.setCornerRadius(dp(24));
+        mask.setColor(Color.WHITE);
+        box.setForeground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(Color.argb(70, 255, 255, 255)), null, mask));
+        box.setClipToOutline(true);
+        box.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(24)); }
+        });
+        Ui.press(box);
+        return box;
+    }
+
+    private FrameLayout roundBox() {
+        FrameLayout box = new FrameLayout(s);
+        box.setBackground(BentoViews.boxBg(s, false, 0));
+        box.setClipToOutline(true);
+        box.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(24)); }
+        });
+        return box;
+    }
+
+    /** Cuaca (langit beranimasi, suhu dikira naik) ↔ tarikh & acara seterusnya. */
+    private View weatherBox() {
+        Data.Weather w = null;
+        try { w = Data.weather(s); } catch (Throwable ignored) {}
+        FrameLayout faceA = new FrameLayout(s);
+        faceA.addView(new BentoViews.Sky(s, w != null ? w.code : 2, w == null || w.day), new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout ta = BentoViews.face(s, w != null && w.city != null && !w.city.isEmpty() ? w.city : s.getString(R.string.wx_here),
+                w != null ? "0°" : "—", w != null ? Data.condition(s, w.code) : s.getString(R.string.wx_need));
+        faceA.addView(ta, new FrameLayout.LayoutParams(-1, -1));
+        if (w != null) BentoViews.countUp((TextView) ta.getChildAt(1), Math.round(w.temp), "°");
+
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        LinearLayout faceB = BentoViews.face(s,
+                new java.text.SimpleDateFormat("EEEE", java.util.Locale.getDefault()).format(cal.getTime()),
+                String.valueOf(cal.get(java.util.Calendar.DAY_OF_MONTH)),
+                new java.text.SimpleDateFormat("MMMM", java.util.Locale.getDefault()).format(cal.getTime()));
+        faceB.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFF993C1D, 0xFF4A1B0C}));
+        final TextView evLine = (TextView) faceB.getChildAt(2);
+        new Thread(() -> {
+            try {
+                List<Data.Event> ev = Data.events(s, 1, 1);
+                if (!ev.isEmpty()) {
+                    Data.Event e = ev.get(0);
+                    String line = (e.allDay ? s.getString(R.string.all_day) : Data.eventTime(s, e).split(" – ")[0]) + " · " + e.title;
+                    s.h.post(() -> evLine.setText(line));
+                }
+            } catch (Throwable ignored) {
+            }
+        }, "gk-bento-ev").start();
+
+        FrameLayout box = roundBox();
+        box.addView(new BentoViews.FlipBox(s, faceA, faceB, 7000, 5000), new FrameLayout.LayoutParams(-1, -1));
+        box.setOnClickListener(v -> launch(new Intent(s, MainActivity.class)));
+        Ui.press(box);
+        return box;
+    }
+
+    /** Bateri (air naik & beralun) ↔ langkah hari ini (cincin). */
+    private View batteryBox() {
+        int lvl = Ui.battery(s);
+        boolean chg = Ui.charging(s);
+        FrameLayout faceA = new FrameLayout(s);
+        BentoViews.LiquidBattery liq = new BentoViews.LiquidBattery(s, Math.max(0, lvl), chg);
+        faceA.addView(liq, new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout ta = BentoViews.face(s, s.getString(R.string.bento_battery), lvl >= 0 ? lvl + "%" : "—",
+                chg ? "⚡ " + s.getString(R.string.charging) : null);
+        ta.setGravity(Gravity.TOP);
+        faceA.addView(ta, new FrameLayout.LayoutParams(-1, -1));
+        liq.fill();
+
+        int steps = Data.steps(s);
+        FrameLayout faceB = new FrameLayout(s);
+        faceB.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFF534AB7, 0xFF26215C}));
+        BentoViews.Ring ring = new BentoViews.Ring(s, steps / 8000f, 0xFFAFA9EC);
+        FrameLayout.LayoutParams rl = new FrameLayout.LayoutParams(dp(54), dp(54), Gravity.TOP | Gravity.END);
+        rl.topMargin = dp(12);
+        rl.rightMargin = dp(12);
+        faceB.addView(ring, rl);
+        faceB.addView(BentoViews.face(s, s.getString(R.string.bento_steps), String.valueOf(steps), "/ 8000"),
+                new FrameLayout.LayoutParams(-1, -1));
+        ring.grow();
+
+        FrameLayout box = roundBox();
+        box.addView(new BentoViews.FlipBox(s, faceA, faceB, 7000, 8500), new FrameLayout.LayoutParams(-1, -1));
+        return box;
+    }
+
+    /** Waktu solat seterusnya dengan cincin kira detik. */
+    private View prayerBox() {
+        FrameLayout box = roundBox();
+        Object[] pr = null;
+        try { pr = Cards.nextPrayerInfo(s); } catch (Throwable ignored) {}
+        box.setBackground(BentoViews.boxBg(s, pr != null, 0xFF0F6E56));
+        LinearLayout row = new LinearLayout(s);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(12), 0, dp(12), 0);
+        LinearLayout txt = new LinearLayout(s);
+        txt.setOrientation(LinearLayout.VERTICAL);
+        TextView a = Ui.line(s, 14, 650, Color.WHITE);
+        TextView bb = Ui.line(s, 11, 500, Color.argb(210, 255, 255, 255));
+        if (pr != null) {
+            a.setText(pr[0] + " " + pr[1]);
+            bb.setText(String.valueOf(pr[2]));
+        } else {
+            a.setText(new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(new java.util.Date()));
+            bb.setText(new java.text.SimpleDateFormat("EEE, d MMM", java.util.Locale.getDefault()).format(new java.util.Date()));
+        }
+        txt.addView(a);
+        txt.addView(bb);
+        row.addView(txt, new LinearLayout.LayoutParams(0, -2, 1f));
+        if (pr != null) {
+            BentoViews.Ring ring = new BentoViews.Ring(s, (Float) pr[3], 0xFF9FE1CB);
+            row.addView(ring, new LinearLayout.LayoutParams(dp(40), dp(40)));
+            ring.grow();
+        }
+        box.addView(row, new FrameLayout.LayoutParams(-1, -1));
+        return box;
     }
 
     // ===================== Susunan tile =====================

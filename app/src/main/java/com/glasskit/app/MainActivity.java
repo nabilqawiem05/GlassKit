@@ -511,7 +511,7 @@ public class MainActivity extends Activity {
                 });
         note(pan, getString(R.string.glass_mode_note));
         label(pan, R.string.panel_style);
-        segmented(pan, new int[]{R.string.panel_classic, R.string.panel_liquid},
+        segmented(pan, new int[]{R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento},
                 prefs.getInt(Prefs.PANEL_STYLE, 1), i -> prefs.edit().putInt(Prefs.PANEL_STYLE, i).apply());
         note(pan, getString(R.string.panel_style_note));
         note(pan, getString(R.string.panels_hint));

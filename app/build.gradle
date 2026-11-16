@@ -10,8 +10,8 @@ android {
         applicationId 'com.glasskit.app'
         minSdk 31
         targetSdk 35
-        versionCode 77
-        versionName '17.7'
+        versionCode 78
+        versionName '17.8'
     }
 
     signingConfigs {
