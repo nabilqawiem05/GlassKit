@@ -608,6 +608,8 @@ public class MainActivity extends Activity {
         label(clk, R.string.clock_layout);
         segmented(clk, new int[]{R.string.clock_inline, R.string.clock_stacked}, prefs.getInt(Prefs.CLOCK_LAYOUT, 0),
                 i -> prefs.edit().putInt(Prefs.CLOCK_LAYOUT, i).apply());
+        label(clk, R.string.clock_shape);
+        shapeChips(clk);
 
         label(clk, R.string.clock_style);
         segmented(clk, new int[]{R.string.style_glass, R.string.style_solid},
@@ -985,6 +987,49 @@ public class MainActivity extends Activity {
     }
 
     /** Pilihan fon jam dengan pratonton "12:30" dalam setiap gaya. */
+    /** Pilihan jam ikut bentuk wallpaper: Biasa, A–F. */
+    private void shapeChips(LinearLayout parent) {
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);
+        hs.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        String[] marks = {"—", "A", "B", "C", "D", "E", "F"};
+        int[] names = {R.string.shape_none, R.string.shape_contour, R.string.shape_line, R.string.shape_sky,
+                R.string.shape_halo, R.string.shape_reflect, R.string.shape_sand};
+        for (int k = 0; k < marks.length; k++) {
+            final int idx = k;
+            LinearLayout col = new LinearLayout(this);
+            col.setOrientation(LinearLayout.VERTICAL);
+            col.setGravity(Gravity.CENTER);
+            col.setPadding(dp(14), dp(8), dp(14), dp(8));
+            TextView mk = Ui.text(this, 22, 700, Color.WHITE);
+            mk.setText(marks[k]);
+            mk.setGravity(Gravity.CENTER);
+            col.addView(mk);
+            TextView nm = Ui.text(this, 11, 600, Color.argb(190, 235, 235, 245));
+            nm.setText(names[k]);
+            col.addView(nm);
+            col.setTag(idx);
+            col.setOnClickListener(v -> {
+                prefs.edit().putInt(Prefs.CLOCK_SHAPE, idx).apply();
+                for (int j = 0; j < row.getChildCount(); j++) {
+                    View cv = row.getChildAt(j);
+                    cv.setBackground((int) cv.getTag() == idx ? Ui.round(Color.argb(60, 255, 255, 255), dp(16)) : null);
+                }
+            });
+            col.setBackground(prefs.getInt(Prefs.CLOCK_SHAPE, 0) == idx ? Ui.round(Color.argb(60, 255, 255, 255), dp(16)) : null);
+            Ui.press(col);
+            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(-2, -2);
+            l.rightMargin = dp(6);
+            row.addView(col, l);
+        }
+        hs.addView(row);
+        parent.addView(hs, new LinearLayout.LayoutParams(-1, -2));
+        TextView hint = Ui.text(this, 12, 400, Color.argb(160, 235, 235, 245));
+        hint.setText(R.string.shape_hint);
+        hint.setPadding(dp(4), dp(4), dp(4), dp(4));
+        parent.addView(hint);
+    }
+
     private void fontChips(LinearLayout parent) {
         android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);
         hs.setHorizontalScrollBarEnabled(false);

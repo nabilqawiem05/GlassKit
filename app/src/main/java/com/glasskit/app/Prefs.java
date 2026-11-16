@@ -84,6 +84,7 @@ public final class Prefs {
     public static final String FONT_UNI = "fontUni";
     public static final String CLOCK_AUTO = "clockAuto";
     public static final String CLOCK_LAYOUT = "clockLayout";
+    public static final String CLOCK_SHAPE = "clockShape";
     public static final String LOCK_HIJRI = "lockHijri";
     public static final String HIJRI_ADJ = "hijriAdj";
     public static final String LOCK_PRAYER = "lockPrayer";

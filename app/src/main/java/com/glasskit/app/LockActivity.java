@@ -648,12 +648,10 @@ public class LockActivity extends Activity {
     }
 
     private void placeGauges() {
-        Path p = DepthRenderer.clockPath(this, prefs, W, H);
-        RectF r = new RectF();
-        p.computeBounds(r, true);
+        float bottom = DepthRenderer.gaugeTop(this, prefs, W, H);
         float scale = (float) getResources().getDisplayMetrics().widthPixels / W;
         FrameLayout.LayoutParams gl = (FrameLayout.LayoutParams) gauges.getLayoutParams();
-        int top = Math.round(r.bottom * scale) + dp(16);
+        int top = Math.round(bottom * scale) + dp(16);
         if (gl.topMargin != top) {
             gl.topMargin = top;
             gauges.setLayoutParams(gl);

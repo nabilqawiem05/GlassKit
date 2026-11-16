@@ -101,6 +101,12 @@ public final class DepthRenderer {
         tp.setTextSize(size);
         tp.setLetterSpacing(0.01f); // jarak kecil: digit tidak bersentuh / bertindih
         tp.setTypeface(font(p.getInt(Prefs.CLOCK_FONT, 0)));
+        int shape = p.getInt(Prefs.CLOCK_SHAPE, 0);
+        if (shape != ClockShape.NONE) {
+            // jam ikut bentuk wallpaper (A–F); jika tidak sesuai, guna susunan biasa
+            Path sp = ClockShape.build(shape, ClockShape.of(ctx, w, h), tp, time, size, y, sx, sy, w, h);
+            if (sp != null) return sp;
+        }
         Path path = new Path();
         if (p.getInt(Prefs.CLOCK_LAYOUT, 0) == 1) {
             // A · jam bertindan: jam di atas, minit di bawah, lebih besar & rapat
@@ -214,6 +220,10 @@ public final class DepthRenderer {
             Path path = clockPath(ctx, p, w, h);
             RectF b = new RectF();
             path.computeBounds(b, true);
+            int shape = p.getInt(Prefs.CLOCK_SHAPE, 0);
+            float gsize = size; // saiz untuk ketebalan kaca: ikut saiz sebenar digit
+            if (shape == ClockShape.SKY || shape == ClockShape.HALO)
+                gsize = Math.max(size * 0.4f, Math.min(size * 4f, b.height() / 0.75f));
 
             // Tarikh di atas jam
             Paint dp = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -224,6 +234,9 @@ public final class DepthRenderer {
             dp.setShadowLayer(size * 0.03f, 0, size * 0.008f, Color.argb(70, 0, 0, 0));
             String date = new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(new Date());
             float dy = b.top - size * 0.16f;
+            if (shape == ClockShape.SAND) dy = h * 0.14f; // jam di tanah: tarikh kekal di atas
+            if (dy - dp.getTextSize() * 2.4f < h * 0.05f && shape != ClockShape.NONE)
+                dy = b.bottom + dp.getTextSize() * 1.4f; // tiada ruang di atas: tarikh di bawah jam
             if (p.getBoolean(Prefs.LOCK_HIJRI, false)) {
                 // D · tarikh Hijri di bawah tarikh Masihi
                 Paint hp = new Paint(dp);
@@ -234,14 +247,40 @@ public final class DepthRenderer {
             }
             c.drawText(date, w / 2f, dy, dp);
 
+            ClockShape.Scene scene = shape == ClockShape.SKY ? ClockShape.of(ctx, w, h) : null;
+            boolean masked = scene != null && scene.skyMask != null;
+            if (masked) c.saveLayer(null, null);
+            ClockShape.under(shape, c, path, size);
             if (glass) {
                 int tint = (color & 0x00FFFFFF) == 0x00FFFFFF ? 0 : (color | 0xFF000000);
-                LiquidGlass.glyph(c, path, size, bg != null ? sharp(bg) : null, bgRect, dark, tint);
+                LiquidGlass.glyph(c, path, gsize, bg != null ? sharp(bg) : null, bgRect, dark, tint);
             } else {
                 Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
                 fp.setColor(color);
                 c.drawPath(path, fp);
             }
+            if (masked) {
+                ClockShape.maskSky(c, scene, w, h);
+                c.restore();
+            }
+            try {
+                ClockShape.over(shape, c, path, b, color, size, w, h);
+            } catch (Throwable ignored) {
+            }
+    }
+
+    /** Kedudukan atas baris tolok (di bawah jam, atau di bawah tarikh/pantulan untuk gaya bentuk). */
+    static float gaugeTop(Context ctx, SharedPreferences p, int w, int h) {
+        RectF b = clockRect(ctx, p, w, h);
+        int shape = p.getInt(Prefs.CLOCK_SHAPE, 0);
+        float size = w * p.getInt(Prefs.CLOCK_SIZE, 30) / 100f;
+        if (shape == ClockShape.SAND) return h * 0.14f + size * 0.14f;
+        if (shape == ClockShape.REFLECT) return Math.min(h * 0.8f, b.bottom + b.height() * 0.75f);
+        if (shape == ClockShape.SKY) {
+            ClockShape.Scene s = ClockShape.of(ctx, w, h);
+            if (s != null && s.horizonOk) return Math.min(b.bottom, s.horizonMid + size * 0.1f);
+        }
+        return b.bottom;
     }
 
     /** Kotak jam (piksel skrin). */

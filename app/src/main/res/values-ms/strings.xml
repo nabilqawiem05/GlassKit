@@ -646,4 +646,13 @@
     <string name="snd_set">%1$s kini nada notifikasi anda</string>
     <string name="snd_tones_note">Nada disimpan ke folder Notifications, jadi boleh juga dipilih ikut app dalam WhatsApp atau Telegram. Untuk elak bunyi berganda, matikan \"Screen locking sound\" di Tetapan → Sound &amp; vibration.</string>
     <string name="clock_edit_hint">Tarik ▾ untuk tinggi · ▸ untuk lebar · ketik luar untuk simpan</string>
+    <string name="clock_shape">Ikut bentuk wallpaper</string>
+    <string name="shape_none">Tiada</string>
+    <string name="shape_contour">Kontur</string>
+    <string name="shape_line">Lengkung</string>
+    <string name="shape_sky">Langit</string>
+    <string name="shape_halo">Halo</string>
+    <string name="shape_reflect">Pantulan</string>
+    <string name="shape_sand">Pasir</string>
+    <string name="shape_hint">Jam menyesuaikan bentuk dengan setiap wallpaper baharu. Jika gambar tiada subjek atau ufuk, jam kembali biasa.</string>
 </resources>
