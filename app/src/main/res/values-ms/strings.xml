@@ -656,4 +656,8 @@
     <string name="shape_sand">Pasir</string>
     <string name="shape_hint">Jam menyesuaikan bentuk dengan setiap wallpaper baharu. Jika gambar tiada subjek atau ufuk, jam kembali biasa.</string>
     <string name="clock_tall">Tinggi</string>
+    <string name="call_style_ios">iOS 27</string>
+    <string name="call_silence">Senyap</string>
+    <string name="call_minimize">Kecilkan</string>
+    <string name="call_birthday">🎂 Hari jadi %s hari ini</string>
 </resources>

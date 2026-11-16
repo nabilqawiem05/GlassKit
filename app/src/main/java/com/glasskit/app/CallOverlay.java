@@ -96,11 +96,12 @@ final class CallOverlay {
             islandRoute(sbn, n, false);
             return;
         }
-        if (style == 2) {
-            // kad kaca: kad terapung semasa berdering, island untuk panggilan berlangsung
+        if (style == 2 || style == 3) {
+            // kad kaca / iOS 27: paparan semasa berdering, island untuk panggilan berlangsung
             boolean ringing = resolve(n);
             islandRoute(sbn, n, ringing);
             if (!ringing) {
+                unmute(); // dijawab / tamat: pulihkan deringan
                 if (sbn.getKey().equals(key)) hide(true);
                 return;
             }
@@ -110,11 +111,13 @@ final class CallOverlay {
             Bundle ex = n.extras;
             CharSequence name = null;
             Drawable photo = null;
+            Person person = null;
             try {
                 Object po = ex.getParcelable(Notification.EXTRA_CALL_PERSON);
                 if (po instanceof Person) {
-                    name = ((Person) po).getName();
-                    if (((Person) po).getIcon() != null) photo = ((Person) po).getIcon().loadDrawable(s);
+                    person = (Person) po;
+                    name = person.getName();
+                    if (person.getIcon() != null) photo = person.getIcon().loadDrawable(s);
                 }
             } catch (Exception ignored) {
             }
@@ -123,7 +126,15 @@ final class CallOverlay {
                 try { photo = n.getLargeIcon().loadDrawable(s); } catch (Exception ignored) {}
             }
             CharSequence sub = ex.getCharSequence(Notification.EXTRA_TEXT);
-            buildCard(name, TextUtils.isEmpty(sub) ? s.getString(R.string.incoming_call) : sub.toString(), photo, sbn.getPackageName());
+            if (style == 2) {
+                buildCard(name, TextUtils.isEmpty(sub) ? s.getString(R.string.incoming_call) : sub.toString(), photo, sbn.getPackageName());
+            } else {
+                String pkg = sbn.getPackageName();
+                boolean dialer = "com.google.android.dialer".equals(pkg) || "com.android.server.telecom".equals(pkg);
+                String subtitle = dialer ? (TextUtils.isEmpty(sub) ? s.getString(R.string.incoming_call) : sub.toString())
+                        : appName(pkg) + " · " + s.getString(R.string.incoming_call);
+                buildIos(name, subtitle, photo, CallIos.birthdayToday(s, person, name));
+            }
             return;
         }
         if (!resolve(n)) {
@@ -162,6 +173,7 @@ final class CallOverlay {
     }
 
     void onRemoved(String k) {
+        unmute();
         if (k.equals(key)) hide(true);
         s.islandCallEnded(k);
     }
@@ -379,6 +391,62 @@ final class CallOverlay {
         av.animate().scaleX(1f).scaleY(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
         col.setTranslationY(dp(40));
         col.animate().translationY(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+    }
+
+    // ======================= Gaya iOS 27 =======================
+
+    private boolean muted;
+
+    private void buildIos(CharSequence name, String subtitle, Drawable photo, boolean birthday) {
+        Posters.Poster poster = Posters.match(s, name);
+        Bitmap ph = poster != null ? Posters.photo(s, poster) : null;
+        if (ph == null) ph = toBitmap(photo, dp(320));
+        TextView[] nv = new TextView[1];
+        root = CallIos.build(s, bd, name, subtitle, ph, birthday, what -> {
+            switch (what) {
+                case 0: act(false); break;
+                case 1: act(true); break;
+                case 2: silence(); break;
+                default: minimize(); break;
+            }
+        }, nv);
+        nameV = nv[0];
+        subV = new TextView(s);
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                        | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT);
+        lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        lp.setTitle("GlassKitCallIos");
+        try {
+            s.wm.addView(root, lp);
+        } catch (Exception e) {
+            root = null;
+            key = null;
+        }
+    }
+
+    /** Senyapkan deringan panggilan ini (dipulihkan bila panggilan tamat). */
+    private void silence() {
+        try {
+            android.media.AudioManager am = (android.media.AudioManager) s.getSystemService(android.content.Context.AUDIO_SERVICE);
+            am.adjustStreamVolume(android.media.AudioManager.STREAM_RING, android.media.AudioManager.ADJUST_MUTE, 0);
+            muted = true;
+            Haptics.soft(s);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void unmute() {
+        if (!muted) return;
+        muted = false;
+        try {
+            android.media.AudioManager am = (android.media.AudioManager) s.getSystemService(android.content.Context.AUDIO_SERVICE);
+            am.adjustStreamVolume(android.media.AudioManager.STREAM_RING, android.media.AudioManager.ADJUST_UNMUTE, 0);
+        } catch (Throwable ignored) {
+        }
     }
 
     // ======================= Kad kaca terapung =======================

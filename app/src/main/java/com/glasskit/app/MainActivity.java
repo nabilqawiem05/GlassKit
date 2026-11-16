@@ -293,8 +293,13 @@ public class MainActivity extends Activity {
         LinearLayout sys = card(pHome, R.string.sec_system, Icon.PHONE, 0xFF34C759);
         toggle(sys, R.string.call_on, Prefs.CALL_ON, true);
         label(sys, R.string.call_style);
-        segmented(sys, new int[]{R.string.call_style_island, R.string.call_style_full, R.string.call_style_card},
-                prefs.getInt(Prefs.CALL_STYLE, 0), i -> prefs.edit().putInt(Prefs.CALL_STYLE, i).apply());
+        segmented(sys, new int[]{R.string.call_style_island, R.string.call_style_full, R.string.call_style_card, R.string.call_style_ios},
+                prefs.getInt(Prefs.CALL_STYLE, 0), i -> {
+                    prefs.edit().putInt(Prefs.CALL_STYLE, i).apply();
+                    // iOS 27: baca tarikh lahir kenalan untuk bunga api hari jadi
+                    if (i == 3 && checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                        requestPermissions(new String[]{android.Manifest.permission.READ_CONTACTS}, 427);
+                });
         label(sys, R.string.poster_title);
         posterList = new LinearLayout(this);
         posterList.setOrientation(LinearLayout.VERTICAL);
