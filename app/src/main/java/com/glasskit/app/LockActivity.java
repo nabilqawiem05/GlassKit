@@ -734,6 +734,8 @@ public class LockActivity extends Activity {
         private int lastStep = -1;
         private long lastApply;
 
+        int hMax() { return prefs.getInt(Prefs.CLOCK_LAYOUT, 0) == 2 ? 600 : 240; }
+
         ClockEdit(Context c) {
             super(c);
             line.setStyle(android.graphics.Paint.Style.STROKE);
@@ -795,7 +797,7 @@ public class LockActivity extends Activity {
                     String k;
                     if (mode == 1) {
                         float f = Math.max(0.3f, (bh0 + (e.getRawY() - sy)) / bh0);
-                        v = Math.round(Math.max(60, Math.min(240, h0 * f)));
+                        v = Math.round(Math.max(60, Math.min(hMax(), h0 * f)));
                         k = Prefs.CLOCK_H;
                     } else if (mode == 2) {
                         float f = Math.max(0.3f, (bw0 + 2 * (e.getRawX() - sx)) / bw0);
@@ -805,7 +807,7 @@ public class LockActivity extends Activity {
                     int step = v / 5;
                     if (step != lastStep) {
                         lastStep = step;
-                        if (v == 60 || v == 240 || (mode == 2 && v == 170)) Haptics.edge(getContext());
+                        if (v == 60 || v == hMax() || (mode == 2 && v == 170)) Haptics.edge(getContext());
                         else Haptics.tick(getContext());
                     }
                     long now = System.currentTimeMillis();

@@ -606,7 +606,7 @@ public class MainActivity extends Activity {
         label(clk, R.string.lbl_font);
         fontChips(clk);
         label(clk, R.string.clock_layout);
-        segmented(clk, new int[]{R.string.clock_inline, R.string.clock_stacked}, prefs.getInt(Prefs.CLOCK_LAYOUT, 0),
+        segmented(clk, new int[]{R.string.clock_inline, R.string.clock_stacked, R.string.clock_tall}, prefs.getInt(Prefs.CLOCK_LAYOUT, 0),
                 i -> prefs.edit().putInt(Prefs.CLOCK_LAYOUT, i).apply());
         label(clk, R.string.clock_shape);
         shapeChips(clk);
@@ -619,7 +619,7 @@ public class MainActivity extends Activity {
         label(clk, R.string.lbl_width);
         slider(clk, 60, 170, prefs.getInt(Prefs.CLOCK_W, 100), val -> prefs.edit().putInt(Prefs.CLOCK_W, val).apply());
         label(clk, R.string.lbl_height);
-        slider(clk, 60, 240, prefs.getInt(Prefs.CLOCK_H, 100), val -> prefs.edit().putInt(Prefs.CLOCK_H, val).apply());
+        slider(clk, 60, 600, prefs.getInt(Prefs.CLOCK_H, 100), val -> prefs.edit().putInt(Prefs.CLOCK_H, val).apply());
         button(clk, getString(R.string.btn_auto_pos), false, v -> autoPlace(true));
 
         toggle(clk, R.string.hide_stock, Prefs.HIDE_STOCK, false);

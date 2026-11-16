@@ -662,4 +662,5 @@
     <string name="shape_reflect">Reflection</string>
     <string name="shape_sand">Ground</string>
     <string name="shape_hint">The clock reshapes itself to each new wallpaper. If a photo has no subject or horizon, it falls back to a normal clock.</string>
+    <string name="clock_tall">Tall</string>
 </resources>

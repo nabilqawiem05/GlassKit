@@ -655,4 +655,5 @@
     <string name="shape_reflect">Pantulan</string>
     <string name="shape_sand">Pasir</string>
     <string name="shape_hint">Jam menyesuaikan bentuk dengan setiap wallpaper baharu. Jika gambar tiada subjek atau ufuk, jam kembali biasa.</string>
+    <string name="clock_tall">Tinggi</string>
 </resources>
