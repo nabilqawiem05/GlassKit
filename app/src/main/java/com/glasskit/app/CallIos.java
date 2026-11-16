@@ -233,7 +233,8 @@ final class CallIos {
         col.setOrientation(LinearLayout.VERTICAL);
         col.setGravity(Gravity.CENTER_HORIZONTAL);
         FrameLayout b = new FrameLayout(s);
-        b.setBackground(new LiquidGlass.Surface(s, Ui.dp(s, 26), false, bd, 0));
+        b.setBackground(new Raised(0x66FFFFFF, Ui.dp(s, 1.2f))); // butang kecil kaca timbul
+        b.setElevation(Ui.dp(s, 8));
         if (icon > 0) {
             b.addView(new Icon(s, icon, Color.WHITE), new FrameLayout.LayoutParams(Ui.dp(s, 22), Ui.dp(s, 22), Gravity.CENTER));
         } else {
@@ -259,8 +260,10 @@ final class CallIos {
         }
         circle(s, b);
         b.setOnClickListener(l);
-        Ui.press(b);
+        sink(b, Ui.dp(s, 8));
         col.addView(b, new LinearLayout.LayoutParams(Ui.dp(s, 52), Ui.dp(s, 52)));
+        col.setClipChildren(false);
+        col.setPadding(Ui.dp(s, 6), Ui.dp(s, 6), Ui.dp(s, 6), 0);
         TextView t = Ui.text(s, 12, 600, Color.WHITE);
         t.setText(label);
         t.setPadding(0, Ui.dp(s, 6), 0, 0);
@@ -276,23 +279,18 @@ final class CallIos {
         col.setClipToPadding(false);
         col.setPadding(Ui.dp(s, 8), Ui.dp(s, 8), Ui.dp(s, 8), 0); // ruang untuk denyutan & bayang
         FrameLayout b = new FrameLayout(s);
-        // bulatan padat: atas lebih cerah, bawah warna penuh (macam butang iPhone), tepi putih halus
-        int light = blend(color, Color.WHITE, 0.28f);
-        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{light, color});
-        g.setShape(GradientDrawable.OVAL);
-        g.setStroke(Math.max(1, Ui.dp(s, 1)), Color.argb(90, 255, 255, 255));
-        b.setBackground(g);
+        b.setBackground(new Raised(color, Ui.dp(s, 1.5f))); // butang timbul 3D
         Icon ic = new Icon(s, Icon.PHONE, Color.WHITE);
         if (hang) ic.setRotation(135);
         b.addView(ic, new FrameLayout.LayoutParams(Ui.dp(s, 34), Ui.dp(s, 34), Gravity.CENTER));
-        b.setElevation(Ui.dp(s, 10));
+        b.setElevation(Ui.dp(s, 16));
         if (android.os.Build.VERSION.SDK_INT >= 28) {
             b.setOutlineSpotShadowColor(color);
             b.setOutlineAmbientShadowColor(color);
         }
         circle(s, b);
         b.setOnClickListener(l);
-        Ui.press(b);
+        sink(b, Ui.dp(s, 16));
         col.addView(b, new LinearLayout.LayoutParams(Ui.dp(s, 78), Ui.dp(s, 78)));
         TextView t = Ui.text(s, 14, 600, Color.WHITE);
         t.setText(label);
@@ -300,6 +298,74 @@ final class CallIos {
         t.setPadding(0, Ui.dp(s, 12), 0, 0);
         col.addView(t);
         return col;
+    }
+
+    /** Tekan: butang tenggelam (mengecil, bayang hilang); lepas: timbul semula dengan lantunan. */
+    private static void sink(View v, float elev) {
+        v.setOnTouchListener((view, e) -> {
+            switch (e.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    view.animate().scaleX(0.9f).scaleY(0.9f).translationZ(-elev * 0.8f).setInterpolator(Ui.EASE).setDuration(110).start();
+                    Haptics.tap(view.getContext());
+                    break;
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    view.animate().scaleX(1f).scaleY(1f).translationZ(0).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                    break;
+            }
+            return false;
+        });
+    }
+
+    /**
+     * Butang timbul: badan bulat dengan cahaya dari atas-kiri (radial), bibir tepi (atas terang, bawah gelap),
+     * kilauan kaca di atas dan bayang dalam di bawah.
+     */
+    static final class Raised extends android.graphics.drawable.Drawable {
+        private final int color;
+        private final float rim;
+        private final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+
+        Raised(int color, float rim) {
+            this.color = color;
+            this.rim = rim;
+        }
+
+        @Override
+        public void draw(android.graphics.Canvas c) {
+            android.graphics.Rect b = getBounds();
+            float w = b.width(), h = b.height(), cx = b.exactCenterX(), cy = b.exactCenterY(), r = Math.min(w, h) / 2f;
+            boolean glass = Color.alpha(color) < 255;
+            int light = blend(color | 0xFF000000, Color.WHITE, 0.45f), dark = blend(color | 0xFF000000, Color.BLACK, 0.35f);
+            int a = Color.alpha(color);
+            // badan: cahaya dari atas-kiri
+            p.setShader(new android.graphics.RadialGradient(cx - r * 0.3f, cy - r * 0.45f, r * 1.55f,
+                    new int[]{withA(light, a), withA(color | 0xFF000000, a), withA(dark, a)},
+                    new float[]{0f, 0.55f, 1f}, android.graphics.Shader.TileMode.CLAMP));
+            c.drawCircle(cx, cy, r, p);
+            // bayang dalam di bawah (memberi isipadu)
+            p.setShader(new android.graphics.LinearGradient(0, cy, 0, cy + r,
+                    Color.argb(0, 0, 0, 0), Color.argb(glass ? 40 : 70, 0, 0, 0), android.graphics.Shader.TileMode.CLAMP));
+            c.drawCircle(cx, cy, r, p);
+            // kilauan kaca di atas
+            p.setShader(new android.graphics.LinearGradient(0, cy - r * 0.92f, 0, cy - r * 0.05f,
+                    Color.argb(glass ? 130 : 165, 255, 255, 255), Color.argb(0, 255, 255, 255), android.graphics.Shader.TileMode.CLAMP));
+            c.drawOval(cx - r * 0.62f, cy - r * 0.9f, cx + r * 0.62f, cy - r * 0.02f, p);
+            // bibir: tepi atas terang, tepi bawah gelap
+            p.setStyle(android.graphics.Paint.Style.STROKE);
+            p.setStrokeWidth(rim);
+            p.setShader(new android.graphics.LinearGradient(0, cy - r, 0, cy + r,
+                    Color.argb(200, 255, 255, 255), Color.argb(glass ? 30 : 110, 0, 0, 0), android.graphics.Shader.TileMode.CLAMP));
+            c.drawCircle(cx, cy, r - rim / 2f, p);
+            p.setStyle(android.graphics.Paint.Style.FILL);
+            p.setShader(null);
+        }
+
+        private static int withA(int c, int a) { return (c & 0x00FFFFFF) | (a << 24); }
+
+        @Override public void setAlpha(int alpha) {}
+        @Override public void setColorFilter(android.graphics.ColorFilter cf) {}
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
     private static int blend(int a, int b, float t) {
