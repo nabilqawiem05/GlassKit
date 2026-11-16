@@ -288,6 +288,12 @@ public class LockActivity extends Activity {
                 wallBlur.setImageBitmap(lastBaseSoft != null ? lastBaseSoft : bd.soft);
             }
         }
+        if (wall.getDrawable() == null) {
+            // proses baru dimulakan (cth. Android menutup GlassKit masa bateri rendah):
+            // tunjuk bingkai terakhir yang disimpan serta-merta, bukan skrin hitam
+            Bitmap saved = loadFrame(this);
+            if (saved != null) wall.setImageBitmap(saved);
+        }
 
         // gambar asal (tanpa gaya timbul) yang "mekar" ke skrin penuh bila buka kunci
         reveal = new RevealView(this);
@@ -644,6 +650,35 @@ public class LockActivity extends Activity {
         if (ui != null && ui.getLayerType() != lt) ui.setLayerType(lt, null);
     }
 
+    private static java.io.File frameFile(android.content.Context c) {
+        return new java.io.File(c.getCacheDir(), "lockframe.jpg");
+    }
+
+    private static long savedAt;
+
+    /** Simpan bingkai lock screen (JPEG, paling kerap sekali seminit) di thread latar. */
+    private static void saveFrame(android.content.Context c, Bitmap b) {
+        long now = System.currentTimeMillis();
+        if (now - savedAt < 50_000) return;
+        savedAt = now;
+        try (java.io.FileOutputStream o = new java.io.FileOutputStream(frameFile(c))) {
+            b.compress(Bitmap.CompressFormat.JPEG, 88, o);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static Bitmap loadFrame(android.content.Context c) {
+        try {
+            java.io.File f = frameFile(c);
+            if (!f.exists()) return null;
+            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+            o.inSampleSize = 2; // separuh resolusi: nyahkod pantas, hanya untuk sekejap sebelum lukisan baru siap
+            return android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     private static float smooth(float a, float b, float x) {
         float t = Math.max(0f, Math.min(1f, (x - a) / (b - a)));
         return t * t * (3 - 2 * t);
@@ -672,7 +707,11 @@ public class LockActivity extends Activity {
                 out = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
                 DepthRenderer.draw(app, new Canvas(out), w, hh, bgB, fgB, prefs, true);
                 nb.set(out, w, hh);
-                try {
+                if (Power.low(app)) {
+                    // mod jimat: satu lukisan sahaja (separuh kerja), kabur slide guna salinan sedia ada
+                    baseOut = null;
+                    baseSoftOut = null;
+                } else try {
                     Bitmap b0 = Bitmap.createBitmap(w, hh, Bitmap.Config.ARGB_8888);
                     DepthRenderer.draw(app, new Canvas(b0), w, hh, bgB, fgB, prefs, true, false);
                     baseOut = b0;
@@ -713,6 +752,7 @@ public class LockActivity extends Activity {
                 if (baseSoft != null) baseSoft.prepareToDraw();
             } catch (Throwable ignored) {
             }
+            if (done != null) saveFrame(app, done);
             h.post(() -> {
                 renderBusy = false;
                 if (done != null) {

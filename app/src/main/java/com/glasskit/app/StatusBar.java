@@ -406,12 +406,13 @@ class StatusBar extends View {
         c.drawText(a, x, base, text);
         float ax = x + text.measureText(a);
         long now = System.currentTimeMillis();
+        boolean low = Power.low(getContext());
         int al = text.getAlpha();
-        text.setAlpha((now / 1000) % 2 == 0 ? 255 : 70);
+        text.setAlpha(low || (now / 1000) % 2 == 0 ? 255 : 70);
         c.drawText(":", ax, base, text);
         text.setAlpha(al);
         c.drawText(b, ax + text.measureText(":"), base, text);
-        postInvalidateDelayed(1000 - now % 1000 + 5);
+        if (!low) postInvalidateDelayed(1000 - now % 1000 + 5);
     }
 
     // ===================== iPhone =====================

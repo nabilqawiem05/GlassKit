@@ -42,7 +42,7 @@ final class BentoViews {
         Live(Context c) { super(c); }
 
         void tick() {
-            if (isAttachedToWindow() && isShown()) postInvalidateDelayed(33);
+            if (isAttachedToWindow() && isShown() && !Power.low(getContext())) postInvalidateDelayed(33);
         }
     }
 
@@ -233,7 +233,7 @@ final class BentoViews {
 
         private void flip() {
             if (!isAttachedToWindow()) return;
-            if (!isShown()) {
+            if (!isShown() || Power.low(getContext())) {
                 postDelayed(flip, every);
                 return;
             }

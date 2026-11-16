@@ -281,7 +281,8 @@ final class CameraRing {
             p.setStrokeWidth(3.2f * d);
             c.drawCircle(cx, cy, rr, p);
             p.setShader(null);
-            postInvalidateOnAnimation();
+            if (Power.low(getContext())) postInvalidateDelayed(10_000); // mod jimat: hampir statik
+            else postInvalidateOnAnimation();
         }
 
         private static int blend(int a, int b, float t) {
