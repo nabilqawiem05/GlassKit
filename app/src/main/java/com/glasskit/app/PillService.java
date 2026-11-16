@@ -1435,6 +1435,14 @@ public class PillService extends AccessibilityService
                 .setInterpolator(Ui.SPRING).start();
     }
 
+    /** Tutup notifikasi island yang sedang terbuka (dipanggil bila lock screen GlassKit dipaparkan). */
+    void dropNoti() {
+        if (mode == NOTI || notiActive) {
+            h.removeCallbacks(endNoti);
+            endNoti.run();
+        }
+    }
+
     private void refresh() {
         if (pill == null) return;
         boolean on = prefs.getBoolean(Prefs.PILL_ON, true);
@@ -1650,6 +1658,12 @@ public class PillService extends AccessibilityService
         if (LockActivity.visible) {
             lockBanner(sbn);
             return;
+        }
+        // skrin terkunci & lock screen GlassKit aktif: notifikasi ditunjuk di lock screen sahaja,
+        // jangan kembangkan island (elak dua kad bertindih bila lock screen muncul)
+        if (prefs.getBoolean(Prefs.LOCK_ON, false)) {
+            KeyguardManager km = getSystemService(KeyguardManager.class);
+            if (km != null && km.isKeyguardLocked()) return;
         }
         if (!prefs.getBoolean(Prefs.PILL_ON, true) || !prefs.getBoolean(Prefs.PILL_NOTI, true)) return;
         if (panels != null && panels.isOpen()) return;

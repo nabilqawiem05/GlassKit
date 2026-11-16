@@ -387,6 +387,10 @@ public class LockActivity extends Activity {
             return;
         }
         visible = true;
+        try {
+            if (PillService.inst != null) PillService.inst.dropNoti(); // elak kad island bertindih dengan banner lock
+        } catch (Throwable ignored) {
+        }
         holdUntil = 0;
         // tanggalkan penutup selepas bingkai pertama aktiviti ini dilukis
         getWindow().getDecorView().postDelayed(() -> {
