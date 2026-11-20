@@ -547,7 +547,7 @@ public class PillService extends AccessibilityService
         volume = new VolumePanel(this);
         extras = new IslandExtras(this);
         profiles = new AppTools.ProfileRunner(this);
-        ring = new CameraRing(this);
+        ring = null; // cincin kamera (notifikasi & cas) dibuang sepenuhnya: jimat bateri
         // Shizuku dihidupkan selepas but semula / kebenaran diberi: terus sorok status bar stock
         try {
             rikka.shizuku.Shizuku.addBinderReceivedListenerSticky(shizukuUp);
