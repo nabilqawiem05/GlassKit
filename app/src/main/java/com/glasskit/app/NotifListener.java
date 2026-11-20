@@ -12,6 +12,7 @@ public class NotifListener extends NotificationListenerService {
     @Override
     public void onListenerConnected() {
         inst = this;
+        BankGuard.onStart(this); // proses bermula semula semasa mod bank: sambung pantau
         PillService p = PillService.inst;
         if (p != null) {
             p.initMedia();

@@ -535,6 +535,7 @@ public class PillService extends AccessibilityService
         CrashLog.install(this);
         inst = this;
         prefs = Prefs.get(this);
+        prefs.edit().putBoolean(Prefs.BANK_PAUSED, false).apply(); // servis hidup semula: mod bank tamat
         prefs.registerOnSharedPreferenceChangeListener(this);
         wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         computeGeometry();
@@ -607,6 +608,10 @@ public class PillService extends AccessibilityService
         if (event != null && event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && extras != null
                 && event.getPackageName() != null) {
             String fp = event.getPackageName().toString();
+            if (BankGuard.isBank(this, fp)) {
+                BankGuard.pause(this, fp); // app bank: GlassKit berehat sementara supaya app bank boleh dibuka
+                return;
+            }
             if (!fp.equals("com.android.systemui") && !fp.equals(getPackageName()) && !fp.equals("android")) {
                 extras.fgPkg = fp;
                 if (profiles != null) profiles.onForeground(fp);

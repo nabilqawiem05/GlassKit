@@ -27,7 +27,7 @@ final class CameraRing {
 
     CameraRing(PillService s) { this.s = s; }
 
-    private boolean on() { return s.prefs != null && s.prefs.getBoolean(Prefs.ISL_RING, true); }
+    private boolean on() { return false; } // lampu notifikasi di kamera dibuang (makan bateri); cincin cas kekal
 
     private void ensure(int cx, int cy, int rad) {
         if (v != null) return;

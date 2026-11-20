@@ -291,6 +291,8 @@ public class MainActivity extends Activity {
         }
 
         LinearLayout sys = card(pHome, R.string.sec_system, Icon.PHONE, 0xFF34C759);
+        toggle(sys, R.string.bank_pause_on, Prefs.BANK_PAUSE, true);
+        note(sys, getString(R.string.bank_pause_hint));
         toggle(sys, R.string.call_on, Prefs.CALL_ON, true);
         label(sys, R.string.call_style);
         segmented(sys, new int[]{R.string.call_style_island, R.string.call_style_full, R.string.call_style_card, R.string.call_style_ios},
@@ -353,7 +355,6 @@ public class MainActivity extends Activity {
         toggle(isl, R.string.isl_bt_on, Prefs.ISL_BT, true);
         toggle(isl, R.string.isl_ringer_on, Prefs.ISL_RINGER, true);
         toggle(isl, R.string.isl_privacy_on, Prefs.ISL_PRIVACY, true);
-        toggle(isl, R.string.isl_camring, Prefs.ISL_RING, true);
         note(isl, getString(R.string.isl_ring_note));
         note(isl, getString(R.string.live_note));
         toggle(isl, R.string.charge_anim, Prefs.CHARGE_ANIM, true);

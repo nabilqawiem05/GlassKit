@@ -680,4 +680,8 @@
     <string name="bento_auto">Auto</string>
     <string name="bento_auto_on">Kecerahan auto dihidupkan</string>
     <string name="bento_auto_off">Kecerahan auto dimatikan</string>
+    <string name="bank_pause_on">Jeda GlassKit untuk app bank</string>
+    <string name="bank_pause_hint">App bank (MAE, CIMB, TNG…) menyekat telefon yang ada app kebolehcapaian dari luar Play Store. Bila kau buka app bank, GlassKit berehat sekejap, buka semula app bank, dan hidup semula bila kau keluar. Perlukan Shizuku.</string>
+    <string name="bank_need_shizuku">Hidupkan Shizuku supaya GlassKit boleh berehat untuk app bank</string>
+    <string name="bank_paused">GlassKit berehat untuk app bank</string>
 </resources>
