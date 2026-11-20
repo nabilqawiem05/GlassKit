@@ -135,33 +135,6 @@ public abstract class GlassWidget extends AppWidgetProvider {
             }
             return bmp;
         }
-        if (clear()) {
-            // versi lutsinar: tiada kad, hanya tulisan putih dengan bayang lembut supaya jelas atas wallpaper
-            t.primary = Color.WHITE;
-            t.secondary = Color.argb(225, 255, 255, 255);
-            t.muted = Color.argb(190, 255, 255, 255);
-            t.hairline = Color.argb(60, 255, 255, 255);
-            t.chip = Color.argb(46, 255, 255, 255);
-            t.dark = true;
-            GlassEngine.skin = 0;
-            float pad = Math.min(15 * d, Math.min(card.width(), card.height()) * 0.12f);
-            RectF in = new RectF(card.left + pad, card.top + pad, card.right - pad, card.bottom - pad);
-            Bitmap fg = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            try {
-                render(c, new Canvas(fg), in, t, d, GlassEngine.size(card.width(), card.height(), d));
-            } catch (Throwable e) {
-                CrashLog.write(c, e);
-            }
-            android.graphics.Paint sp = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-            sp.setColor(Color.argb(150, 0, 0, 0));
-            sp.setMaskFilter(new android.graphics.BlurMaskFilter(6 * d, android.graphics.BlurMaskFilter.Blur.NORMAL));
-            Bitmap a = fg.extractAlpha();
-            cv.drawBitmap(a, 0, 1.5f * d, sp);
-            a.recycle();
-            cv.drawBitmap(fg, 0, 0, null);
-            fg.recycle();
-            return bmp;
-        }
         GlassEngine.card(cv, card, t, d);
         float pad = Math.min(15 * d, Math.min(card.width(), card.height()) * 0.12f);
         RectF in = new RectF(card.left + pad, card.top + pad, card.right - pad, card.bottom - pad);
@@ -219,9 +192,6 @@ public abstract class GlassWidget extends AppWidgetProvider {
     /** Tiada kad besar: widget melukis jubin sendiri. */
     boolean bare() { return false; }
 
-    /** Versi lutsinar (tanpa kad). */
-    boolean clear() { return false; }
-
     /** Kandungan memenuhi seluruh kad (contoh: gambar). */
     boolean fullBleed() { return false; }
 
@@ -245,7 +215,6 @@ public abstract class GlassWidget extends AppWidgetProvider {
         Calendar now = Calendar.getInstance();
         int m = now.get(Calendar.MINUTE);
         updateAll(c, UpNextWidget.class); // kira detik
-        updateAll(c, UpNextClearWidget.class);
         updateAll(c, BentoWidget.class);
         if (m % 5 == 0) SmartStack.refresh(c);
         if (m % 15 == 0) {
