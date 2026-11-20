@@ -755,4 +755,9 @@
     <string name="tone_light">Terang</string>
     <string name="tone_dark">Gelap</string>
     <string name="clay_t_dark">Sentiasa gelap</string>
+    <string name="icon_tint">Warna ikon</string>
+    <string name="icon_tint_desc">Ikon Classic, Bento dan Clay ikut warna ni (Classic jadi bertinta macam iOS). Liquid island kekal monokrom.</string>
+    <string name="tint_cyan">Sian</string>
+    <string name="tint_green">Hijau</string>
+    <string name="tint_red">Merah</string>
 </resources>

@@ -35,6 +35,14 @@ final class BentoViews {
 
     private static int hsv(float h, float s, float v) { return Color.HSVToColor(new float[]{h, s, v}); }
 
+    /** Hue warna utama wallpaper (dikira bersama palet tanah liat). */
+    static float wallHue(Context c) {
+        palette(c);
+        float[] h = new float[3];
+        Color.colorToHSV(seed, h);
+        return h[0];
+    }
+
     /**
      * Kira palet tanah liat dari warna utama wallpaper (dikira di latar, dicache ikut versi gambar)
      * dan mod gelap/terang sistem. Satu warna aksen untuk semua suis hidup — tiada warna-warni.

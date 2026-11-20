@@ -22,7 +22,8 @@ public final class Prefs {
     public static final String W_STYLE = "wStyle";
     public static final String L_STYLE = "lStyle";     // launcher: -1 ikut tema, 0 classic, 1 liquid, 2 bento, 3 clay
     public static final String THEME = "gkTheme";
-    public static final String THEME_TONE = "gkTone";  // 0 ikut sistem, 1 terang, 2 gelap      // tema GlassKit utama: 0 classic, 1 liquid, 2 bento, 3 clay
+    public static final String THEME_TONE = "gkTone";
+    public static final String ICON_TINT = "iconTint";  // -1 ikut tema, -2 ikut wallpaper, selain itu hue (darjah)  // 0 ikut sistem, 1 terang, 2 gelap      // tema GlassKit utama: 0 classic, 1 liquid, 2 bento, 3 clay
     public static final String CLAY_HUE = "clayHue";   // -1 ikut wallpaper, selain itu hue (darjah)
     public static final String CLAY_TONE = "clayTone"; // 0 ikut mod sistem, 1 sentiasa terang     // widget: -1 ikut panel, 0 kaca, 2 bento, 3 tanah liat   // widget: 0 cerah, 1 gelap, 2 auto
     public static final String W_ALPHA = "wAlpha";     // 0..100

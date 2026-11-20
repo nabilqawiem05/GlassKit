@@ -251,6 +251,15 @@ public class MainActivity extends Activity {
                             .putInt(Prefs.CLAY_TONE, i).apply();
                     clayChanged();
                 });
+        label(th, R.string.icon_tint);
+        choiceChips(th, new int[]{-1, -2, 258, 212, 190, 155, 120, 42, 22, 4, 335},
+                new int[]{R.string.follow_theme, R.string.clay_c_wall, R.string.clay_c_lavender, R.string.clay_c_blue, R.string.tint_cyan,
+                        R.string.clay_c_mint, R.string.tint_green, R.string.clay_c_butter, R.string.clay_c_peach, R.string.tint_red, R.string.clay_c_pink},
+                prefs.getInt(Prefs.ICON_TINT, -1), i -> prefs.edit().putInt(Prefs.ICON_TINT, i).apply());
+        TextView itd = Ui.text(this, 12, 500, TEXT2);
+        itd.setText(R.string.icon_tint_desc);
+        itd.setPadding(0, dp(6), 0, 0);
+        th.addView(itd);
         label(th, R.string.l_style);
         choiceChips(th, new int[]{-1, 0, 1, 2, 3}, new int[]{R.string.follow_theme, R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
                 prefs.getInt(Prefs.L_STYLE, -1), i -> prefs.edit().putInt(Prefs.L_STYLE, i).apply());

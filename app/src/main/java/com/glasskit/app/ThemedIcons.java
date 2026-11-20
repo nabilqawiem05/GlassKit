@@ -41,7 +41,7 @@ final class ThemedIcons {
         String k = sig + "|" + key;
         Bitmap b = cache.get(k);
         if (b != null && !b.isRecycled()) return b;
-        b = theme == 0 ? classic(icon, size) : glyph(icon, size, glyphColor);
+        b = theme == 0 && glyphColor == 0 ? classic(icon, size) : glyph(icon, size, glyphColor);
         cache.put(k, b);
         return b;
     }
@@ -149,8 +149,8 @@ final class ThemedIcons {
     }
 
     /**
-     * Lukis ikon penuh (bucu bulat), kemudian tukar kepada satu warna: bahagian yang berbeza kecerahan
-     * dari purata ikon menjadi logo. Elak kotak kosong untuk ikon bergambar penuh.
+     * Lukis ikon penuh (bucu bulat), kemudian tukar kepada satu warna: piksel yang berbeza dari warna latar
+     * ikon (diambil dari tepi) menjadi logo. Kekuatan dinormalkan supaya ikon kontras rendah pun nampak.
      */
     private static Bitmap detailed(Drawable d, int s, int color) {
         int g = Math.round(s * 0.66f);
@@ -168,41 +168,58 @@ final class ThemedIcons {
             d.setBounds(0, 0, g, g);
             d.draw(sc);
         }
-        // purata kecerahan
-        double sum = 0;
-        int n = 0;
-        for (int y = 0; y < g; y += 3)
-            for (int x = 0; x < g; x += 3) {
-                int p = src.getPixel(x, y);
-                if (Color.alpha(p) < 128) continue;
-                sum += (0.299 * Color.red(p) + 0.587 * Color.green(p) + 0.114 * Color.blue(p)) / 255.0;
+        int[] px = new int[g * g];
+        src.getPixels(px, 0, g, 0, 0, g, g);
+        src.recycle();
+        // warna latar = purata piksel legap di jalur tepi (dalam bucu bulat)
+        long sr = 0, sg = 0, sb = 0;
+        int n = 0, band = Math.max(2, g / 10);
+        for (int y = 0; y < g; y++)
+            for (int x = 0; x < g; x++) {
+                if (x >= band && x < g - band && y >= band && y < g - band) continue;
+                int p = px[y * g + x];
+                if (Color.alpha(p) < 200) continue;
+                sr += Color.red(p);
+                sg += Color.green(p);
+                sb += Color.blue(p);
                 n++;
             }
-        float avg = n == 0 ? 0.5f : (float) (sum / n);
-        float k = avg > 0.5f ? -2.2f : 2.2f;                 // logo = bahagian lebih gelap / lebih cerah dari latar
-        float o = -k * avg * 255f;
-        float r = Color.red(color), gr = Color.green(color), bl = Color.blue(color);
-        ColorMatrix cm = new ColorMatrix(new float[]{
-                0, 0, 0, 0, r,
-                0, 0, 0, 0, gr,
-                0, 0, 0, 0, bl,
-                k * 0.299f, k * 0.587f, k * 0.114f, 0, o});
-        Bitmap b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        p.setColorFilter(new ColorMatrixColorFilter(cm));
+        float br = n == 0 ? 255 : sr / (float) n, bgc = n == 0 ? 255 : sg / (float) n, bb = n == 0 ? 255 : sb / (float) n;
+        float[] dist = new float[px.length];
+        float[] sortd = new float[px.length];
+        int m = 0;
+        for (int k = 0; k < px.length; k++) {
+            int p = px[k];
+            if (Color.alpha(p) < 40) { dist[k] = -1; continue; }
+            float dr = Color.red(p) - br, dg = Color.green(p) - bgc, db = Color.blue(p) - bb;
+            float dd = (float) Math.sqrt(dr * dr + dg * dg + db * db) / 441f;
+            dist[k] = dd;
+            sortd[m++] = dd;
+        }
+        java.util.Arrays.sort(sortd, 0, m);
+        float hi = m == 0 ? 0 : sortd[Math.min(m - 1, (int) (m * 0.97f))];
+        Bitmap out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
         int off = (s - g) / 2;
-        new Canvas(b).drawBitmap(src, off, off, p);
-        src.recycle();
-        // jika hampir kosong (ikon satu warna rata), tunjuk bentuk ikon sebagai siluet lembut
-        if (coverageOf(b) < 0.03f) {
-            b.eraseColor(0);
-            Canvas bc = new Canvas(b);
+        if (hi < 0.05f) {
+            // ikon rata satu warna: tunjuk bentuk sebagai siluet lembut
+            Canvas bc = new Canvas(out);
             Paint sp = new Paint(Paint.ANTI_ALIAS_FLAG);
             sp.setColor(color);
             sp.setAlpha(200);
             float rr = g * 0.24f;
             bc.drawRoundRect(new RectF(off, off, off + g, off + g), rr, rr, sp);
+            return out;
         }
-        return b;
+        int rgb = color & 0x00FFFFFF;
+        int[] o = new int[g * g];
+        for (int k = 0; k < px.length; k++) {
+            if (dist[k] < 0) continue;
+            float v = (dist[k] / hi - 0.12f) * 1.35f;      // buang hingar halus, kuatkan logo
+            if (v <= 0) continue;
+            int al = Math.min(255, Math.round(v * 255f * (Color.alpha(px[k]) / 255f)));
+            o[k] = (al << 24) | rgb;
+        }
+        out.setPixels(o, 0, g, off, off, g, g);
+        return out;
     }
 }

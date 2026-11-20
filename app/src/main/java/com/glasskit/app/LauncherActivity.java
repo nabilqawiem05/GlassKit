@@ -149,7 +149,7 @@ public class LauncherActivity extends Activity {
         super.onResume();
         int t = styleOf(this);
         if (t == 3) BentoViews.palette(this);
-        String sig = t + ":" + GlassEngine.isDark(this) + ":" + BentoViews.clayDark + ":" + BentoViews.CLAY_INK;
+        String sig = t + ":" + GlassEngine.isDark(this) + ":" + BentoViews.clayDark + ":" + BentoViews.CLAY_INK + ":" + prefs.getInt(Prefs.ICON_TINT, -1);
         if (t != theme || !sig.equals(lastSig)) {
             theme = t;
             lastSig = sig;
@@ -415,8 +415,24 @@ public class LauncherActivity extends Activity {
         }
     }
 
+    /** Warna ikon pilihan (bukan untuk Liquid): -1 ikut tema, selain itu hue. */
+    private float tintHue() {
+        if (theme == 1) return -1;
+        int t = prefs.getInt(Prefs.ICON_TINT, -1);
+        if (t == -1) return -1;
+        if (t == -2) return BentoViews.wallHue(this);
+        return t;
+    }
+
+    private static int hsv(float h, float s, float v) { return Color.HSVToColor(new float[]{h, s, v}); }
+
     /** Warna logo ikut tema. */
     private int glyphColor(String key) {
+        float th = tintHue();
+        if (th >= 0) {
+            if (theme == 3) return BentoViews.clayDark ? hsv(th, 0.40f, 0.95f) : hsv(th, 0.62f, 0.50f);
+            return dk() ? hsv(th, 0.35f, 0.98f) : hsv(th, 0.62f, 0.48f);
+        }
         switch (theme) {
             case 1: return dk() ? 0xFFE5E5EA : 0xFF1C1C1E;
             case 2: return dk() ? ThemedIcons.BENTO_FG[ThemedIcons.bentoIdx(key)] : ThemedIcons.BENTO_BG[ThemedIcons.bentoIdx(key)];
@@ -432,6 +448,15 @@ public class LauncherActivity extends Activity {
 
     /** Latar jubin setiap app ikut tema (Classic tiada: ikon sendiri ialah jubin). */
     private Drawable appTileBg(String key) {
+        float th = tintHue();
+        if (th >= 0 && theme != 1) {
+            if (theme == 3) return new BentoViews.Clay(this, BentoViews.clayDark ? hsv(th, 0.28f, 0.26f) : hsv(th, 0.10f, 0.98f), 18, false);
+            GradientDrawable g = new GradientDrawable();
+            g.setCornerRadius(theme == 0 ? tileSize() * 0.235f : dp(16));
+            g.setColor(dk() ? hsv(th, 0.40f, 0.24f) : hsv(th, 0.14f, 0.96f));
+            g.setStroke(Math.max(1, dp(0.8f)), dk() ? Color.argb(50, 255, 255, 255) : Color.argb(40, 0, 0, 0));
+            return g;
+        }
         switch (theme) {
             case 1: {
                 GradientDrawable g = new GradientDrawable();
@@ -469,7 +494,7 @@ public class LauncherActivity extends Activity {
         if (bg != null) f.setBackground(bg);
         ImageView iv = new ImageView(this);
         iv.setImageBitmap(themedIcon(a, tile));
-        if (theme == 0) {
+        if (theme == 0 && tintHue() < 0) {
             final float rr = tile * 0.235f;
             iv.setOutlineProvider(new android.view.ViewOutlineProvider() {
                 @Override
@@ -565,7 +590,7 @@ public class LauncherActivity extends Activity {
     private void build() {
         if (theme < 0) theme = styleOf(this);
         if (theme == 3) BentoViews.palette(this);
-        ThemedIcons.reset(theme + ":" + BentoViews.CLAY_INK + ":" + BentoViews.clayDark + ":" + GlassEngine.isDark(this));
+        ThemedIcons.reset(theme + ":" + BentoViews.CLAY_INK + ":" + BentoViews.clayDark + ":" + GlassEngine.isDark(this) + ":" + prefs.getInt(Prefs.ICON_TINT, -1));
         int keepPage = pager != null ? pager.cur : 0;
         root.removeAllViews();
         grids.clear();

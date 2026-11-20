@@ -762,4 +762,9 @@
     <string name="tone_light">Light</string>
     <string name="tone_dark">Dark</string>
     <string name="clay_t_dark">Always dark</string>
+    <string name="icon_tint">Icon colour</string>
+    <string name="icon_tint_desc">Classic, Bento and Clay icons take this colour (Classic becomes tinted like iOS). Liquid island stays monochrome.</string>
+    <string name="tint_cyan">Cyan</string>
+    <string name="tint_green">Green</string>
+    <string name="tint_red">Red</string>
 </resources>
