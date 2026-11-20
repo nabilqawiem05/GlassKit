@@ -303,11 +303,17 @@ public class ScreenRecService extends Service {
         stopping = true;
         running = false;
         if (PillService.inst != null) PillService.inst.onRecChanged();
+        // hentikan tayangan serta-merta: cip merah stock hilang & audio tidak lagi menyekat benang
+        try { if (vd != null) vd.release(); } catch (Exception ignored) {}
+        vd = null;
+        try { if (mp != null) mp.stop(); } catch (Exception ignored) {}
+        mp = null;
+        try { if (arInt != null) arInt.stop(); } catch (Exception ignored) {}
+        try { if (arMic != null) arMic.stop(); } catch (Exception ignored) {}
         new Thread(() -> {
-            try { if (vd != null) vd.release(); } catch (Exception ignored) {}
             try { venc.signalEndOfInputStream(); } catch (Exception ignored) {}
-            try { if (vThread != null) vThread.join(4000); } catch (Exception ignored) {}
-            try { if (aThread != null) aThread.join(4000); } catch (Exception ignored) {}
+            try { if (vThread != null) vThread.join(2500); } catch (Exception ignored) {}
+            try { if (aThread != null) aThread.join(1500); } catch (Exception ignored) {}
             cleanup();
             if (prevTouches != null) Shell.run("settings put system show_touches " + prevTouches);
             h.post(() -> {
@@ -319,8 +325,8 @@ public class ScreenRecService extends Service {
     }
 
     private void cleanup() {
-        try { if (arInt != null) { arInt.stop(); arInt.release(); } } catch (Exception ignored) {}
-        try { if (arMic != null) { arMic.stop(); arMic.release(); } } catch (Exception ignored) {}
+        try { if (arInt != null) arInt.release(); } catch (Exception ignored) {}
+        try { if (arMic != null) arMic.release(); } catch (Exception ignored) {}
         try { if (venc != null) { venc.stop(); venc.release(); } } catch (Exception ignored) {}
         try { if (aenc != null) { aenc.stop(); aenc.release(); } } catch (Exception ignored) {}
         synchronized (muxLock) {

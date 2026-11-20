@@ -682,6 +682,7 @@ public class PillService extends AccessibilityService
         if (call != null) call.hide(false);
         hideBanner(false);
         if (Recorder.recording()) Recorder.stop(this);
+        recTapWindow(false);
         if (volume != null) volume.hide();
         if (registered) {
             try { unregisterReceiver(sysRx); } catch (Exception ignored) {}
@@ -2388,7 +2389,40 @@ public class PillService extends AccessibilityService
         }
     };
 
+    private View recTap;
+
+    /** Semasa merakam: ketik kawasan cip merah (kiri island) untuk berhenti. */
+    private void recTapWindow(boolean on) {
+        try {
+            if (on && recTap == null) {
+                recTap = new View(this);
+                recTap.setOnClickListener(v -> {
+                    Haptics.thud(this);
+                    Recorder.stop(this);
+                });
+                int w = Math.max(dp(80), Math.round(screenW / 2f - dp(60)));
+                WindowManager.LayoutParams p = new WindowManager.LayoutParams(w, dp(44),
+                        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                        PixelFormat.TRANSLUCENT);
+                p.gravity = Gravity.TOP | Gravity.LEFT;
+                p.x = dp(60);
+                p.y = 0;
+                p.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+                p.setTitle("GlassKitRecTap");
+                wm.addView(recTap, p);
+            } else if (!on && recTap != null) {
+                wm.removeView(recTap);
+                recTap = null;
+            }
+        } catch (Throwable e) {
+            recTap = null;
+        }
+    }
+
     void onRecChanged() {
+        recTapWindow(Recorder.recording());
         if (sbar != null) { sbar.setSolid(Recorder.recording() || (extras != null && extras.busy())); sbar.setRec(Recorder.recording()); }
         h.removeCallbacks(recTick);
         if (Recorder.recording()) h.post(recTick);
