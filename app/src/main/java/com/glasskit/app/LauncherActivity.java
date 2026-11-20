@@ -65,11 +65,11 @@ import java.util.concurrent.Executors;
  * Rupa dan animasi ikut tema: 0 Classic (kaca), 1 Liquid island (monokrom cecair), 2 Bento (kotak), 3 Clay (tanah liat).
  */
 public class LauncherActivity extends Activity {
-    static final String K_HOME = "lHome", K_DOCK = "lDock";
+    static final String K_HOME = "lHome2", K_DOCK = "lDock", K_KNOWN = "lKnown", K_USE = "lUse";
     private static final int COLS = 4;
 
     static final class App {
-        String key, label;
+        String key, label, cat;
         ComponentName cn;
         UserHandle user;
         Drawable icon;
@@ -85,9 +85,7 @@ public class LauncherActivity extends Activity {
     private float density;
 
     private FrameLayout root;
-    private LinearLayout home, homeCol, dock;
-    private ScrollView scroll;
-    private GridLayout grid;
+    private LinearLayout home, dock;
     private ImageView header;
     private FrameLayout drawer, folderLayer;
     private GridView drawerGrid;
@@ -165,7 +163,7 @@ public class LauncherActivity extends Activity {
         // butang Home semasa di home: tutup laci / folder, naik ke atas
         if (folderLayer != null && folderLayer.getVisibility() == View.VISIBLE) closeFolder();
         else if (drawer != null && drawer.getVisibility() == View.VISIBLE) closeDrawer();
-        else if (scroll != null) scroll.smoothScrollTo(0, 0);
+        else if (pager != null && pager.cur != 0) pager.snap(0);
     }
 
     @Override
@@ -218,6 +216,7 @@ public class LauncherActivity extends Activity {
                         a.user = u;
                         a.key = a.cn.flattenToShortString() + (u.equals(Process.myUserHandle()) ? "" : "#" + u.hashCode());
                         a.label = String.valueOf(i.getLabel());
+                        a.cat = AppCats.of(a.cn.getPackageName(), a.label, i.getApplicationInfo());
                         try {
                             a.icon = u.equals(Process.myUserHandle()) ? i.getIcon(px) : i.getBadgedIcon(px);
                         } catch (Throwable e) {
@@ -236,6 +235,7 @@ public class LauncherActivity extends Activity {
                 sorted.clear();
                 sorted.addAll(list);
                 seedDefaults();
+                arrange();
                 build();
             });
         });
@@ -265,17 +265,82 @@ public class LauncherActivity extends Activity {
             } catch (Throwable ignored) {
             }
         }
-        JSONArray hm = new JSONArray();
-        String[] pref = {"com.google.android.apps.photos", "com.whatsapp", "com.android.vending", "com.google.android.gm",
-                "com.google.android.apps.maps", "com.google.android.calendar", "com.google.android.deskclock", "com.android.settings"};
-        for (String p : pref)
-            for (App a : sorted)
-                if (a.cn.getPackageName().equals(p) && !used.contains(a.key)) {
-                    hm.put(item(a.key));
-                    used.add(a.key);
-                    break;
+        prefs.edit().putString(K_DOCK, dk.toString()).apply();
+    }
+
+    /**
+     * Susun automatik gaya iPhone: semua app ada di home. Kali pertama app dikumpul ke folder ikut kategori
+     * (2 app ke atas); app baru dipasang masuk sendiri ke folder kategorinya, atau di hujung home.
+     */
+    private void arrange() {
+        if (sorted.isEmpty()) return;
+        java.util.Set<String> dock = new java.util.HashSet<>();
+        JSONArray dk = dockItems();
+        for (int i = 0; i < dk.length(); i++) dock.add(dk.optString(i));
+        if (!prefs.contains(K_HOME)) {
+            Map<String, List<App>> by = new HashMap<>();
+            for (App a : sorted) {
+                if (dock.contains(a.key)) continue;
+                List<App> l = by.get(a.cat);
+                if (l == null) by.put(a.cat, l = new ArrayList<>());
+                l.add(a);
+            }
+            JSONArray home = new JSONArray();
+            List<App> loose = new ArrayList<>();
+            for (String cat : AppCats.ORDER) {
+                List<App> l = by.get(cat);
+                if (l == null) continue;
+                if (l.size() < 2 || AppCats.OTHER.equals(cat)) { loose.addAll(l); continue; }
+                JSONObject fo = new JSONObject();
+                JSONArray in = new JSONArray();
+                for (App a : l) in.put(a.key);
+                try {
+                    fo.put("f", getString(AppCats.name(cat)));
+                    fo.put("cat", cat);
+                    fo.put("a", in);
+                } catch (Exception ignored) {
                 }
-        prefs.edit().putString(K_DOCK, dk.toString()).putString(K_HOME, hm.toString()).apply();
+                home.put(fo);
+            }
+            Collections.sort(loose, (x, y) -> x.label.compareToIgnoreCase(y.label));
+            for (App a : loose) home.put(item(a.key));
+            JSONArray known = new JSONArray();
+            for (App a : sorted) known.put(a.key);
+            prefs.edit().putString(K_HOME, home.toString()).putString(K_KNOWN, known.toString()).apply();
+            return;
+        }
+        // app baru
+        java.util.Set<String> known = new java.util.HashSet<>();
+        try {
+            JSONArray k = new JSONArray(prefs.getString(K_KNOWN, "[]"));
+            for (int i = 0; i < k.length(); i++) known.add(k.optString(i));
+        } catch (Exception ignored) {
+        }
+        JSONArray home = homeItems();
+        boolean changed = false;
+        for (App a : sorted) {
+            if (known.contains(a.key)) continue;
+            known.add(a.key);
+            changed = true;
+            if (dock.contains(a.key)) continue;
+            boolean placed = false;
+            for (int i = 0; i < home.length() && !placed; i++) {
+                JSONObject o = home.optJSONObject(i);
+                if (o != null && a.cat.equals(o.optString("cat", null))) {
+                    JSONArray in = o.optJSONArray("a");
+                    if (in == null) in = new JSONArray();
+                    in.put(a.key);
+                    try { o.put("a", in); } catch (Exception ignored) {}
+                    placed = true;
+                }
+            }
+            if (!placed) home.put(item(a.key));
+        }
+        if (changed) {
+            JSONArray k = new JSONArray();
+            for (String x : known) k.put(x);
+            prefs.edit().putString(K_HOME, home.toString()).putString(K_KNOWN, k.toString()).apply();
+        }
     }
 
     private static JSONObject item(String key) {
@@ -469,80 +534,92 @@ public class LauncherActivity extends Activity {
         return Math.min(cellW - dp(16), dp(theme >= 2 ? 66 : 60));
     }
 
+    private static final int FIRST_CAP = 16, PAGE_CAP = 24;
+    private Pager pager;
+    private LinearLayout dots;
+    private final List<GridLayout> grids = new ArrayList<>();
+    private ScrollView libScroll;
+
     private void build() {
         if (theme < 0) theme = styleOf(this);
         if (theme == 3) BentoViews.palette(this);
         ThemedIcons.reset(theme + ":" + BentoViews.CLAY_INK + ":" + BentoViews.clayDark);
+        int keepPage = pager != null ? pager.cur : 0;
         root.removeAllViews();
+        grids.clear();
 
         home = new LinearLayout(this);
         home.setOrientation(LinearLayout.VERTICAL);
+        home.setPadding(0, insetTop, 0, 0);
         root.addView(home, new FrameLayout.LayoutParams(-1, -1));
 
-        scroll = new ScrollView(this);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        homeCol = new LinearLayout(this);
-        homeCol.setOrientation(LinearLayout.VERTICAL);
-        homeCol.setPadding(dp(12), insetTop + dp(10), dp(12), dp(12));
-        homeCol.setOnLongClickListener(v -> { homeMenu(v); return true; });
-        scroll.addView(homeCol, new FrameLayout.LayoutParams(-1, -2));
-        home.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        pager = new Pager(this);
+        pager.theme = theme;
+        home.addView(pager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         header = new ImageView(this);
         header.setScaleType(ImageView.ScaleType.FIT_XY);
         header.setOnClickListener(v -> openIntent(theme == 1 ? GlassWidget.alarms() : GlassWidget.calendar(), v));
-        LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, dp(headerDp()));
-        hl.bottomMargin = dp(14);
-        homeCol.addView(header, hl);
         headerWidget = theme == 2 ? new BentoWidget() : theme == 1 ? new ClockWidget() : new UpNextWidget();
-        renderHeader();
 
-        grid = new GridLayout(this);
-        grid.setColumnCount(COLS);
-        homeCol.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+        // ---- halaman home: semua item, dipecah ikut muatan halaman ----
         int tile = tileSize();
         JSONArray items = homeItems();
+        List<Integer> valid = new ArrayList<>();
         for (int i = 0; i < items.length(); i++) {
             JSONObject o = items.optJSONObject(i);
             if (o == null) continue;
-            final int idx = i;
-            View cell;
-            if (o.has("f")) {
-                cell = folderCell(o, tile);
-                cell.setOnClickListener(v -> openFolder(idx, v));
-                cell.setOnLongClickListener(v -> { folderMenu(idx, v); return true; });
-            } else {
-                App a = apps.get(o.optString("c"));
-                if (a == null) continue;
-                cell = appCell(a, true, tile);
-                cell.setOnClickListener(v -> launch(a, v));
-                cell.setOnLongClickListener(v -> { homeAppMenu(idx, a, v); return true; });
+            if (!o.has("f") && apps.get(o.optString("c")) == null) continue;
+            valid.add(i);
+        }
+        int at = 0, page = 0;
+        do {
+            int cap = page == 0 ? FIRST_CAP : PAGE_CAP;
+            LinearLayout pg = new LinearLayout(this);
+            pg.setOrientation(LinearLayout.VERTICAL);
+            pg.setPadding(dp(12), dp(10), dp(12), 0);
+            pg.setOnLongClickListener(v -> { homeMenu(v); return true; });
+            if (page == 0) {
+                LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, dp(headerDp()));
+                hl.bottomMargin = dp(16);
+                pg.addView(header, hl);
             }
-            GridLayout.LayoutParams gl = new GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(GridLayout.UNDEFINED, 1f));
-            gl.width = 0;
-            gl.bottomMargin = dp(16);
-            grid.addView(cell, gl);
-        }
-        if (items.length() == 0) {
-            TextView hint = Ui.text(this, 13, 500, Color.argb(200, 255, 255, 255));
-            hint.setText(R.string.l_empty_hint);
-            hint.setGravity(Gravity.CENTER);
-            hint.setShadowLayer(dp(3), 0, dp(1), Color.argb(150, 0, 0, 0));
-            hint.setPadding(dp(20), dp(30), dp(20), dp(30));
-            homeCol.addView(hint);
-        }
+            GridLayout g = new GridLayout(this);
+            g.setColumnCount(COLS);
+            for (int k = 0; k < cap && at < valid.size(); k++, at++) {
+                final int idx = valid.get(at);
+                JSONObject o = items.optJSONObject(idx);
+                View cell;
+                if (o.has("f")) {
+                    cell = folderCell(o, tile);
+                    cell.setOnClickListener(v -> openFolder(idx, v));
+                    cell.setOnLongClickListener(v -> { folderMenu(idx, v); return true; });
+                } else {
+                    App a = apps.get(o.optString("c"));
+                    cell = appCell(a, true, tile);
+                    cell.setOnClickListener(v -> launch(a, v));
+                    cell.setOnLongClickListener(v -> { homeAppMenu(idx, a, v); return true; });
+                }
+                GridLayout.LayoutParams gl = new GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(GridLayout.UNDEFINED, 1f));
+                gl.width = 0;
+                gl.bottomMargin = dp(18);
+                g.addView(cell, gl);
+            }
+            pg.addView(g, new LinearLayout.LayoutParams(-1, -2));
+            grids.add(g);
+            pager.addView(pg, new FrameLayout.LayoutParams(-1, -1));
+            page++;
+        } while (at < valid.size());
+        pager.addView(buildLibrary(tile), new FrameLayout.LayoutParams(-1, -1));
+        renderHeader();
 
-        // pemegang laci
-        View handle = new View(this);
-        handle.setBackground(Ui.round(Color.argb(150, 255, 255, 255), dp(3)));
-        LinearLayout hw = new LinearLayout(this);
-        hw.setGravity(Gravity.CENTER);
-        hw.addView(handle, new LinearLayout.LayoutParams(dp(38), dp(5)));
-        hw.setOnClickListener(v -> openDrawer());
-        home.addView(hw, new LinearLayout.LayoutParams(-1, dp(22)));
+        // ---- titik halaman ----
+        dots = new LinearLayout(this);
+        dots.setGravity(Gravity.CENTER);
+        home.addView(dots, new LinearLayout.LayoutParams(-1, dp(24)));
+        pager.onPage = this::updateDots;
 
-        // dock
+        // ---- dock ----
         dock = new LinearLayout(this);
         dock.setGravity(Gravity.CENTER);
         dock.setPadding(dp(10), dp(10), dp(10), dp(10));
@@ -567,10 +644,386 @@ public class LauncherActivity extends Activity {
         dl.setMargins(dp(12), 0, dp(12), insetBottom + dp(10));
         home.addView(dock, dl);
 
+        pager.jump(Math.min(keepPage, pager.getChildCount() - 1));
+        updateDots(pager.cur);
+
         buildDrawer();
         folderLayer = new FrameLayout(this);
         folderLayer.setVisibility(View.GONE);
         root.addView(folderLayer, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    private void updateDots(int cur) {
+        if (dots == null || pager == null) return;
+        dots.removeAllViews();
+        int n = pager.getChildCount();
+        boolean lightClay = theme == 3 && !BentoViews.clayDark;
+        for (int i = 0; i < n; i++) {
+            View d = new View(this);
+            int on = Color.WHITE, off = Color.argb(110, 255, 255, 255);
+            if (i == n - 1) {
+                // App Library: ikon grid kecil
+                d.setBackground(Ui.round(i == cur ? on : off, dp(2)));
+            } else d.setBackground(Ui.circle(i == cur ? on : off));
+            if (theme == 2 && i == cur) d.setBackground(Ui.round(on, dp(4)));
+            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(theme == 2 && i == cur ? dp(16) : dp(7), dp(7));
+            l.setMargins(dp(4), 0, dp(4), 0);
+            dots.addView(d, l);
+        }
+        if (lightClay) dots.setElevation(0);
+    }
+
+    // ======================================================= App Library (halaman terakhir)
+
+    private View buildLibrary(int tile) {
+        boolean lightClay = theme == 3 && !BentoViews.clayDark;
+        int fg = Color.WHITE;
+        libScroll = new ScrollView(this);
+        libScroll.setVerticalScrollBarEnabled(false);
+        libScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(dp(16), dp(8), dp(16), dp(20));
+        libScroll.addView(col, new FrameLayout.LayoutParams(-1, -2));
+
+        TextView sb = Ui.text(this, 15, 500, lightClay ? BentoViews.CLAY_SOFT : Color.argb(200, 255, 255, 255));
+        sb.setText("⌕  " + getString(R.string.l_library));
+        sb.setPadding(dp(16), dp(12), dp(16), dp(12));
+        sb.setBackground(searchBg());
+        if (lightClay) sb.setTextColor(BentoViews.CLAY_INK);
+        sb.setOnClickListener(v -> openDrawer());
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
+        sl.bottomMargin = dp(16);
+        col.addView(sb, sl);
+
+        Map<String, List<App>> by = new HashMap<>();
+        for (App a : sorted) {
+            List<App> l = by.get(a.cat);
+            if (l == null) by.put(a.cat, l = new ArrayList<>());
+            l.add(a);
+        }
+        GridLayout g = new GridLayout(this);
+        g.setColumnCount(2);
+        int box = (getResources().getDisplayMetrics().widthPixels - dp(32) - dp(16)) / 2;
+        int ic = (box - dp(30)) / 2;
+        for (String cat : AppCats.ORDER) {
+            List<App> l = by.get(cat);
+            if (l == null || l.isEmpty()) continue;
+            LinearLayout cell = new LinearLayout(this);
+            cell.setOrientation(LinearLayout.VERTICAL);
+            GridLayout in = new GridLayout(this);
+            in.setColumnCount(2);
+            in.setPadding(dp(9), dp(9), dp(9), dp(9));
+            in.setBackground(libBoxBg());
+            boolean more = l.size() > 4;
+            int show = more ? 3 : l.size();
+            for (int i = 0; i < show; i++) {
+                App a = l.get(i);
+                View c = appCell(a, false, ic);
+                c.setOnClickListener(v -> launch(a, v));
+                c.setOnLongClickListener(v -> { drawerMenu(a, v); return true; });
+                GridLayout.LayoutParams gl = new GridLayout.LayoutParams();
+                gl.width = ic;
+                gl.height = ic;
+                gl.setMargins(dp(3), dp(3), dp(3), dp(3));
+                in.addView(c, gl);
+            }
+            if (more) {
+                GridLayout mini = new GridLayout(this);
+                mini.setColumnCount(2);
+                int ms = (ic - dp(10)) / 2;
+                for (int i = 3; i < Math.min(7, l.size()); i++) {
+                    ImageView iv = new ImageView(this);
+                    iv.setImageBitmap(themedIcon(l.get(i), ms));
+                    GridLayout.LayoutParams ml = new GridLayout.LayoutParams();
+                    ml.width = ms;
+                    ml.height = ms;
+                    ml.setMargins(dp(1.5f), dp(1.5f), dp(1.5f), dp(1.5f));
+                    mini.addView(iv, ml);
+                }
+                FrameLayout mf = new FrameLayout(this);
+                mf.addView(mini, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+                final List<App> all = l;
+                mf.setOnClickListener(v -> openCategory(getString(AppCats.name(cat)), all));
+                pressFx(mf, mf);
+                GridLayout.LayoutParams gl = new GridLayout.LayoutParams();
+                gl.width = ic;
+                gl.height = ic;
+                gl.setMargins(dp(3), dp(3), dp(3), dp(3));
+                in.addView(mf, gl);
+            }
+            cell.addView(in, new LinearLayout.LayoutParams(box, -2));
+            TextView t = label(getString(AppCats.name(cat)));
+            if (lightClay) {
+                t.setTextColor(BentoViews.CLAY_INK);
+                t.setShadowLayer(0, 0, 0, 0);
+            }
+            t.setPadding(0, dp(6), 0, 0);
+            cell.addView(t, new LinearLayout.LayoutParams(box, -2));
+            final List<App> all = l;
+            cell.setOnLongClickListener(v -> { openCategory(getString(AppCats.name(cat)), all); return true; });
+            GridLayout.LayoutParams gl = new GridLayout.LayoutParams();
+            gl.setMargins(0, 0, dp(16), dp(16));
+            g.addView(cell, gl);
+        }
+        col.addView(g);
+        if (lightClay) col.setBackgroundColor(Color.TRANSPARENT);
+        return libScroll;
+    }
+
+    private Drawable libBoxBg() {
+        switch (theme) {
+            case 0: return Ui.glassStyled(this, 26, Ui.darkGlass(this));
+            case 1: {
+                GradientDrawable g = new GradientDrawable();
+                g.setCornerRadius(dp(30));
+                g.setColor(Color.argb(190, 14, 14, 18));
+                g.setStroke(Math.max(1, dp(1)), Color.argb(90, 255, 255, 255));
+                return g;
+            }
+            case 2: {
+                GradientDrawable g = new GradientDrawable();
+                g.setCornerRadius(dp(24));
+                g.setColor(0xF014131C);
+                g.setStroke(Math.max(1, dp(0.8f)), Color.argb(40, 255, 255, 255));
+                return g;
+            }
+            default: return new BentoViews.Clay(this, BentoViews.CLAY_PANEL, 28, false);
+        }
+    }
+
+    private Drawable searchBg() {
+        if (theme == 3) return new BentoViews.Clay(this, BentoViews.CLAY_BASE, 24, false);
+        if (theme == 2) return Ui.round(0xFF262433, dp(24));
+        if (theme == 1) {
+            GradientDrawable g = new GradientDrawable();
+            g.setCornerRadius(dp(24));
+            g.setColor(Color.argb(200, 14, 14, 18));
+            g.setStroke(Math.max(1, dp(1)), Color.argb(90, 255, 255, 255));
+            return g;
+        }
+        return Ui.glassStyled(this, 24, Ui.darkGlass(this));
+    }
+
+    /** Senarai penuh satu kategori App Library. */
+    private void openCategory(String title, List<App> list) {
+        folderLayer.removeAllViews();
+        folderLayer.setBackgroundColor(Color.argb(110, 0, 0, 0));
+        folderLayer.setOnClickListener(v -> closeFolder());
+        boolean lightClay = theme == 3 && !BentoViews.clayDark;
+        int fg = lightClay ? BentoViews.CLAY_INK : Color.WHITE;
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(20), dp(18), dp(20), dp(18));
+        card.setBackground(folderCardBg());
+        card.setClickable(true);
+        TextView t = Ui.text(this, 22, 700, fg);
+        t.setText(title);
+        t.setGravity(Gravity.CENTER);
+        card.addView(t);
+        ScrollView sv = new ScrollView(this);
+        sv.setVerticalScrollBarEnabled(false);
+        GridLayout g = new GridLayout(this);
+        g.setColumnCount(COLS);
+        int tile = Math.min(tileSize(), dp(56));
+        for (App ap : list) {
+            View c = appCell(ap, true, tile);
+            if (lightClay) {
+                TextView lt = (TextView) ((LinearLayout) c).getChildAt(1);
+                lt.setTextColor(BentoViews.CLAY_INK);
+                lt.setShadowLayer(0, 0, 0, 0);
+            }
+            c.setOnClickListener(v -> { launch(ap, v); h.postDelayed(this::closeFolder, 400); });
+            c.setOnLongClickListener(v -> { drawerMenu(ap, v); return true; });
+            GridLayout.LayoutParams gl = new GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(GridLayout.UNDEFINED, 1f));
+            gl.width = 0;
+            gl.topMargin = dp(14);
+            g.addView(c, gl);
+        }
+        sv.addView(g, new FrameLayout.LayoutParams(-1, -2));
+        int maxH = Math.round(getResources().getDisplayMetrics().heightPixels * 0.6f);
+        int rows = (list.size() + COLS - 1) / COLS;
+        card.addView(sv, new LinearLayout.LayoutParams(-1, Math.min(maxH, rows * (tile + dp(40)))));
+        FrameLayout.LayoutParams cl = new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER);
+        cl.setMargins(dp(22), 0, dp(22), 0);
+        folderLayer.addView(card, cl);
+        folderLayer.setVisibility(View.VISIBLE);
+        folderLayer.setAlpha(0f);
+        folderLayer.animate().alpha(1f).setDuration(200).start();
+        card.setScaleX(0.85f);
+        card.setScaleY(0.85f);
+        card.animate().scaleX(1f).scaleY(1f).setDuration(320).setInterpolator(new OvershootInterpolator(theme == 3 ? 2f : 1.1f)).start();
+    }
+
+    // ======================================================= pager halaman (leret kiri / kanan ikut tema)
+
+    static final class Pager extends FrameLayout {
+        float pos;
+        int cur, theme;
+        Consumer onPage;
+        private float downX, downY, startPos;
+        private boolean dragging;
+        private android.view.VelocityTracker vt;
+        private final int slop;
+        private android.animation.ValueAnimator anim;
+
+        interface Consumer { void on(int page); }
+
+        Pager(Context c) {
+            super(c);
+            slop = android.view.ViewConfiguration.get(c).getScaledTouchSlop();
+        }
+
+        @Override
+        protected void onLayout(boolean ch, int l, int t, int r, int b) {
+            super.onLayout(ch, l, t, r, b);
+            apply();
+        }
+
+        void jump(int p) {
+            cur = Math.max(0, p);
+            pos = cur;
+            apply();
+        }
+
+        void apply() {
+            int w = getWidth(), hh = getHeight();
+            if (w == 0) return;
+            for (int i = 0; i < getChildCount(); i++) {
+                View v = getChildAt(i);
+                float p = i - pos;
+                float ap = Math.abs(p);
+                v.setVisibility(ap < 1.02f ? VISIBLE : INVISIBLE);
+                v.setTranslationX(p * w);
+                v.setScaleX(1f);
+                v.setScaleY(1f);
+                v.setAlpha(1f);
+                v.setRotationY(0f);
+                switch (theme) {
+                    case 1: // cecair: halaman mengecil & pudar ke tepi
+                        v.setScaleX(1f - 0.10f * ap);
+                        v.setScaleY(1f - 0.10f * ap);
+                        v.setAlpha(1f - 0.6f * ap);
+                        break;
+                    case 2: // kotak kubus
+                        v.setCameraDistance(w * 10f);
+                        v.setPivotX(p < 0 ? w : 0);
+                        v.setPivotY(hh / 2f);
+                        v.setRotationY(-50f * p);
+                        break;
+                    case 3: // tanah liat: penyek sedikit semasa dileret
+                        v.setScaleX(1f - 0.12f * ap);
+                        v.setScaleY(1f - 0.05f * ap);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent e) {
+            track(e);
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    downX = e.getX();
+                    downY = e.getY();
+                    dragging = false;
+                    if (anim != null && anim.isRunning()) {
+                        anim.cancel();
+                        startPos = pos;
+                        dragging = true;
+                        return true;
+                    }
+                    break;
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = e.getX() - downX, dy = e.getY() - downY;
+                    if (!dragging && Math.abs(dx) > slop && Math.abs(dx) > Math.abs(dy) * 1.2f) {
+                        dragging = true;
+                        startPos = pos;
+                        downX = e.getX();
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+            return dragging;
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent e) {
+            track(e);
+            int w = Math.max(1, getWidth());
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    downX = e.getX();
+                    downY = e.getY();
+                    startPos = pos;
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = e.getX() - downX;
+                    if (!dragging && Math.abs(dx) > slop) {
+                        dragging = true;
+                        downX = e.getX();
+                        dx = 0;
+                    }
+                    if (dragging) {
+                        float np = startPos - dx / w;
+                        float max = getChildCount() - 1;
+                        if (np < 0) np = np * 0.3f;
+                        if (np > max) np = max + (np - max) * 0.3f;
+                        pos = np;
+                        apply();
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL: {
+                    float vx = 0;
+                    if (vt != null) {
+                        vt.computeCurrentVelocity(1000);
+                        vx = vt.getXVelocity();
+                        vt.recycle();
+                        vt = null;
+                    }
+                    if (dragging) {
+                        int target = Math.round(pos);
+                        float vmin = 500 * getResources().getDisplayMetrics().density / 2.6f;
+                        if (vx < -vmin && pos > cur - 0.5f) target = (int) Math.floor(pos) + 1;
+                        else if (vx > vmin && pos < cur + 0.5f) target = (int) Math.ceil(pos) - 1;
+                        snap(target);
+                    }
+                    dragging = false;
+                    return true;
+                }
+                default:
+                    return true;
+            }
+        }
+
+        private void track(MotionEvent e) {
+            if (vt == null) vt = android.view.VelocityTracker.obtain();
+            vt.addMovement(e);
+        }
+
+        void snap(int target) {
+            target = Math.max(0, Math.min(getChildCount() - 1, target));
+            if (anim != null) anim.cancel();
+            final int t = target;
+            anim = android.animation.ValueAnimator.ofFloat(pos, target);
+            anim.setDuration(theme == 3 ? 460 : theme == 1 ? 420 : 300);
+            anim.setInterpolator(theme == 3 ? new OvershootInterpolator(1.4f) : theme == 1 ? new OvershootInterpolator(0.8f) : new DecelerateInterpolator(1.8f));
+            anim.addUpdateListener(a -> {
+                pos = (float) a.getAnimatedValue();
+                apply();
+            });
+            anim.start();
+            if (t != cur) Haptics.tick(getContext());
+            cur = t;
+            if (onPage != null) onPage.on(t);
+        }
     }
 
     private int headerDp() { return theme == 2 ? 300 : theme == 1 ? 150 : 170; }
@@ -613,11 +1066,15 @@ public class LauncherActivity extends Activity {
     // ======================================================= animasi masuk home ikut tema
 
     private void animateIn() {
-        if (grid == null || Power.low(this)) return;
+        if (pager == null || grids.isEmpty() || Power.low(this)) return;
+        int pi = Math.min(pager.cur, grids.size() - 1);
+        GridLayout grid = grids.get(pi);
         List<View> vs = new ArrayList<>();
         List<float[]> rc = new ArrayList<>();
-        vs.add(header);
-        rc.add(new float[]{-1, 1.5f});
+        if (pi == 0 && pager.cur == 0) {
+            vs.add(header);
+            rc.add(new float[]{-1, 1.5f});
+        }
         for (int i = 0; i < grid.getChildCount(); i++) {
             vs.add(grid.getChildAt(i));
             rc.add(new float[]{i / COLS, i % COLS});
@@ -695,6 +1152,12 @@ public class LauncherActivity extends Activity {
 
     private void launch(App a, View v) {
         try {
+            JSONObject u = usage();
+            u.put(a.key, u.optInt(a.key) + 1);
+            prefs.edit().putString(K_USE, u.toString()).apply();
+        } catch (Exception ignored) {
+        }
+        try {
             Rect r = new Rect();
             v.getGlobalVisibleRect(r);
             Bundle o = (theme == 2 ? ActivityOptions.makeClipRevealAnimation(v, 0, 0, v.getWidth(), v.getHeight())
@@ -725,10 +1188,13 @@ public class LauncherActivity extends Activity {
             if (fOpen) return false;
             if (dOpen) {
                 if (vy > 0 && !drawerGrid.canScrollVertically(-1)) { closeDrawer(); return true; }
+                if (vy < 0) hideKeyboard();
                 return false;
             }
-            if (vy < 0 && (scroll == null || !scroll.canScrollVertically(1))) { openDrawer(); return true; }
-            if (vy > 0 && (scroll == null || !scroll.canScrollVertically(-1))) { expandNotifications(); return true; }
+            // leret ke bawah di home = carian (macam iPhone); di App Library hanya bila di paling atas
+            boolean onLib = pager != null && pager.cur == pager.getChildCount() - 1;
+            if (vy > 0 && (!onLib || libScroll == null || !libScroll.canScrollVertically(-1))) { openDrawer(); return true; }
+            return false;
             return false;
         }
     });
@@ -760,6 +1226,7 @@ public class LauncherActivity extends Activity {
     private void buildDrawer() {
         drawer = new FrameLayout(this);
         drawer.setVisibility(View.GONE);
+        drawer.setOnClickListener(v -> closeDrawer());
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(dp(12), insetTop + dp(14), dp(12), insetBottom);
@@ -788,6 +1255,17 @@ public class LauncherActivity extends Activity {
         LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
         sl.bottomMargin = dp(12);
         col.addView(search, sl);
+        calcView = Ui.text(this, 22, 700, lightClay ? BentoViews.CLAY_INK : Color.WHITE);
+        calcView.setPadding(dp(18), dp(14), dp(18), dp(14));
+        calcView.setBackground(theme == 3 ? new BentoViews.Clay(this, BentoViews.CLAY_BASE, 22, false)
+                : Ui.round(theme == 2 ? 0xFF262433 : Color.argb(40, 255, 255, 255), dp(22)));
+        calcView.setVisibility(View.GONE);
+        LinearLayout.LayoutParams cl2 = new LinearLayout.LayoutParams(-1, -2);
+        cl2.bottomMargin = dp(12);
+        col.addView(calcView, cl2);
+        sugTitle = Ui.text(this, 13, 600, lightClay ? BentoViews.CLAY_SOFT : Color.argb(170, 255, 255, 255));
+        sugTitle.setPadding(dp(6), 0, 0, dp(8));
+        col.addView(sugTitle);
 
         drawerGrid = new GridView(this);
         drawerGrid.setNumColumns(COLS);
@@ -817,11 +1295,32 @@ public class LauncherActivity extends Activity {
         root.addView(drawer, new FrameLayout.LayoutParams(-1, -1));
     }
 
+    private TextView calcView, sugTitle;
+
+    /** Carian: kosong = cadangan (app paling kerap dibuka); ada teks = padanan nama + kalkulator. */
     private void filter(String q) {
         shown.clear();
         String s = q.trim().toLowerCase(Locale.ROOT);
-        for (App a : sorted) if (s.isEmpty() || a.label.toLowerCase(Locale.ROOT).contains(s)) shown.add(a);
+        if (s.isEmpty()) {
+            JSONObject use = usage();
+            List<App> l = new ArrayList<>(sorted);
+            Collections.sort(l, (x, y) -> Integer.compare(use.optInt(y.key), use.optInt(x.key)));
+            for (int i = 0; i < Math.min(8, l.size()); i++) shown.add(l.get(i));
+        } else {
+            for (App a : sorted) if (a.label.toLowerCase(Locale.ROOT).startsWith(s)) shown.add(a);
+            for (App a : sorted) if (!shown.contains(a) && a.label.toLowerCase(Locale.ROOT).contains(s)) shown.add(a);
+        }
+        if (sugTitle != null) sugTitle.setText(s.isEmpty() ? R.string.l_suggest : R.string.l_results);
+        if (calcView != null) {
+            String r = Calc.eval(q);
+            calcView.setVisibility(r == null ? View.GONE : View.VISIBLE);
+            if (r != null) calcView.setText(q.trim() + " = " + r);
+        }
         if (drawerGrid != null) ((BaseAdapter) drawerGrid.getAdapter()).notifyDataSetChanged();
+    }
+
+    private JSONObject usage() {
+        try { return new JSONObject(prefs.getString(K_USE, "{}")); } catch (Exception e) { return new JSONObject(); }
     }
 
     private int drawerColor() {
@@ -837,8 +1336,16 @@ public class LauncherActivity extends Activity {
         if (drawer == null || drawer.getVisibility() == View.VISIBLE) return;
         Haptics.soft(this);
         search.setText("");
+        filter("");
         drawer.setBackgroundColor(drawerColor());
         drawer.setVisibility(View.VISIBLE);
+        h.postDelayed(() -> {
+            search.requestFocus();
+            try {
+                ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(search, 0);
+            } catch (Throwable ignored) {
+            }
+        }, 180);
         float hgt = root.getHeight();
         boolean low = Power.low(this);
         if (!low && android.os.Build.VERSION.SDK_INT >= 31 && theme <= 1)
@@ -973,6 +1480,9 @@ public class LauncherActivity extends Activity {
                 pm.setOnMenuItemClickListener(mi -> {
                     if (mi.getTitle().equals(getString(R.string.l_remove_from_folder))) {
                         setFolderApps(idx, removeKey(fo.optJSONArray("a"), key));
+                        JSONArray hm = homeItems();
+                        hm.put(item(key));
+                        prefs.edit().putString(K_HOME, hm.toString()).apply();
                         openFolder(idx, null);
                     } else appInfo(ap);
                     return true;
@@ -1157,7 +1667,7 @@ public class LauncherActivity extends Activity {
         pm.setOnMenuItemClickListener(mi -> {
             switch (mi.getItemId()) {
                 case 1: newFolder(null); break;
-                case 2: openDrawer(); break;
+                case 2: if (pager != null) pager.snap(pager.getChildCount() - 1); break;
                 case 3: openIntent(Intent.createChooser(new Intent(Intent.ACTION_SET_WALLPAPER), getString(R.string.l_wallpaper)), v); break;
                 default: openIntent(new Intent(this, MainActivity.class), v);
             }

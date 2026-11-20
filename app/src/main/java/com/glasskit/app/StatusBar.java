@@ -91,9 +91,17 @@ class StatusBar extends View {
         invalidate();
     }
 
+    /** Gaya status bar: -1 (lalai) ikut tema GlassKit. Classic → iPhone, Liquid → island, Bento → cip, Clay → tanah liat. */
+    static int styleOf(android.content.SharedPreferences p) {
+        int s = p.getInt(Prefs.SBAR_STYLE, -1);
+        if (s >= 0) return s;
+        int t = Math.max(0, Math.min(3, p.getInt(Prefs.PANEL_STYLE, 1)));
+        return new int[]{IPHONE, ISLAND, CHIPS, CLAY}[t];
+    }
+
     void refresh() {
         Context c = getContext();
-        style = prefs.getInt(Prefs.SBAR_STYLE, CAPSULE);
+        style = styleOf(prefs);
         showPct = prefs.getBoolean(Prefs.SBAR_PCT, true);
         dark = Ui.darkGlass(c);
         boolean bare = style == MINIMAL || style == IPHONE;
@@ -252,7 +260,7 @@ class StatusBar extends View {
 
     private boolean solid, rec;
 
-    /** Sedang merakam skrin: gaya iPhone lukis pil merah legap di belakang jam (menutup cip rakaman stock). */
+    /** Cip merah stock (rakam / kongsi skrin) dipapar: kiri hanya jam supaya tidak bertindih. */
     void setRec(boolean v) {
         if (rec == v) return;
         rec = v;
@@ -281,37 +289,22 @@ class StatusBar extends View {
 
     @Override
     protected void onDraw(Canvas c) {
+        if (!rec) {
+            draw0(c);
+            return;
+        }
+        // cip merah stock (rakam skrin / kongsi skrin) sedang dipapar di kiri island:
+        // tunjuk jam sahaja di kiri supaya tidak bertindih, kandungan lain kembali bila cip hilang
+        List<Drawable> keepN = new ArrayList<>(notifs);
+        int keepM = moreNotifs;
+        Data.Weather keepW = wx;
+        notifs.clear();
+        moreNotifs = 0;
+        wx = null;
         draw0(c);
-        if (rec && style != IPHONE) recCover(c);
-    }
-
-    /**
-     * Semasa merakam skrin, Android lukis cip merah "00:05" di kiri island. Tutup dengan sambungan hitam
-     * island (nampak macam island memanjang ke kiri), jam GlassKit kekal di kiri.
-     */
-    private void recCover(Canvas c) {
-        float cy = centerY > 0 ? centerY : getHeight() / 2f;
-        float cx = islandCx > 0 ? islandCx : getWidth() / 2f;
-        float l = dp(14) + text.measureText(time) + dp(10);
-        float r = cx - gapHalf + dp(16);
-        if (r - l < dp(30)) return;
-        float hh = dp(16.5f);
-        cap.setShader(null);
-        cap.clearShadowLayer();
-        cap.setColor(Color.BLACK);
-        c.drawRoundRect(new RectF(l, cy - hh, r, cy + hh), hh, hh, cap);
-        // titik merah + teks "REC" kecil di sebelah kiri sambungan
-        cap.setColor(0xFFFF3B30);
-        c.drawCircle(l + hh, cy, dp(4.5f), cap);
-        // jam ditulis semula supaya tidak tertutup cip
-        Paint.FontMetrics fm = text.getFontMetrics();
-        float base = cy - (fm.ascent + fm.descent) / 2f;
-        int keep = text.getColor();
-        cap.setColor(Color.argb(150, 0, 0, 0));
-        c.drawRoundRect(new RectF(dp(6), cy - hh, l - dp(4), cy + hh), hh, hh, cap);
-        text.setColor(Color.WHITE);
-        c.drawText(time, dp(14), base, text);
-        text.setColor(keep);
+        notifs.addAll(keepN);
+        moreNotifs = keepM;
+        wx = keepW;
     }
 
     private void draw0(Canvas c) {
@@ -330,7 +323,7 @@ class StatusBar extends View {
         float cx = islandCx > 0 ? islandCx : w / 2f;
 
         float lx, rx; // permulaan kandungan kiri & kanan
-        if (style == ISLAND && cx - gapHalf - dp(8) - lw - 2 * cpad > pad
+        if (style == ISLAND && !rec && cx - gapHalf - dp(8) - lw - 2 * cpad > pad
                 && cx + gapHalf + dp(8) + rw + 2 * cpad < w - pad) {
             lx = cx - gapHalf - dp(8) - cpad - lw;
             rx = cx + gapHalf + dp(8) + cpad;
@@ -340,7 +333,6 @@ class StatusBar extends View {
         }
 
         float lr = lx + lw + cpad;
-        if (rec && style != MINIMAL) lr = Math.max(lr, Math.min(cx - gapHalf - dp(4), dp(146)));
         if (style == CLAY) {
             clayCapsule(c, lx - cpad, lr, cy);
             clayCapsule(c, rx - cpad, rx + rw + cpad, cy);
@@ -505,18 +497,8 @@ class StatusBar extends View {
         float leftMid = (edge + (cx - g)) / 2f;
         Paint.FontMetrics fm = text.getFontMetrics();
         float base = cy - (fm.ascent + fm.descent) / 2f;
-        if (rec) {
-            float hh = dp(13.5f);
-            float pr = Math.max(cx - g, dp(146));
-            cap.setShader(null);
-            cap.setColor(0xFFFF3B30);
-            c.drawRoundRect(new RectF(edge, cy - hh, pr, cy + hh), hh, hh, cap);
-            leftMid = (edge + pr) / 2f;
-            int keep = text.getColor();
-            text.setColor(Color.WHITE);
-            c.drawText(time, leftMid - text.measureText(time) / 2f, base, text);
-            text.setColor(keep);
-        } else c.drawText(time, leftMid - text.measureText(time) / 2f, base, text);
+        if (rec) leftMid = edge + dp(4) + text.measureText(time) / 2f; // beri ruang untuk cip merah stock
+        c.drawText(time, leftMid - text.measureText(time) / 2f, base, text);
         // kanan
         float cw = (cell >= 0 || airplane ? dp(16) + dp(6) : 0) + (wifi >= 0 ? dp(17) + dp(6) : 0)
                 + (hotspot ? dp(17) + dp(6) : 0) + (dnd ? dp(13) + dp(6) : 0) + batteryWidth();

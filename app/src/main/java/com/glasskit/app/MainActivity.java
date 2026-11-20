@@ -494,10 +494,10 @@ public class MainActivity extends Activity {
         toggle(sb, R.string.sbar_pct, Prefs.SBAR_PCT, true);
         label(sb, R.string.sbar_style);
         // cip boleh skrol (6 gaya tidak muat dalam satu baris segmen)
-        int[] sbOrder = {6, 5, 0, 1, 2, 3, 4};
-        int[] sbNames = {R.string.sbar_clay, R.string.sbar_iphone, R.string.sbar_capsule, R.string.sbar_minimal, R.string.sbar_island,
+        int[] sbOrder = {-1, 6, 5, 0, 1, 2, 3, 4};
+        int[] sbNames = {R.string.follow_theme, R.string.sbar_clay, R.string.sbar_iphone, R.string.sbar_capsule, R.string.sbar_minimal, R.string.sbar_island,
                 R.string.sbar_chips, R.string.sbar_tint};
-        choiceChips(sb, sbOrder, sbNames, prefs.getInt(Prefs.SBAR_STYLE, 0), i -> prefs.edit().putInt(Prefs.SBAR_STYLE, i).apply());
+        choiceChips(sb, sbOrder, sbNames, prefs.getInt(Prefs.SBAR_STYLE, -1), i -> prefs.edit().putInt(Prefs.SBAR_STYLE, i).apply());
         LinearLayout sr = new LinearLayout(this);
         sb.addView(sr);
         addPair(sr, button(null, getString(R.string.btn_hide_sys), false, v -> {
@@ -882,9 +882,8 @@ public class MainActivity extends Activity {
 
     /** Satu tema untuk semua: launcher, status bar, panel sistem, panel notifikasi dan widget. Setiap satu masih boleh ditukar sendiri. */
     private void applyTheme(int t) {
-        int[] sbar = {5, 2, 3, 6}; // Classic → iPhone, Liquid → island, Bento → cip, Clay → tanah liat
         prefs.edit().putInt(Prefs.THEME, t).putInt(Prefs.PANEL_STYLE, t).putInt(Prefs.NOTIF_STYLE, -1)
-                .putInt(Prefs.W_STYLE, -1).putInt(Prefs.L_STYLE, -1).putInt(Prefs.SBAR_STYLE, sbar[t]).apply();
+                .putInt(Prefs.W_STYLE, -1).putInt(Prefs.L_STYLE, -1).putInt(Prefs.SBAR_STYLE, -1).apply();
         if (t == 3) BentoViews.palette(this);
         widgetsChanged();
         toast(getString(R.string.theme_applied));

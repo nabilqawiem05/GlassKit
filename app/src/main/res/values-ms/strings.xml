@@ -715,7 +715,7 @@
     <string name="l_folder">Folder</string>
     <string name="l_empty_hint">Tekan lama di sini untuk buat folder, atau leret ke atas untuk semua app dan tekan lama satu app untuk tambah.</string>
     <string name="l_dock_hint">Tekan lama app dalam laci untuk letak di sini</string>
-    <string name="l_search">Cari app</string>
+    <string name="l_search">Cari app atau kira (cth. 12*3)</string>
     <string name="l_cant_open">Tak dapat buka app ni</string>
     <string name="l_remove_from_folder">Keluarkan dari folder</string>
     <string name="l_app_info">Info app</string>
@@ -737,4 +737,18 @@
     <string name="l_add_home">Tambah ke home</string>
     <string name="l_added">Ditambah ke home</string>
     <string name="l_dock_full">Dock dah penuh (5 app)</string>
+    <string name="l_library">App Library</string>
+    <string name="l_suggest">Cadangan</string>
+    <string name="l_results">Hasil</string>
+    <string name="cat_social">Media sosial</string>
+    <string name="cat_finance">Kewangan</string>
+    <string name="cat_ai">AI</string>
+    <string name="cat_shop">Beli-belah</string>
+    <string name="cat_fun">Hiburan</string>
+    <string name="cat_games">Permainan</string>
+    <string name="cat_creative">Kreatif</string>
+    <string name="cat_work">Kerja</string>
+    <string name="cat_util">Utiliti</string>
+    <string name="cat_google">Google</string>
+    <string name="cat_other">Lain-lain</string>
 </resources>

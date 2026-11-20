@@ -29,8 +29,30 @@ public class NotifListener extends NotificationListenerService {
         inst = null;
     }
 
+    /** Perakam skrin stock / kongsi skrin aktif? (notifikasi berterusan dari System UI) */
+    private void checkStockRec() {
+        boolean on = false;
+        try {
+            StatusBarNotification[] all = getActiveNotifications();
+            if (all != null) for (StatusBarNotification s : all) {
+                if (!"com.android.systemui".equals(s.getPackageName())) continue;
+                String ch = s.getNotification().getChannelId();
+                ch = ch == null ? "" : ch.toLowerCase(java.util.Locale.ROOT);
+                if (s.isOngoing() && (ch.contains("screen_record") || ch.contains("screenrecord") || ch.contains("media_projection")
+                        || ch.contains("screen_share") || ch.contains("cast"))) { on = true; break; }
+            }
+        } catch (Throwable ignored) {
+        }
+        if (on != Recorder.stockRec) {
+            Recorder.stockRec = on;
+            PillService p = PillService.inst;
+            if (p != null) p.h.post(p::onRecChanged);
+        }
+    }
+
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
+        checkStockRec();
         PillService p = PillService.inst;
         if (p != null && p.panels != null) p.panels.onNotificationsChanged();
         if (p != null) p.onNotifsChanged();
@@ -41,6 +63,7 @@ public class NotifListener extends NotificationListenerService {
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
+        checkStockRec();
         PillService p = PillService.inst;
         if (p == null || sbn == null) return;
         if (p.panels != null) p.panels.onNotificationsChanged();

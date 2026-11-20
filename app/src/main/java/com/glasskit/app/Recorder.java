@@ -19,6 +19,12 @@ final class Recorder {
 
     static boolean recording() { return rec || ScreenRecService.running; }
 
+    /** Rakaman / kongsi skrin stock (dikesan dari notifikasi System UI). */
+    static volatile boolean stockRec;
+
+    /** Android sedang papar cip merah di status bar (MediaProjection GlassKit atau perakam stock). */
+    static boolean chipShown() { return ScreenRecService.running || stockRec; }
+
     static long elapsed() {
         if (ScreenRecService.running) return System.currentTimeMillis() - ScreenRecService.startedAt;
         return rec ? System.currentTimeMillis() - start : 0;

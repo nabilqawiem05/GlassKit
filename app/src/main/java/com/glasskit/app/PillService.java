@@ -265,7 +265,7 @@ public class PillService extends AccessibilityService
     private int lastPriv = -1;
 
     void onPrivacy() {
-        if (sbar != null) { sbar.setSolid(Recorder.recording() || (extras != null && extras.busy())); sbar.setRec(Recorder.recording()); }
+        if (sbar != null) { sbar.setSolid(Recorder.recording() || (extras != null && extras.busy())); sbar.setRec(Recorder.chipShown()); }
         if (privDot == null || extras == null) return;
         int k = extras.privacy();
         if (k != lastPriv) {
@@ -1459,7 +1459,7 @@ public class PillService extends AccessibilityService
         int newMode = IDLE;
         if (callKey != null && (panels == null || !panels.isOpen())) {
             newMode = CALL;
-        } else if (Recorder.recording() && !land && (panels == null || !panels.isOpen())) {
+        } else if (Recorder.recording() && !ScreenRecService.running && !land && (panels == null || !panels.isOpen())) {
             newMode = REC;
         } else if (on && !land && (panels == null || !panels.isOpen())) {
             if (notiActive) newMode = NOTI;
@@ -2422,8 +2422,8 @@ public class PillService extends AccessibilityService
     }
 
     void onRecChanged() {
-        recTapWindow(Recorder.recording());
-        if (sbar != null) { sbar.setSolid(Recorder.recording() || (extras != null && extras.busy())); sbar.setRec(Recorder.recording()); }
+        recTapWindow(ScreenRecService.running);
+        if (sbar != null) { sbar.setSolid(Recorder.recording() || (extras != null && extras.busy())); sbar.setRec(Recorder.chipShown()); }
         h.removeCallbacks(recTick);
         if (Recorder.recording()) h.post(recTick);
         refresh();

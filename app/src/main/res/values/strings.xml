@@ -744,4 +744,18 @@
     <string name="l_add_home">Add to home</string>
     <string name="l_added">Added to home</string>
     <string name="l_dock_full">Dock is full (5 apps)</string>
+    <string name="l_library">App Library</string>
+    <string name="l_suggest">Suggestions</string>
+    <string name="l_results">Results</string>
+    <string name="cat_social">Social media</string>
+    <string name="cat_finance">Finance</string>
+    <string name="cat_ai">AI</string>
+    <string name="cat_shop">Shopping</string>
+    <string name="cat_fun">Entertainment</string>
+    <string name="cat_games">Games</string>
+    <string name="cat_creative">Creative</string>
+    <string name="cat_work">Work</string>
+    <string name="cat_util">Utilities</string>
+    <string name="cat_google">Google</string>
+    <string name="cat_other">Others</string>
 </resources>
