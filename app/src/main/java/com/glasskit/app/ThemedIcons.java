@@ -107,7 +107,11 @@ final class ThemedIcons {
             AdaptiveIconDrawable a = (AdaptiveIconDrawable) d;
             Drawable mono = Build.VERSION.SDK_INT >= 33 ? a.getMonochrome() : null;
             boolean trusted = mono != null;
-            if (mono == null && a.getForeground() != null && coverage(a.getForeground()) < 0.55f) mono = a.getForeground();
+            if (mono == null && a.getForeground() != null) {
+                // lapisan depan berwarna-warni (gambar / ikon lama dibalut sistem): ambil logo dari dalamnya
+                if (multiColour(a.getForeground()) || coverage(a.getForeground()) >= 0.55f) return detailed(d, s, color, true);
+                mono = a.getForeground();
+            }
             if (mono != null) {
                 Drawable m = mono.mutate();
                 int ext = Math.round(g * 0.25f);
@@ -120,7 +124,29 @@ final class ThemedIcons {
             }
         }
         // ikon penuh gambar (lapisan depan menutup semua) atau ikon lama: kekalkan butiran ikut kecerahan
-        return detailed(d, s, color);
+        return detailed(d, s, color, false);
+    }
+
+    /** Lapisan mempunyai lebih dari satu warna ketara (bukan logo satu warna)? */
+    private static boolean multiColour(Drawable d) {
+        Bitmap t = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888);
+        d.setBounds(0, 0, 48, 48);
+        d.draw(new Canvas(t));
+        int[] px = new int[48 * 48];
+        t.getPixels(px, 0, 48, 0, 0, 48, 48);
+        t.recycle();
+        long r = 0, g = 0, b = 0;
+        int n = 0;
+        for (int p : px) if (Color.alpha(p) > 200) { r += Color.red(p); g += Color.green(p); b += Color.blue(p); n++; }
+        if (n < 20) return false;
+        float mr = r / (float) n, mg = g / (float) n, mb = b / (float) n;
+        int far = 0;
+        for (int p : px) {
+            if (Color.alpha(p) <= 200) continue;
+            float dr = Color.red(p) - mr, dg = Color.green(p) - mg, db = Color.blue(p) - mb;
+            if (dr * dr + dg * dg + db * db > 0.18f * 0.18f * 441f * 441f) far++;
+        }
+        return far > n * 0.10f;
     }
 
     /** Peratus kawasan kelihatan (72/108 tengah) yang legap. */
@@ -152,7 +178,7 @@ final class ThemedIcons {
      * Lukis ikon penuh (bucu bulat), kemudian tukar kepada satu warna: piksel yang berbeza dari warna latar
      * ikon (diambil dari tepi) menjadi logo. Kekuatan dinormalkan supaya ikon kontras rendah pun nampak.
      */
-    private static Bitmap detailed(Drawable d, int s, int color) {
+    private static Bitmap detailed(Drawable d, int s, int color, boolean fgOnly) {
         int g = Math.round(s * 0.66f);
         Bitmap src = Bitmap.createBitmap(g, g, Bitmap.Config.ARGB_8888);
         Canvas sc = new Canvas(src);
@@ -162,7 +188,7 @@ final class ThemedIcons {
         if (d instanceof AdaptiveIconDrawable) {
             AdaptiveIconDrawable a = (AdaptiveIconDrawable) d;
             int ext = Math.round(g * 0.25f);
-            if (a.getBackground() != null) { a.getBackground().setBounds(-ext, -ext, g + ext, g + ext); a.getBackground().draw(sc); }
+            if (!fgOnly && a.getBackground() != null) { a.getBackground().setBounds(-ext, -ext, g + ext, g + ext); a.getBackground().draw(sc); }
             if (a.getForeground() != null) { a.getForeground().setBounds(-ext, -ext, g + ext, g + ext); a.getForeground().draw(sc); }
         } else {
             d.setBounds(0, 0, g, g);
@@ -171,12 +197,22 @@ final class ThemedIcons {
         int[] px = new int[g * g];
         src.getPixels(px, 0, g, 0, 0, g, g);
         src.recycle();
-        // warna latar = purata piksel legap di jalur tepi (dalam bucu bulat)
-        long sr = 0, sg = 0, sb = 0;
-        int n = 0, band = Math.max(2, g / 10);
+        // warna latar = purata piksel legap di jalur tepi kawasan legap (bukan tepi kanvas: ikon lama ada ruang kosong)
+        int x0 = g, y0 = g, x1 = -1, y1 = -1;
         for (int y = 0; y < g; y++)
-            for (int x = 0; x < g; x++) {
-                if (x >= band && x < g - band && y >= band && y < g - band) continue;
+            for (int x = 0; x < g; x++)
+                if (Color.alpha(px[y * g + x]) > 200) {
+                    if (x < x0) x0 = x;
+                    if (x > x1) x1 = x;
+                    if (y < y0) y0 = y;
+                    if (y > y1) y1 = y;
+                }
+        if (x1 < 0) { x0 = 0; y0 = 0; x1 = g - 1; y1 = g - 1; }
+        long sr = 0, sg = 0, sb = 0;
+        int n = 0, band = Math.max(2, Math.min(x1 - x0, y1 - y0) / 10);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) {
+                if (x >= x0 + band && x <= x1 - band && y >= y0 + band && y <= y1 - band) continue;
                 int p = px[y * g + x];
                 if (Color.alpha(p) < 200) continue;
                 sr += Color.red(p);
