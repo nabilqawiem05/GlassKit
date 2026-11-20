@@ -711,4 +711,6 @@
     <string name="clay_tone">Clay brightness</string>
     <string name="clay_t_system">Follow system</string>
     <string name="clay_t_light">Always light</string>
+    <string name="widget_upnext_clear_name">Up Next (transparent)</string>
+    <string name="widget_upnext_clear_desc">Clock and next event, text only on your wallpaper</string>
 </resources>
