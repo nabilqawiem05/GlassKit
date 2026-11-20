@@ -698,7 +698,6 @@
     <string name="bento_count">%d notifications</string>
     <string name="notif_style">Notification panel style</string>
     <string name="follow_system_panel">Same as system panel</string>
-    <string name="notif_open">Open</string>
     <string name="w_style">Widget style</string>
     <string name="w_style_glass">Glass</string>
 </resources>
