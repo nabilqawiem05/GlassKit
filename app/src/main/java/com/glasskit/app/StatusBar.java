@@ -97,7 +97,8 @@ class StatusBar extends View {
         showPct = prefs.getBoolean(Prefs.SBAR_PCT, true);
         dark = Ui.darkGlass(c);
         boolean bare = style == MINIMAL || style == IPHONE;
-        ink = style == CLAY ? 0xFF3C3489 : 0xFFFFFFFF;
+        if (style == CLAY) BentoViews.palette(c); // warna ikut wallpaper + mod gelap/terang
+        ink = style == CLAY ? BentoViews.CLAY_INK : 0xFFFFFFFF;
         text.setColor(ink);
         setLayerType(bare || style == CLAY ? LAYER_TYPE_SOFTWARE : LAYER_TYPE_HARDWARE, null);
         text.setShadowLayer(bare ? dp(3) : 0, 0, dp(0.6f), Color.argb(130, 0, 0, 0));
@@ -370,14 +371,15 @@ class StatusBar extends View {
         float hh = dp(13.5f);
         RectF rf = new RectF(l, cy - hh, r, cy + hh);
         clayP.setShader(null);
-        clayP.setColor(0xFFF3ECFB);
-        clayP.setShadowLayer(dp(5), dp(1.5f), dp(2.5f), Color.argb(90, 83, 74, 183));
+        clayP.setColor(BentoViews.CLAY_BASE);
+        clayP.setShadowLayer(dp(5), dp(1.5f), dp(2.5f), BentoViews.CLAY_SHADOW);
         c.drawRoundRect(rf, hh, hh, clayP);
-        clayP.setShadowLayer(dp(3), -dp(1), -dp(1), Color.argb(200, 255, 255, 255));
+        clayP.setShadowLayer(dp(3), -dp(1), -dp(1), BentoViews.CLAY_LIGHT);
         c.drawRoundRect(rf, hh, hh, clayP);
         clayP.clearShadowLayer();
         clayP.setShader(new LinearGradient(0, rf.top, 0, rf.bottom,
-                new int[]{Color.argb(170, 255, 255, 255), Color.argb(0, 255, 255, 255), Color.argb(40, 60, 52, 137)},
+                new int[]{BentoViews.clayDark ? Color.argb(45, 255, 255, 255) : Color.argb(170, 255, 255, 255),
+                        Color.argb(0, 255, 255, 255), BentoViews.clayDark ? Color.argb(70, 0, 0, 0) : Color.argb(40, 60, 52, 137)},
                 new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP));
         c.drawRoundRect(rf, hh, hh, clayP);
         clayP.setShader(null);

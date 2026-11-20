@@ -1498,6 +1498,7 @@ final class Panels {
     private int inkSoft() { return clay() ? BentoViews.CLAY_SOFT : Color.argb(200, 255, 255, 255); }
 
     private void applyTheme() {
+        if (clay()) BentoViews.palette(s); // warna ikut wallpaper + mod gelap/terang
         BentoViews.clay = clay();
         BentoViews.ink = ink();
     }
@@ -1551,6 +1552,10 @@ final class Panels {
      * bertukar isi (cuaca ↔ kalendar, bateri ↔ langkah). Gaya animasi masuk bertukar setiap kali dibuka.
      */
     private void fillBento(LiquidSheet sheet, int gapIgnored, java.util.Map<String, Tile> map, List<Tile> shown) {
+        if (clay()) {
+            fillClay(sheet, map, shown);
+            return;
+        }
         LinearLayout b = sheet.body;
         sheet.dropStyle = new java.util.Random().nextInt(4);
         applyTheme();
@@ -1730,6 +1735,215 @@ final class Panels {
         paintAuto(on);
         Haptics.toggle(s, on);
         Toast.makeText(s, on ? R.string.bento_auto_on : R.string.bento_auto_off, Toast.LENGTH_SHORT).show();
+    }
+
+    // ===================== Tanah liat · gaya A (butang gula-gula) =====================
+
+    /**
+     * Panel sistem tanah liat: 6 butang bulat besar (3×2), dua tiub slider tebal (kecerahan & bunyi)
+     * dengan butang Auto & Bunyi, kad muzik bulat, kemudian suis lain dalam butang bulat kecil.
+     * Semua warna dari palet wallpaper (satu aksen), ikut mod gelap/terang.
+     */
+    private void fillClay(LiquidSheet sheet, java.util.Map<String, Tile> map, List<Tile> shown) {
+        LinearLayout b = sheet.body;
+        sheet.dropStyle = new java.util.Random().nextInt(4);
+        applyTheme();
+        sBright = null;
+        vBright = vVolume = null;
+        GradientDrawable pb = new GradientDrawable();
+        pb.setColor(BentoViews.CLAY_PANEL);
+        pb.setCornerRadius(dp(38));
+        b.setBackground(pb);
+        b.setPadding(dp(14), dp(12), dp(14), dp(16));
+        if (b.getChildCount() > 0) tintTree(b.getChildAt(0), ink());
+
+        // ---- 6 butang bulat besar ----
+        int n = Math.min(6, shown.size());
+        for (int i = 0; i < n; i += 3) {
+            LinearLayout row = new LinearLayout(s);
+            for (int j = i; j < i + 3; j++) {
+                FrameLayout cell = new FrameLayout(s);
+                if (j < n) cell.addView(clayTile(shown.get(j), dp(66), 12f), new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+                row.addView(cell, new LinearLayout.LayoutParams(0, -2, 1f));
+            }
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+            rl.topMargin = dp(i == 0 ? 14 : 10);
+            b.addView(row, rl);
+            sheet.drops.add(row);
+        }
+
+        // ---- tiub slider + Auto & Bunyi ----
+        LinearLayout sl = new LinearLayout(s);
+        sl.setGravity(Gravity.CENTER);
+        BentoViews.Tube tb = new BentoViews.Tube(s, Icon.SUN);
+        try {
+            tb.setValue(Settings.System.getInt(s.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, 128) / 255f);
+        } catch (Exception ignored) {
+        }
+        tb.setCb((v, done) -> {
+            setBrightness(v, done);
+            paintAuto(false);
+        });
+        sl.addView(tb, new LinearLayout.LayoutParams(dp(70), dp(176)));
+        final android.media.AudioManager am = s.getSystemService(android.media.AudioManager.class);
+        BentoViews.Tube tv = new BentoViews.Tube(s, Icon.SPEAKER);
+        int mx = Math.max(1, am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC));
+        tv.setValue(am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / (float) mx);
+        tv.setCb((v, done) -> am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Math.round(v * mx), 0));
+        LinearLayout.LayoutParams tvl = new LinearLayout.LayoutParams(dp(70), dp(176));
+        tvl.leftMargin = dp(12);
+        sl.addView(tv, tvl);
+        LinearLayout side = new LinearLayout(s);
+        side.setOrientation(LinearLayout.VERTICAL);
+        autoBox = clayButton(Icon.SUN, s.getString(R.string.bento_auto), v -> toggleAutoBrightness());
+        paintAuto(Settings.System.getInt(s.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == 1);
+        side.addView(autoBox, new LinearLayout.LayoutParams(dp(96), dp(82)));
+        View snd = clayButton(Icon.SPEAKER, s.getString(R.string.sound_short), v -> showSoundSheet(map.get("ringer")));
+        LinearLayout.LayoutParams sdl = new LinearLayout.LayoutParams(dp(96), dp(82));
+        sdl.topMargin = dp(12);
+        side.addView(snd, sdl);
+        LinearLayout.LayoutParams sil = new LinearLayout.LayoutParams(-2, -2);
+        sil.leftMargin = dp(14);
+        sl.addView(side, sil);
+        LinearLayout.LayoutParams sll = new LinearLayout.LayoutParams(-1, -2);
+        sll.topMargin = dp(16);
+        b.addView(sl, sll);
+        sheet.drops.add(sl);
+
+        // ---- kad muzik bulat ----
+        View m = clayMedia();
+        LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-1, dp(84));
+        ml.topMargin = dp(14);
+        b.addView(m, ml);
+        sheet.drops.add(m);
+
+        // ---- suis lain: bulat kecil, 4 sebaris ----
+        for (int i = n; i < shown.size(); i += 4) {
+            LinearLayout row = new LinearLayout(s);
+            for (int j = i; j < i + 4; j++) {
+                FrameLayout cell = new FrameLayout(s);
+                if (j < shown.size()) cell.addView(clayTile(shown.get(j), dp(52), 10f), new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+                row.addView(cell, new LinearLayout.LayoutParams(0, -2, 1f));
+            }
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+            rl.topMargin = dp(12);
+            b.addView(row, rl);
+            sheet.drops.add(row);
+        }
+
+        LinearLayout foot = new LinearLayout(s);
+        foot.addView(themedChip(s.getString(R.string.system_panel), v -> {
+            close();
+            s.h.postDelayed(() -> s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS), 450);
+        }), new LinearLayout.LayoutParams(0, dp(48), 1f));
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        fl.leftMargin = dp(8);
+        foot.addView(themedChip(s.getString(R.string.cc_settings), v -> launch(new Intent(s, MainActivity.class))), fl);
+        LinearLayout.LayoutParams fe = new LinearLayout.LayoutParams(dp(88), dp(48));
+        fe.leftMargin = dp(8);
+        foot.addView(themedChip(s.getString(R.string.tile_edit), v -> showTileEditor()), fe);
+        LinearLayout.LayoutParams fll = new LinearLayout.LayoutParams(-1, -2);
+        fll.topMargin = dp(16);
+        b.addView(foot, fll);
+        sheet.drops.add(foot);
+    }
+
+    /** Butang bulat tanah liat: bulatan besar + nama; bila hidup = warna aksen & melantun perlahan. */
+    private View clayTile(Tile t, int size, float labelSp) {
+        if (t == null) return new View(s);
+        if (t.v.getParent() instanceof ViewGroup) ((ViewGroup) t.v.getParent()).removeView(t.v);
+        ViewGroup.LayoutParams dl = t.disc.getLayoutParams();
+        if (dl != null) {
+            dl.width = size;
+            dl.height = size;
+            t.disc.setLayoutParams(dl);
+        }
+        if (t.label != null) {
+            t.label.setTextSize(labelSp);
+            t.label.setTextColor(ink());
+        }
+        t.hook = on -> {
+            Object a = t.disc.getTag();
+            if (on && a == null) {
+                android.animation.ObjectAnimator bob = android.animation.ObjectAnimator.ofFloat(t.disc, View.TRANSLATION_Y, 0f, -dp(3), 0f);
+                bob.setDuration(2600);
+                bob.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+                bob.setStartDelay((long) (Math.random() * 800));
+                bob.start();
+                t.disc.setTag(bob);
+            } else if (!on && a instanceof android.animation.Animator) {
+                ((android.animation.Animator) a).cancel();
+                t.disc.setTag(null);
+                t.disc.setTranslationY(0);
+            }
+        };
+        return t.v;
+    }
+
+    private FrameLayout clayButton(int icon, String label, View.OnClickListener l) {
+        FrameLayout box = new FrameLayout(s);
+        box.setBackground(BentoViews.boxBg(s, false, 0));
+        LinearLayout c = new LinearLayout(s);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setGravity(Gravity.CENTER);
+        c.addView(new Icon(s, icon, ink()), new LinearLayout.LayoutParams(dp(24), dp(24)));
+        TextView t = Ui.line(s, 12, 650, ink());
+        t.setText(label);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0, dp(4), 0, 0);
+        c.addView(t);
+        box.addView(c, new FrameLayout.LayoutParams(-1, -1));
+        box.setOnClickListener(l);
+        Ui.press(box);
+        return box;
+    }
+
+    /** Kad muzik tanah liat: kulit album bulat, tajuk, butang main bulat. */
+    private View clayMedia() {
+        LinearLayout r = new LinearLayout(s);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setBackground(BentoViews.boxBg(s, false, 0));
+        r.setPadding(dp(16), 0, dp(16), 0);
+        ImageView art = new ImageView(s);
+        art.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        if (s.art != null) art.setImageBitmap(s.art);
+        else art.setBackground(new BentoViews.Clay(s, BentoViews.CLAY_ACCENT, 99, true));
+        art.setClipToOutline(true);
+        art.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline o) { o.setOval(0, 0, view.getWidth(), view.getHeight()); }
+        });
+        r.addView(art, new LinearLayout.LayoutParams(dp(50), dp(50)));
+        LinearLayout tx = new LinearLayout(s);
+        tx.setOrientation(LinearLayout.VERTICAL);
+        tx.setPadding(dp(12), 0, dp(8), 0);
+        TextView a = Ui.line(s, 14, 650, ink());
+        a.setText(s.title != null ? s.title : s.getString(R.string.not_playing));
+        a.setSingleLine(true);
+        a.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        TextView bb = Ui.line(s, 11, 500, inkSoft());
+        bb.setText(s.artist != null ? s.artist : "");
+        bb.setSingleLine(true);
+        tx.addView(a);
+        tx.addView(bb);
+        r.addView(tx, new LinearLayout.LayoutParams(0, -2, 1f));
+        FrameLayout play = new FrameLayout(s);
+        play.setBackground(new BentoViews.Clay(s, BentoViews.CLAY_ACCENT, 99, true));
+        final Icon pi = new Icon(s, s.playing ? Icon.PAUSE : Icon.PLAY, Color.WHITE);
+        play.addView(pi, new FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER));
+        play.setOnClickListener(v -> {
+            try {
+                if (s.mc != null) {
+                    if (s.playing) s.mc.getTransportControls().pause();
+                    else s.mc.getTransportControls().play();
+                    pi.setKind(s.playing ? Icon.PLAY : Icon.PAUSE);
+                }
+            } catch (Exception ignored) {
+            }
+        });
+        Ui.press(play);
+        r.addView(play, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        return r;
     }
 
     /** Kotak suis: seluruh kotak boleh ditekan; warna kotak ikut keadaan suis. Lebar = ikon + nama di sebelah. */
@@ -3276,6 +3490,23 @@ final class Panels {
         LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(0, dp(104), 1f);
         sl.leftMargin = g;
         top.addView(sum, sl);
+        if (clay()) {
+            // tanah liat: satu kad header (jam + kiraan notifikasi dalam lencana), bukan dua kotak
+            sum.setVisibility(View.GONE);
+            sum.removeView(bnCount);
+            bnCount.setTextSize(13);
+            bnCount.setTextColor(Color.WHITE);
+            bnCount.setBackground(new BentoViews.Clay(s, BentoViews.CLAY_ACCENT, 99, false));
+            bnCount.setPadding(dp(14), dp(8), dp(14), dp(8));
+            LinearLayout.LayoutParams bcl = new LinearLayout.LayoutParams(-2, -2);
+            bcl.topMargin = dp(6);
+            clk.addView(bnCount, bcl);
+            clk.setBackground(BentoViews.boxBg(s, false, 0));
+            clk.setPadding(dp(20), dp(16), dp(20), dp(14));
+            clk.getLayoutParams().height = -2;
+            tintTree(clk, ink());
+            bnCount.setTextColor(Color.WHITE);
+        }
         col.addView(top, new LinearLayout.LayoutParams(w, -2));
 
         // ---- tab penapis ----
@@ -3448,7 +3679,7 @@ final class Panels {
         all.sort((a, b) -> Long.compare(b.getPostTime(), a.getPostTime()));
 
         // ringkasan: jumlah & bar warna ikut app (sebelum penapis)
-        bnCount.setText(String.valueOf(all.size()));
+        bnCount.setText(clay() ? s.getString(R.string.bento_count, all.size()) : String.valueOf(all.size()));
         bnBar.removeAllViews();
         java.util.LinkedHashMap<String, Integer> cnt = new java.util.LinkedHashMap<>();
         for (StatusBarNotification x : all) cnt.merge(x.getPackageName(), 1, Integer::sum);

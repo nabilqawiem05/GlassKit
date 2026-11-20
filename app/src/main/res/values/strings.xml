@@ -695,4 +695,5 @@
     <string name="panel_clay">Clay</string>
     <string name="sound_all">All sounds</string>
     <string name="sound_short">Sound</string>
+    <string name="bento_count">%d notifications</string>
 </resources>

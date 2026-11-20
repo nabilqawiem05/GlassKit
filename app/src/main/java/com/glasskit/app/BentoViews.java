@@ -25,10 +25,62 @@ final class BentoViews {
     // ---- tema Claymorphism ----
     static boolean clay;
     static int ink = Color.WHITE;           // warna teks utama
-    static final int CLAY_INK = 0xFF3C3489, CLAY_SOFT = 0xFF7F77DD, CLAY_BASE = 0xFFF8F2FD, CLAY_PANEL = 0xFFF1E9F7;
+    // palet tanah liat: dikira dari warna wallpaper + tema terang/gelap (lihat palette())
+    static int CLAY_INK = 0xFF3C3489, CLAY_SOFT = 0xFF7F77DD, CLAY_BASE = 0xFFF8F2FD, CLAY_PANEL = 0xFFF1E9F7,
+            CLAY_ACCENT = 0xFFAFA9EC, CLAY_SHADOW = 0x50534AB7, CLAY_LIGHT = 0xE6FFFFFF;
+    static boolean clayDark;
+    private static volatile int seed = 0xFF7F77DD;
+    private static volatile long seedVer = Long.MIN_VALUE;
+    private static volatile boolean seedBusy;
+
+    private static int hsv(float h, float s, float v) { return Color.HSVToColor(new float[]{h, s, v}); }
+
+    /**
+     * Kira palet tanah liat dari warna utama wallpaper (dikira di latar, dicache ikut versi gambar)
+     * dan mod gelap/terang sistem. Satu warna aksen untuk semua suis hidup — tiada warna-warni.
+     */
+    static void palette(Context c) {
+        long ver = Prefs.get(c).getLong(Prefs.IMG_VER, 0);
+        if (ver != seedVer && !seedBusy) {
+            seedBusy = true;
+            final Context app = c.getApplicationContext();
+            new Thread(() -> {
+                try {
+                    android.graphics.Bitmap bg = DepthRenderer.load(DepthRenderer.bgFile(app));
+                    if (bg != null) seed = DepthRenderer.autoColor(bg);
+                } catch (Throwable ignored) {
+                }
+                seedVer = ver;
+                seedBusy = false;
+            }, "gk-claypal").start();
+        }
+        float[] h = new float[3];
+        Color.colorToHSV(seed, h);
+        float hue = h[0];
+        clayDark = (c.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        if (clayDark) {
+            CLAY_PANEL = hsv(hue, 0.28f, 0.17f);
+            CLAY_BASE = hsv(hue, 0.24f, 0.24f);
+            CLAY_INK = hsv(hue, 0.08f, 0.96f);
+            CLAY_SOFT = hsv(hue, 0.22f, 0.76f);
+            CLAY_ACCENT = hsv(hue, 0.50f, 0.72f);
+            CLAY_SHADOW = Color.argb(150, 0, 0, 0);
+            CLAY_LIGHT = (hsv(hue, 0.22f, 0.36f) & 0x00FFFFFF) | 0x99000000;
+        } else {
+            CLAY_PANEL = hsv(hue, 0.10f, 0.96f);
+            CLAY_BASE = hsv(hue, 0.05f, 0.995f);
+            CLAY_INK = hsv(hue, 0.70f, 0.32f);
+            CLAY_SOFT = hsv(hue, 0.42f, 0.62f);
+            CLAY_ACCENT = hsv(hue, 0.42f, 0.84f);
+            CLAY_SHADOW = (hsv(hue, 0.60f, 0.55f) & 0x00FFFFFF) | 0x55000000;
+            CLAY_LIGHT = Color.argb(230, 255, 255, 255);
+        }
+    }
 
     /** Versi pastel sesuatu warna (untuk suis hidup dalam tema tanah liat). */
     static int pastel(int c) {
+        if (clay) return CLAY_ACCENT; // tema tanah liat: satu warna aksen ikut wallpaper
         float[] h = new float[3];
         Color.colorToHSV(c, h);
         h[1] = Math.min(0.55f, h[1] * 0.7f + 0.15f);
@@ -62,9 +114,9 @@ final class BentoViews {
             // bayang luar
             p.setShader(null);
             p.setColor(color);
-            p.setShadowLayer(s * 1.6f, s * 0.7f, s * 0.9f, Color.argb(80, 83, 74, 183));
+            p.setShadowLayer(s * 1.6f, s * 0.7f, s * 0.9f, CLAY_SHADOW);
             c.drawRoundRect(f, rr, rr, p);
-            p.setShadowLayer(s * 1.2f, -s * 0.5f, -s * 0.5f, Color.argb(230, 255, 255, 255));
+            p.setShadowLayer(s * 1.2f, -s * 0.5f, -s * 0.5f, CLAY_LIGHT);
             c.drawRoundRect(f, rr, rr, p);
             p.clearShadowLayer();
             // badan
@@ -72,7 +124,8 @@ final class BentoViews {
             c.drawRoundRect(f, rr, rr, p);
             // kilauan dalam (atas) & bayang dalam (bawah)
             p.setShader(new LinearGradient(0, f.top, 0, f.bottom,
-                    new int[]{Color.argb(150, 255, 255, 255), Color.argb(0, 255, 255, 255), Color.argb(0, 0, 0, 0), Color.argb(38, 60, 52, 137)},
+                    new int[]{clayDark ? Color.argb(40, 255, 255, 255) : Color.argb(150, 255, 255, 255), Color.argb(0, 255, 255, 255),
+                            Color.argb(0, 0, 0, 0), clayDark ? Color.argb(70, 0, 0, 0) : (CLAY_SHADOW & 0x00FFFFFF) | 0x26000000},
                     new float[]{0f, 0.35f, 0.6f, 1f}, Shader.TileMode.CLAMP));
             c.drawRoundRect(f, rr, rr, p);
             p.setShader(null);
@@ -101,6 +154,71 @@ final class BentoViews {
             g.setStroke(Math.max(1, dp(c, 1)), Color.argb(38, 255, 255, 255));
         }
         return g;
+    }
+
+    // ===================== Tiub slider tanah liat =====================
+
+    /** Slider menegak tebal macam tiub tanah liat: isi aksen dari bawah, ikon di bawah. */
+    static final class Tube extends View {
+        interface Cb { void on(float v, boolean done); }
+
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.drawable.Drawable icon;
+        private float value = 0.5f;
+        private Cb cb;
+
+        Tube(Context c, int iconKind) {
+            super(c);
+            setBackground(new Clay(c, CLAY_BASE, 99, false));
+            icon = Ui.iconDrawable(c, iconKind, CLAY_INK, 0, dp(c, 22));
+        }
+
+        void setCb(Cb cb) { this.cb = cb; }
+
+        void setValue(float v) {
+            value = Math.max(0f, Math.min(1f, v));
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            float in = dp(getContext(), 9), w = getWidth(), h = getHeight();
+            float top = in + (h - 2 * in) * (1f - Math.max(0.12f, value));
+            RectF f = new RectF(in, top, w - in, h - in);
+            float r = (w - 2 * in) / 2f;
+            p.setShader(new LinearGradient(0, f.top, 0, f.bottom,
+                    CLAY_ACCENT, (CLAY_ACCENT & 0x00FFFFFF) | 0xFF000000, Shader.TileMode.CLAMP));
+            c.drawRoundRect(f, r, r, p);
+            p.setShader(new LinearGradient(0, f.top, 0, f.top + r * 1.6f,
+                    Color.argb(120, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP));
+            c.drawRoundRect(f, r, r, p);
+            p.setShader(null);
+            int is = dp(getContext(), 22);
+            icon.setBounds((int) (w / 2 - is / 2f), (int) (h - in - dp(getContext(), 10) - is), (int) (w / 2 + is / 2f), (int) (h - in - dp(getContext(), 10)));
+            icon.draw(c);
+        }
+
+        @Override
+        public boolean onTouchEvent(android.view.MotionEvent e) {
+            float in = dp(getContext(), 9), h = getHeight();
+            float v = 1f - (e.getY() - in) / Math.max(1f, h - 2 * in);
+            switch (e.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                    animate().scaleX(1.06f).setDuration(120).start();
+                case android.view.MotionEvent.ACTION_MOVE:
+                    setValue(v);
+                    if (cb != null) cb.on(value, false);
+                    return true;
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    animate().scaleX(1f).setInterpolator(Ui.SPRING).setDuration(Ui.SPRING_MS).start();
+                    Haptics.tick(getContext());
+                    if (cb != null) cb.on(value, true);
+                    return true;
+            }
+            return super.onTouchEvent(e);
+        }
     }
 
     /** Animasi berjalan ~30fps hanya bila kelihatan. */
