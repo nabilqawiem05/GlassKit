@@ -246,7 +246,9 @@ public class MainActivity extends Activity {
         label(th, R.string.l_style);
         choiceChips(th, new int[]{-1, 0, 1, 2, 3}, new int[]{R.string.follow_theme, R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
                 prefs.getInt(Prefs.L_STYLE, -1), i -> prefs.edit().putInt(Prefs.L_STYLE, i).apply());
-        addPair(th, button(null, getString(R.string.l_set_default), true, v -> {
+        LinearLayout thRow = new LinearLayout(this);
+        th.addView(thRow, new LinearLayout.LayoutParams(-1, -2));
+        addPair(thRow, button(null, getString(R.string.l_set_default), true, v -> {
             try { startActivity(new Intent(android.provider.Settings.ACTION_HOME_SETTINGS)); } catch (Exception e) { toast(getString(R.string.l_set_default)); }
         }), button(null, getString(R.string.l_open), false, v -> startActivity(new Intent(this, LauncherActivity.class))));
 

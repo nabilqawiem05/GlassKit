@@ -281,6 +281,40 @@ class StatusBar extends View {
 
     @Override
     protected void onDraw(Canvas c) {
+        draw0(c);
+        if (rec && style != IPHONE) recCover(c);
+    }
+
+    /**
+     * Semasa merakam skrin, Android lukis cip merah "00:05" di kiri island. Tutup dengan sambungan hitam
+     * island (nampak macam island memanjang ke kiri), jam GlassKit kekal di kiri.
+     */
+    private void recCover(Canvas c) {
+        float cy = centerY > 0 ? centerY : getHeight() / 2f;
+        float cx = islandCx > 0 ? islandCx : getWidth() / 2f;
+        float l = dp(14) + text.measureText(time) + dp(10);
+        float r = cx - gapHalf + dp(16);
+        if (r - l < dp(30)) return;
+        float hh = dp(16.5f);
+        cap.setShader(null);
+        cap.clearShadowLayer();
+        cap.setColor(Color.BLACK);
+        c.drawRoundRect(new RectF(l, cy - hh, r, cy + hh), hh, hh, cap);
+        // titik merah + teks "REC" kecil di sebelah kiri sambungan
+        cap.setColor(0xFFFF3B30);
+        c.drawCircle(l + hh, cy, dp(4.5f), cap);
+        // jam ditulis semula supaya tidak tertutup cip
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float base = cy - (fm.ascent + fm.descent) / 2f;
+        int keep = text.getColor();
+        cap.setColor(Color.argb(150, 0, 0, 0));
+        c.drawRoundRect(new RectF(dp(6), cy - hh, l - dp(4), cy + hh), hh, hh, cap);
+        text.setColor(Color.WHITE);
+        c.drawText(time, dp(14), base, text);
+        text.setColor(keep);
+    }
+
+    private void draw0(Canvas c) {
         if (style == CHIPS) {
             drawChips(c);
             return;
