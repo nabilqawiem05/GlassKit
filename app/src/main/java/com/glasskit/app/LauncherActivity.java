@@ -328,16 +328,41 @@ public class LauncherActivity extends Activity {
         }
     }
 
-    /** Saiz ikon di dalam jubin: Classic & Liquid penuh, Bento & Clay dalam kotak. */
-    private int iconInset() { return theme >= 2 ? dp(theme == 3 ? 15 : 12) : 0; }
-
-    private void styleIcon(ImageView iv) {
-        if (theme == 1) {
-            ColorMatrix m = new ColorMatrix();
-            m.setSaturation(0f);
-            iv.setColorFilter(new ColorMatrixColorFilter(m));
+    /** Warna logo ikut tema. */
+    private int glyphColor(String key) {
+        switch (theme) {
+            case 1: return 0xFFE5E5EA;
+            case 2: return ThemedIcons.BENTO_FG[ThemedIcons.bentoIdx(key)];
+            case 3: return BentoViews.clayDark ? BentoViews.CLAY_ACCENT : BentoViews.CLAY_INK;
+            default: return 0;
         }
-        if (theme == 0) iv.setElevation(dp(4));
+    }
+
+    private Bitmap themedIcon(App a, int size) {
+        int col = glyphColor(a.key);
+        return ThemedIcons.get(a.icon, a.key, theme, size, col);
+    }
+
+    /** Latar jubin setiap app ikut tema (Classic tiada: ikon sendiri ialah jubin). */
+    private Drawable appTileBg(String key) {
+        switch (theme) {
+            case 1: {
+                GradientDrawable g = new GradientDrawable();
+                g.setShape(GradientDrawable.OVAL);
+                g.setColor(0xFF1C1C22);
+                g.setStroke(Math.max(1, dp(1)), Color.argb(120, 255, 255, 255));
+                return g;
+            }
+            case 2: {
+                GradientDrawable g = new GradientDrawable();
+                g.setCornerRadius(dp(16));
+                g.setColor(ThemedIcons.BENTO_BG[ThemedIcons.bentoIdx(key)]);
+                g.setStroke(Math.max(1, dp(0.8f)), Color.argb(30, 255, 255, 255));
+                return g;
+            }
+            case 3: return new BentoViews.Clay(this, BentoViews.CLAY_BASE, 18, false);
+            default: return null;
+        }
     }
 
     private TextView label(String s) {
@@ -353,12 +378,19 @@ public class LauncherActivity extends Activity {
         cell.setOrientation(LinearLayout.VERTICAL);
         cell.setGravity(Gravity.CENTER_HORIZONTAL);
         FrameLayout f = new FrameLayout(this);
-        Drawable bg = tileBg(false);
+        Drawable bg = appTileBg(a.key);
         if (bg != null) f.setBackground(bg);
         ImageView iv = new ImageView(this);
-        iv.setImageDrawable(a.icon);
-        styleIcon(iv);
-        int in = iconInset();
+        iv.setImageBitmap(themedIcon(a, tile));
+        if (theme == 0) {
+            final float rr = tile * 0.235f;
+            iv.setOutlineProvider(new android.view.ViewOutlineProvider() {
+                @Override
+                public void getOutline(View v, android.graphics.Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), rr); }
+            });
+            iv.setElevation(dp(4));
+        }
+        int in = theme == 3 ? dp(4) : 0; // ruang bayang tanah liat
         FrameLayout.LayoutParams il = new FrameLayout.LayoutParams(-1, -1);
         il.setMargins(in, in, in, in);
         f.addView(iv, il);
@@ -393,12 +425,7 @@ public class LauncherActivity extends Activity {
         for (int i = 0; a != null && i < Math.min(4, a.length()); i++) {
             App ap = apps.get(a.optString(i));
             ImageView iv = new ImageView(this);
-            if (ap != null) iv.setImageDrawable(ap.icon);
-            if (theme == 1) {
-                ColorMatrix m = new ColorMatrix();
-                m.setSaturation(0f);
-                iv.setColorFilter(new ColorMatrixColorFilter(m));
-            }
+            if (ap != null) iv.setImageBitmap(themedIcon(ap, ms));
             GridLayout.LayoutParams gl = new GridLayout.LayoutParams();
             gl.width = ms;
             gl.height = ms;
@@ -445,6 +472,7 @@ public class LauncherActivity extends Activity {
     private void build() {
         if (theme < 0) theme = styleOf(this);
         if (theme == 3) BentoViews.palette(this);
+        ThemedIcons.reset(theme + ":" + BentoViews.CLAY_INK + ":" + BentoViews.clayDark);
         root.removeAllViews();
 
         home = new LinearLayout(this);
