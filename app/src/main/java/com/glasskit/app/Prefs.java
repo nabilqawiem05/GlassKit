@@ -87,6 +87,7 @@ public final class Prefs {
     public static final String CLOCK_SHAPE = "clockShape";
     public static final String LOCK_HIJRI = "lockHijri";
     public static final String BANK_PAUSE = "bankPause";
+    public static final String NOTIF_STYLE = "notifStyle";
     public static final String BANK_PAUSED = "bankPaused";
     public static final String BANK_PKG = "bankPkg";
     public static final String BANK_EXTRA = "bankExtra";

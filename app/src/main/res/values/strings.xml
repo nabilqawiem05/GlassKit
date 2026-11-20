@@ -696,4 +696,6 @@
     <string name="sound_all">All sounds</string>
     <string name="sound_short">Sound</string>
     <string name="bento_count">%d notifications</string>
+    <string name="notif_style">Notification panel style</string>
+    <string name="follow_system_panel">Same as system panel</string>
 </resources>

@@ -650,7 +650,7 @@ final class Panels {
 
         void set(boolean on, String state) {
             if (hook != null) hook.accept(on);
-            int ps = s.prefs.getInt(Prefs.PANEL_STYLE, 1);
+            int ps = styleNow;
             if (round && ps == 3) {
                 // tanah liat: bulatan lembut timbul; hidup = pastel warna suis
                 disc.setBackground(new BentoViews.Clay(s, on ? BentoViews.pastel(onColor) : BentoViews.CLAY_BASE, 99, true));
@@ -791,6 +791,7 @@ final class Panels {
     void openControl() {
         if (open == QS) return;
         int ps = s.prefs.getInt(Prefs.PANEL_STYLE, 1);
+        styleNow = ps;
         if (ps >= 1) {
             openLiquid();
             return;
@@ -1491,7 +1492,16 @@ final class Panels {
 
     // ===================== Tema =====================
 
-    private boolean clay() { return s.prefs.getInt(Prefs.PANEL_STYLE, 1) == 3; }
+    /** Gaya panel yang sedang dibuka (panel sistem & notifikasi boleh berlainan). */
+    private int styleNow = 1;
+
+    /** Gaya panel notifikasi: -1 = ikut panel sistem. */
+    private int notifStyle() {
+        int n = s.prefs.getInt(Prefs.NOTIF_STYLE, -1);
+        return n < 0 ? s.prefs.getInt(Prefs.PANEL_STYLE, 1) : n;
+    }
+
+    private boolean clay() { return styleNow == 3; }
 
     private int ink() { return clay() ? BentoViews.CLAY_INK : Color.WHITE; }
 
@@ -3234,6 +3244,7 @@ final class Panels {
     void openNotifications() {
         if (open == SHADE) return;
         bnCount = null; // ditetapkan semula oleh gaya Bento
+        styleNow = notifStyle();
         bd = new LiquidGlass.Backdrop();
         LiquidGlass.current = bd;
         dark = Ui.darkGlass(s);
@@ -3251,7 +3262,7 @@ final class Panels {
         col.setOnClickListener(v -> close());
         sv.addView(col, new ScrollView.LayoutParams(-1, -2));
 
-        if (s.prefs.getInt(Prefs.PANEL_STYLE, 1) >= 2) {
+        if (notifStyle() >= 2) {
             openBentoNotifications(col, sv, w);
             return;
         }

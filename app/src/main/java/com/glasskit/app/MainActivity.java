@@ -514,6 +514,9 @@ public class MainActivity extends Activity {
         label(pan, R.string.panel_style);
         segmented(pan, new int[]{R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
                 prefs.getInt(Prefs.PANEL_STYLE, 1), i -> prefs.edit().putInt(Prefs.PANEL_STYLE, i).apply());
+        label(pan, R.string.notif_style);
+        choiceChips(pan, new int[]{-1, 0, 2, 3}, new int[]{R.string.follow_system_panel, R.string.panel_classic, R.string.panel_bento, R.string.panel_clay},
+                prefs.getInt(Prefs.NOTIF_STYLE, -1), i -> prefs.edit().putInt(Prefs.NOTIF_STYLE, i).apply());
         note(pan, getString(R.string.panel_style_note));
         note(pan, getString(R.string.panels_hint));
         LinearLayout pr = new LinearLayout(this);
