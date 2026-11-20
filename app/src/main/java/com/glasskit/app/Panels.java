@@ -3851,14 +3851,115 @@ final class Panels {
         mid.addView(a);
         mid.addView(b);
         r.addView(mid, new LinearLayout.LayoutParams(0, -2, 1f));
+        LinearLayout side = new LinearLayout(s);
+        side.setOrientation(LinearLayout.VERTICAL);
+        side.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         TextView tm = Ui.line(s, 11, 500, inkSoft());
         tm.setText(ago(x.getPostTime()));
-        r.addView(tm);
-        r.setOnClickListener(v -> openApp(x, n));
+        side.addView(tm);
+        final TextView chev = Ui.line(s, 13, 700, inkSoft());
+        chev.setText("⌄");
+        chev.setGravity(Gravity.END);
+        side.addView(chev);
+        r.addView(side);
         r.setBackground(new android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(Color.argb(50, 255, 255, 255)), null, null));
-        swipeToDismiss(r, x);
-        return r;
+
+        // ---- kembang: baca penuh, gambar, butang tindakan (sama seperti kad Classic) ----
+        final LinearLayout wrap = new LinearLayout(s);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.addView(r, new LinearLayout.LayoutParams(-1, -2));
+        final LinearLayout exp = new LinearLayout(s);
+        exp.setOrientation(LinearLayout.VERTICAL);
+        exp.setPadding(dp(58), 0, dp(14), dp(12));
+        exp.setVisibility(View.GONE);
+        CharSequence full = ex == null ? null : ex.getCharSequence(Notification.EXTRA_BIG_TEXT);
+        StringBuilder msgs = new StringBuilder();
+        try {
+            android.os.Parcelable[] arr = ex == null ? null : ex.getParcelableArray(Notification.EXTRA_MESSAGES);
+            if (arr != null) for (int i = Math.max(0, arr.length - 6); i < arr.length; i++) {
+                if (!(arr[i] instanceof android.os.Bundle)) continue;
+                android.os.Bundle mb = (android.os.Bundle) arr[i];
+                CharSequence who = mb.getCharSequence("sender");
+                CharSequence txt = mb.getCharSequence("text");
+                if (txt == null) continue;
+                if (msgs.length() > 0) msgs.append('\n');
+                if (!android.text.TextUtils.isEmpty(who)) msgs.append(who).append(": ");
+                msgs.append(txt);
+            }
+        } catch (Exception ignored) {
+        }
+        TextView ft = Ui.line(s, 13, 500, ink());
+        ft.setText(msgs.length() > 0 ? msgs : !android.text.TextUtils.isEmpty(full) ? full : body);
+        ft.setSingleLine(false);
+        ft.setMaxLines(30);
+        ft.setLineSpacing(dp(2), 1f);
+        exp.addView(ft);
+        android.graphics.Bitmap pic = null;
+        try {
+            if (ex != null) {
+                Object po = ex.get(Notification.EXTRA_PICTURE);
+                if (po instanceof android.graphics.Bitmap) pic = (android.graphics.Bitmap) po;
+                if (pic == null && android.os.Build.VERSION.SDK_INT >= 31) {
+                    Object pi = ex.get(Notification.EXTRA_PICTURE_ICON);
+                    if (pi instanceof android.graphics.drawable.Icon) {
+                        android.graphics.drawable.Drawable dd = ((android.graphics.drawable.Icon) pi).loadDrawable(s);
+                        if (dd instanceof android.graphics.drawable.BitmapDrawable) pic = ((android.graphics.drawable.BitmapDrawable) dd).getBitmap();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (pic != null) {
+            ImageView iv = new ImageView(s);
+            iv.setImageBitmap(pic);
+            iv.setAdjustViewBounds(true);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            iv.setClipToOutline(true);
+            iv.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(14)); }
+            });
+            LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(-1, -2);
+            il.topMargin = dp(8);
+            exp.addView(iv, il);
+            iv.setMaxHeight(dp(260));
+        }
+        LinearLayout acts = new LinearLayout(s);
+        View open = themedChip(s.getString(R.string.notif_open), v -> openApp(x, n));
+        acts.addView(open, new LinearLayout.LayoutParams(-2, dp(36)));
+        if (n.actions != null) for (Notification.Action a2 : n.actions) {
+            if (a2 == null || a2.title == null || a2.actionIntent == null) continue;
+            if (a2.getRemoteInputs() != null && a2.getRemoteInputs().length > 0) continue; // balas: buka app
+            final Notification.Action act = a2;
+            View b2 = themedChip(String.valueOf(a2.title), v -> {
+                try { act.actionIntent.send(); } catch (Exception ignored) {}
+                Haptics.tap(s);
+            });
+            LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-2, dp(36));
+            al.leftMargin = dp(6);
+            acts.addView(b2, al);
+            if (acts.getChildCount() >= 3) break;
+        }
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(s);
+        hs.setHorizontalScrollBarEnabled(false);
+        hs.addView(acts);
+        LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, -2);
+        hl.topMargin = dp(10);
+        exp.addView(hs, hl);
+        wrap.addView(exp, new LinearLayout.LayoutParams(-1, -2));
+
+        r.setOnClickListener(v -> {
+            boolean show = exp.getVisibility() != View.VISIBLE;
+            if (wrap.getParent() instanceof ViewGroup)
+                android.transition.TransitionManager.beginDelayedTransition((ViewGroup) wrap.getParent().getParent() instanceof ViewGroup
+                        ? (ViewGroup) wrap.getParent().getParent() : (ViewGroup) wrap.getParent());
+            exp.setVisibility(show ? View.VISIBLE : View.GONE);
+            chev.animate().rotation(show ? 180 : 0).setDuration(220).start();
+            Haptics.tick(s);
+        });
+        swipeToDismiss(wrap, x);
+        return wrap;
     }
 
     private String ago(long t) {

@@ -35,6 +35,8 @@ final class GlassEngine {
     }
 
     static Theme cur = new Theme();
+    static int skin;              // 0/1 kaca, 2 Bento, 3 tanah liat (diset oleh GlassWidget.draw)
+    static Context skinCtx;
 
     static int appearance(Context c) { return Prefs.get(c).getInt(Prefs.W_APPEAR, 2); }
 
@@ -131,6 +133,15 @@ final class GlassEngine {
     }
 
     static void card(Canvas c, RectF r, Theme t, float d, boolean shadow) {
+        // gaya widget: kad Bento / tanah liat menggantikan kaca (termasuk jubin kecil widget Bento)
+        if (skin == 3 && skinCtx != null) {
+            GlassWidget.clayCard(skinCtx, c, r);
+            return;
+        }
+        if (skin == 2) {
+            GlassWidget.bentoCard(c, r, d);
+            return;
+        }
         float rad = Math.min(t.radiusDp * d, Math.min(r.width(), r.height()) / 2f);
         Path shape = new Path();
         shape.addRoundRect(r, rad, rad, Path.Direction.CW);

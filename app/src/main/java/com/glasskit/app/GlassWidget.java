@@ -102,7 +102,28 @@ public abstract class GlassWidget extends AppWidgetProvider {
         Canvas cv = new Canvas(bmp);
         GlassEngine.Theme t = GlassEngine.theme(c);
         tune(c, t);
+        int ws = wStyle(c);
+        if (ws == 3) {
+            // tanah liat: palet dari wallpaper + mod gelap/terang
+            BentoViews.palette(c);
+            t.primary = BentoViews.CLAY_INK;
+            t.secondary = (BentoViews.CLAY_INK & 0x00FFFFFF) | 0xC0000000;
+            t.muted = BentoViews.CLAY_SOFT;
+            t.accent = BentoViews.CLAY_ACCENT;
+            t.hairline = (BentoViews.CLAY_SOFT & 0x00FFFFFF) | 0x40000000;
+            t.chip = (BentoViews.CLAY_ACCENT & 0x00FFFFFF) | 0x50000000;
+            t.dark = BentoViews.clayDark;
+        } else if (ws == 2) {
+            t.primary = Color.WHITE;
+            t.secondary = Color.argb(200, 255, 255, 255);
+            t.muted = Color.argb(150, 255, 255, 255);
+            t.hairline = Color.argb(40, 255, 255, 255);
+            t.chip = Color.argb(36, 255, 255, 255);
+            t.dark = true;
+        }
         GlassEngine.cur = t;
+        GlassEngine.skin = ws;
+        GlassEngine.skinCtx = c.getApplicationContext();
         float m = GlassEngine.shadowPad(d);
         RectF card = new RectF(m, m, w - m, h - m);
         if (bare()) {
@@ -127,6 +148,45 @@ public abstract class GlassWidget extends AppWidgetProvider {
             CrashLog.write(c, e);
         }
         return bmp;
+    }
+
+    /** Gaya widget: ikut tetapan, atau ikut gaya panel sistem (0/1 = kaca, 2 = Bento, 3 = Tanah liat). */
+    static int wStyle(Context c) {
+        android.content.SharedPreferences p = Prefs.get(c);
+        int s = p.getInt(Prefs.W_STYLE, -1);
+        if (s < 0) s = p.getInt(Prefs.PANEL_STYLE, 1);
+        return s;
+    }
+
+    /** Kad tanah liat: badan lembut timbul, bayang lembut, kilauan dalam. */
+    static void clayCard(Context c, Canvas cv, RectF r) {
+        BentoViews.Clay cd = new BentoViews.Clay(c, BentoViews.CLAY_BASE, 26, false);
+        cd.setBounds(Math.round(r.left) - Ui.dp(c, 4), Math.round(r.top) - Ui.dp(c, 4), Math.round(r.right) + Ui.dp(c, 4), Math.round(r.bottom) + Ui.dp(c, 4));
+        cd.draw(cv);
+    }
+
+    /** Kad Bento: gelap dengan cahaya warna lembut di sudut dan tepi halus. */
+    static void bentoCard(Canvas cv, RectF r, float d) {
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        float rad = 24 * d;
+        p.setColor(0xF014131C);
+        cv.drawRoundRect(r, rad, rad, p);
+        cv.save();
+        android.graphics.Path clip = new android.graphics.Path();
+        clip.addRoundRect(r, rad, rad, android.graphics.Path.Direction.CW);
+        cv.clipPath(clip);
+        p.setShader(new android.graphics.RadialGradient(r.left + r.width() * 0.15f, r.top + r.height() * 0.1f, Math.max(r.width(), r.height()) * 0.7f,
+                Color.argb(120, 58, 74, 107), Color.argb(0, 58, 74, 107), android.graphics.Shader.TileMode.CLAMP));
+        cv.drawRect(r, p);
+        p.setShader(new android.graphics.RadialGradient(r.right - r.width() * 0.1f, r.bottom - r.height() * 0.1f, Math.max(r.width(), r.height()) * 0.7f,
+                Color.argb(110, 90, 42, 68), Color.argb(0, 90, 42, 68), android.graphics.Shader.TileMode.CLAMP));
+        cv.drawRect(r, p);
+        cv.restore();
+        p.setShader(null);
+        p.setStyle(android.graphics.Paint.Style.STROKE);
+        p.setStrokeWidth(Math.max(1, d));
+        p.setColor(Color.argb(40, 255, 255, 255));
+        cv.drawRoundRect(r, rad, rad, p);
     }
 
     /** Tiada kad besar: widget melukis jubin sendiri. */

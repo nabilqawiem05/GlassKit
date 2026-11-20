@@ -691,4 +691,7 @@
     <string name="bento_count">%d notifikasi</string>
     <string name="notif_style">Gaya panel notifikasi</string>
     <string name="follow_system_panel">Sama dengan panel sistem</string>
+    <string name="notif_open">Buka</string>
+    <string name="w_style">Gaya widget</string>
+    <string name="w_style_glass">Kaca</string>
 </resources>

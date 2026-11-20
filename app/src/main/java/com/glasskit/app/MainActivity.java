@@ -513,7 +513,7 @@ public class MainActivity extends Activity {
         note(pan, getString(R.string.glass_mode_note));
         label(pan, R.string.panel_style);
         segmented(pan, new int[]{R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
-                prefs.getInt(Prefs.PANEL_STYLE, 1), i -> prefs.edit().putInt(Prefs.PANEL_STYLE, i).apply());
+                prefs.getInt(Prefs.PANEL_STYLE, 1), i -> { prefs.edit().putInt(Prefs.PANEL_STYLE, i).apply(); widgetsChanged(); });
         label(pan, R.string.notif_style);
         choiceChips(pan, new int[]{-1, 0, 2, 3}, new int[]{R.string.follow_system_panel, R.string.panel_classic, R.string.panel_bento, R.string.panel_clay},
                 prefs.getInt(Prefs.NOTIF_STYLE, -1), i -> prefs.edit().putInt(Prefs.NOTIF_STYLE, i).apply());
@@ -660,6 +660,9 @@ public class MainActivity extends Activity {
         label(wg, R.string.w_appearance);
         segmented(wg, new int[]{R.string.w_light, R.string.w_dark, R.string.glass_auto},
                 prefs.getInt(Prefs.W_APPEAR, 2), i -> { prefs.edit().putInt(Prefs.W_APPEAR, i).apply(); widgetsChanged(); });
+        label(wg, R.string.w_style);
+        choiceChips(wg, new int[]{-1, 0, 2, 3}, new int[]{R.string.follow_system_panel, R.string.w_style_glass, R.string.panel_bento, R.string.panel_clay},
+                prefs.getInt(Prefs.W_STYLE, -1), i -> { prefs.edit().putInt(Prefs.W_STYLE, i).apply(); widgetsChanged(); });
         label(wg, R.string.w_accent);
         segmented(wg, new int[]{R.string.w_acc_wall, R.string.w_acc_blue, R.string.w_acc_purple, R.string.w_acc_cyan},
                 prefs.getInt(Prefs.W_ACCENT, 0), i -> { prefs.edit().putInt(Prefs.W_ACCENT, i).apply(); widgetsChanged(); });

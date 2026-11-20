@@ -18,7 +18,8 @@ public final class Prefs {
     public static final String PILL_NOTI = "pillNoti";
     public static final String PANELS_ON = "panelsOn";
     public static final String GLASS_DARK = "glassDark";
-    public static final String W_APPEAR = "wAppear";   // widget: 0 cerah, 1 gelap, 2 auto
+    public static final String W_APPEAR = "wAppear";
+    public static final String W_STYLE = "wStyle";     // widget: -1 ikut panel, 0 kaca, 2 bento, 3 tanah liat   // widget: 0 cerah, 1 gelap, 2 auto
     public static final String W_ALPHA = "wAlpha";     // 0..100
     public static final String W_REFLECT = "wReflect"; // 0..100
     public static final String W_RADIUS = "wRadius";   // dp
