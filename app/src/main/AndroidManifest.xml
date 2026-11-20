@@ -302,6 +302,7 @@
         <activity
             android:name=".LauncherActivity"
             android:exported="true"
+            android:taskAffinity="com.glasskit.app.home"
             android:label="@string/l_name"
             android:launchMode="singleTask"
             android:stateNotNeeded="true"

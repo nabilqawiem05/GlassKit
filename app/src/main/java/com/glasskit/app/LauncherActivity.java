@@ -189,11 +189,11 @@ public class LauncherActivity extends Activity {
     };
 
     private final LauncherApps.Callback appsCb = new LauncherApps.Callback() {
-        @Override public void onPackageRemoved(String p, UserHandle u) { loadApps(); }
-        @Override public void onPackageAdded(String p, UserHandle u) { loadApps(); }
-        @Override public void onPackageChanged(String p, UserHandle u) { loadApps(); }
-        @Override public void onPackagesAvailable(String[] p, UserHandle u, boolean r) { loadApps(); }
-        @Override public void onPackagesUnavailable(String[] p, UserHandle u, boolean r) { loadApps(); }
+        @Override public void onPackageRemoved(String p, UserHandle u) { reload(); }
+        @Override public void onPackageAdded(String p, UserHandle u) { reload(); }
+        @Override public void onPackageChanged(String p, UserHandle u) { reload(); }
+        @Override public void onPackagesAvailable(String[] p, UserHandle u, boolean r) { reload(); }
+        @Override public void onPackagesUnavailable(String[] p, UserHandle u, boolean r) { reload(); }
     };
 
     /** Gaya launcher: tetapan sendiri, atau ikut gaya panel sistem (tema GlassKit). */
@@ -205,6 +205,14 @@ public class LauncherActivity extends Activity {
     }
 
     // ======================================================= data app
+
+    private final Runnable reloadR = this::loadApps;
+
+    /** Banyak perubahan pakej serentak (kemas kini Play Store): muat semula sekali sahaja. */
+    private void reload() {
+        h.removeCallbacks(reloadR);
+        h.postDelayed(reloadR, 600);
+    }
 
     private void loadApps() {
         final int px = getResources().getDisplayMetrics().densityDpi;
@@ -927,10 +935,8 @@ public class LauncherActivity extends Activity {
                     downY = e.getY();
                     dragging = false;
                     if (anim != null && anim.isRunning()) {
-                        anim.cancel();
-                        startPos = pos;
-                        dragging = true;
-                        return true;
+                        // ketik semasa halaman masih bergerak: terus ke halaman sasaran, ketikan tetap sampai ke ikon
+                        anim.end();
                     }
                     break;
                 case MotionEvent.ACTION_MOVE: {
@@ -939,6 +945,7 @@ public class LauncherActivity extends Activity {
                         dragging = true;
                         startPos = pos;
                         downX = e.getX();
+                        layers(true);
                         getParent().requestDisallowInterceptTouchEvent(true);
                     }
                     break;
@@ -967,6 +974,7 @@ public class LauncherActivity extends Activity {
                         dx = 0;
                     }
                     if (dragging) {
+                        layers(true);
                         float np = startPos - dx / w;
                         float max = getChildCount() - 1;
                         if (np < 0) np = np * 0.3f;
@@ -1005,9 +1013,19 @@ public class LauncherActivity extends Activity {
             vt.addMovement(e);
         }
 
+        private boolean layered;
+
+        private void layers(boolean on) {
+            if (layered == on) return;
+            layered = on;
+            for (int i = 0; i < getChildCount(); i++)
+                getChildAt(i).setLayerType(on ? LAYER_TYPE_HARDWARE : LAYER_TYPE_NONE, null);
+        }
+
         void snap(int target) {
             target = Math.max(0, Math.min(getChildCount() - 1, target));
             if (anim != null) anim.cancel();
+            layers(true);
             final int t = target;
             anim = android.animation.ValueAnimator.ofFloat(pos, target);
             anim.setDuration(theme == 3 ? 460 : theme == 1 ? 420 : 300);
@@ -1015,6 +1033,14 @@ public class LauncherActivity extends Activity {
             anim.addUpdateListener(a -> {
                 pos = (float) a.getAnimatedValue();
                 apply();
+            });
+            anim.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(android.animation.Animator a) {
+                    pos = t;
+                    apply();
+                    layers(false);
+                }
             });
             anim.start();
             if (t != cur) Haptics.tick(getContext());
@@ -1217,6 +1243,7 @@ public class LauncherActivity extends Activity {
     // ======================================================= laci app
 
     private void buildDrawer() {
+        cellCache.clear();
         drawer = new FrameLayout(this);
         drawer.setVisibility(View.GONE);
         drawer.setOnClickListener(v -> closeDrawer());
@@ -1275,7 +1302,10 @@ public class LauncherActivity extends Activity {
             @Override
             public View getView(int i, View cv, ViewGroup p) {
                 App a = shown.get(i);
+                View cached = cellCache.get(a.key);
+                if (cached != null && cached.getParent() == null) return cached;
                 View c = appCell(a, true, tile);
+                cellCache.put(a.key, c);
                 if (lightClay) ((TextView) ((LinearLayout) c).getChildAt(1)).setTextColor(uiInk());
                 if (lightClay) ((TextView) ((LinearLayout) c).getChildAt(1)).setShadowLayer(0, 0, 0, 0);
                 c.setOnClickListener(v -> launch(a, v));
@@ -1289,6 +1319,7 @@ public class LauncherActivity extends Activity {
     }
 
     private TextView calcView, sugTitle;
+    private final Map<String, View> cellCache = new HashMap<>();
 
     /** Carian: kosong = cadangan (app paling kerap dibuka); ada teks = padanan nama + kalkulator. */
     private void filter(String q) {
