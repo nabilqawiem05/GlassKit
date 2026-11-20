@@ -235,6 +235,21 @@ public class MainActivity extends Activity {
         tools = new ToolsPage(this, boxes[5]);
         selectTab(0);
 
+        // ---------- Tema GlassKit (launcher + status bar + panel + widget sekali gus) ----------
+        LinearLayout th = card(pHome, R.string.sec_theme, Icon.SUN, 0xFFBF5AF2);
+        TextView thd = Ui.text(this, 13, 500, TEXT2);
+        thd.setText(R.string.theme_desc);
+        thd.setPadding(0, dp(10), 0, dp(4));
+        th.addView(thd);
+        choiceChips(th, new int[]{0, 1, 2, 3}, new int[]{R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
+                prefs.getInt(Prefs.THEME, prefs.getInt(Prefs.PANEL_STYLE, 1)), this::applyTheme);
+        label(th, R.string.l_style);
+        choiceChips(th, new int[]{-1, 0, 1, 2, 3}, new int[]{R.string.follow_theme, R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
+                prefs.getInt(Prefs.L_STYLE, -1), i -> prefs.edit().putInt(Prefs.L_STYLE, i).apply());
+        addPair(th, button(null, getString(R.string.l_set_default), true, v -> {
+            try { startActivity(new Intent(android.provider.Settings.ACTION_HOME_SETTINGS)); } catch (Exception e) { toast(getString(R.string.l_set_default)); }
+        }), button(null, getString(R.string.l_open), false, v -> startActivity(new Intent(this, LauncherActivity.class))));
+
         // ---------- Kebenaran ----------
         LinearLayout perm = card(pHome, R.string.sec_perm, Icon.LOCK, 0xFF34C759);
         stShizuku = statusRow(perm, getString(R.string.perm_shizuku));
@@ -861,6 +876,17 @@ public class MainActivity extends Activity {
         t.setPadding(0, dp(10), 0, 0);
         parent.addView(t);
         return t;
+    }
+
+    /** Satu tema untuk semua: launcher, status bar, panel sistem, panel notifikasi dan widget. Setiap satu masih boleh ditukar sendiri. */
+    private void applyTheme(int t) {
+        int[] sbar = {5, 2, 3, 6}; // Classic → iPhone, Liquid → island, Bento → cip, Clay → tanah liat
+        prefs.edit().putInt(Prefs.THEME, t).putInt(Prefs.PANEL_STYLE, t).putInt(Prefs.NOTIF_STYLE, -1)
+                .putInt(Prefs.W_STYLE, -1).putInt(Prefs.L_STYLE, -1).putInt(Prefs.SBAR_STYLE, sbar[t]).apply();
+        if (t == 3) BentoViews.palette(this);
+        widgetsChanged();
+        toast(getString(R.string.theme_applied));
+        wh.postDelayed(this::recreate, 350);
     }
 
     /** Palet tanah liat berubah: kira semula dan segarkan bar status + widget. */

@@ -113,6 +113,13 @@ public abstract class GlassWidget extends AppWidgetProvider {
             t.hairline = (BentoViews.CLAY_SOFT & 0x00FFFFFF) | 0x40000000;
             t.chip = (BentoViews.CLAY_ACCENT & 0x00FFFFFF) | 0x50000000;
             t.dark = BentoViews.clayDark;
+        } else if (ws == 1) {
+            // Liquid island: monokrom, tiada warna aksen
+            t.primary = Color.WHITE;
+            t.secondary = Color.argb(205, 255, 255, 255);
+            t.muted = Color.argb(150, 255, 255, 255);
+            t.accent = 0xFFD1D1D6;
+            t.dark = true;
         } else if (ws == 2) {
             t.primary = Color.WHITE;
             t.secondary = Color.argb(200, 255, 255, 255);
