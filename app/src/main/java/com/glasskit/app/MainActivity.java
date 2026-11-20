@@ -514,6 +514,13 @@ public class MainActivity extends Activity {
         label(pan, R.string.panel_style);
         segmented(pan, new int[]{R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
                 prefs.getInt(Prefs.PANEL_STYLE, 1), i -> { prefs.edit().putInt(Prefs.PANEL_STYLE, i).apply(); widgetsChanged(); });
+        label(pan, R.string.clay_color);
+        choiceChips(pan, new int[]{-1, 258, 212, 22, 155, 335, 42}, new int[]{R.string.clay_c_wall, R.string.clay_c_lavender, R.string.clay_c_blue,
+                        R.string.clay_c_peach, R.string.clay_c_mint, R.string.clay_c_pink, R.string.clay_c_butter},
+                prefs.getInt(Prefs.CLAY_HUE, -1), i -> { prefs.edit().putInt(Prefs.CLAY_HUE, i).apply(); clayChanged(); });
+        label(pan, R.string.clay_tone);
+        segmented(pan, new int[]{R.string.clay_t_system, R.string.clay_t_light},
+                prefs.getInt(Prefs.CLAY_TONE, 0), i -> { prefs.edit().putInt(Prefs.CLAY_TONE, i).apply(); clayChanged(); });
         label(pan, R.string.notif_style);
         choiceChips(pan, new int[]{-1, 0, 2, 3}, new int[]{R.string.follow_system_panel, R.string.panel_classic, R.string.panel_bento, R.string.panel_clay},
                 prefs.getInt(Prefs.NOTIF_STYLE, -1), i -> prefs.edit().putInt(Prefs.NOTIF_STYLE, i).apply());
@@ -854,6 +861,13 @@ public class MainActivity extends Activity {
         t.setPadding(0, dp(10), 0, 0);
         parent.addView(t);
         return t;
+    }
+
+    /** Palet tanah liat berubah: kira semula dan segarkan bar status + widget. */
+    private void clayChanged() {
+        BentoViews.palette(this);
+        widgetsChanged();
+        if (PillService.inst != null) PillService.inst.updateStatusBar();
     }
 
     void label(LinearLayout parent, int res) {

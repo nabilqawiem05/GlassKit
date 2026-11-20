@@ -57,7 +57,11 @@ final class BentoViews {
         float[] h = new float[3];
         Color.colorToHSV(seed, h);
         float hue = h[0];
-        clayDark = (c.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+        android.content.SharedPreferences pr = Prefs.get(c);
+        int fixed = pr.getInt(Prefs.CLAY_HUE, -1);
+        if (fixed >= 0) hue = fixed;
+        clayDark = pr.getInt(Prefs.CLAY_TONE, 0) == 0
+                && (c.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
                 == android.content.res.Configuration.UI_MODE_NIGHT_YES;
         if (clayDark) {
             CLAY_PANEL = hsv(hue, 0.28f, 0.17f);

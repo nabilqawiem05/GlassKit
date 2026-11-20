@@ -700,4 +700,15 @@
     <string name="follow_system_panel">Same as system panel</string>
     <string name="w_style">Widget style</string>
     <string name="w_style_glass">Glass</string>
+    <string name="clay_color">Clay colour</string>
+    <string name="clay_c_wall">Wallpaper</string>
+    <string name="clay_c_lavender">Lavender</string>
+    <string name="clay_c_blue">Blue</string>
+    <string name="clay_c_peach">Peach</string>
+    <string name="clay_c_mint">Mint</string>
+    <string name="clay_c_pink">Pink</string>
+    <string name="clay_c_butter">Butter</string>
+    <string name="clay_tone">Clay brightness</string>
+    <string name="clay_t_system">Follow system</string>
+    <string name="clay_t_light">Always light</string>
 </resources>
