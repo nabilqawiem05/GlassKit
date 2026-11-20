@@ -60,9 +60,10 @@ final class BentoViews {
         android.content.SharedPreferences pr = Prefs.get(c);
         int fixed = pr.getInt(Prefs.CLAY_HUE, -1);
         if (fixed >= 0) hue = fixed;
-        clayDark = pr.getInt(Prefs.CLAY_TONE, 0) == 0
+        int ct = pr.getInt(Prefs.CLAY_TONE, 0); // 0 ikut sistem, 1 sentiasa terang, 2 sentiasa gelap
+        clayDark = ct == 2 || (ct == 0
                 && (c.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
-                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES);
         if (clayDark) {
             CLAY_PANEL = hsv(hue, 0.28f, 0.17f);
             CLAY_BASE = hsv(hue, 0.24f, 0.24f);

@@ -751,4 +751,8 @@
     <string name="cat_util">Utiliti</string>
     <string name="cat_google">Google</string>
     <string name="cat_other">Lain-lain</string>
+    <string name="theme_tone">Mod</string>
+    <string name="tone_light">Terang</string>
+    <string name="tone_dark">Gelap</string>
+    <string name="clay_t_dark">Sentiasa gelap</string>
 </resources>

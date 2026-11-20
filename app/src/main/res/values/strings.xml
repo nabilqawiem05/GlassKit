@@ -758,4 +758,8 @@
     <string name="cat_util">Utilities</string>
     <string name="cat_google">Google</string>
     <string name="cat_other">Others</string>
+    <string name="theme_tone">Mode</string>
+    <string name="tone_light">Light</string>
+    <string name="tone_dark">Dark</string>
+    <string name="clay_t_dark">Always dark</string>
 </resources>

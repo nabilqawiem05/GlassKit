@@ -94,6 +94,7 @@ public class LauncherActivity extends Activity {
     private int insetTop, insetBottom;
     private GlassWidget headerWidget;
     private boolean animatePending = true;
+    private String lastSig = "";
 
     private int dp(float v) { return Math.round(v * density); }
 
@@ -147,8 +148,11 @@ public class LauncherActivity extends Activity {
     protected void onResume() {
         super.onResume();
         int t = styleOf(this);
-        if (t != theme) {
+        if (t == 3) BentoViews.palette(this);
+        String sig = t + ":" + GlassEngine.isDark(this) + ":" + BentoViews.clayDark + ":" + BentoViews.CLAY_INK;
+        if (t != theme || !sig.equals(lastSig)) {
             theme = t;
+            lastSig = sig;
             build();
         }
         if (animatePending) {
@@ -365,27 +369,37 @@ public class LauncherActivity extends Activity {
 
     private int ink() { return theme == 3 && !BentoViews.clayDark ? BentoViews.CLAY_INK : Color.WHITE; }
 
+    /** Mod gelap / terang tema (Tema GlassKit → Mod). Clay ikut palet tanah liat. */
+    private boolean dk() { return theme == 3 ? BentoViews.clayDark : GlassEngine.isDark(this); }
+
+    /** Lapisan (carian, folder, kategori) berwarna terang → teks gelap. */
+    private boolean lightUi() { return !dk(); }
+
+    private int uiInk() { return theme == 3 ? BentoViews.CLAY_INK : dk() ? Color.WHITE : 0xFF1C1C1E; }
+
+    private int uiSoft() { return theme == 3 ? BentoViews.CLAY_SOFT : dk() ? Color.argb(170, 255, 255, 255) : 0xFF6B6B73; }
+
     private Drawable tileBg(boolean folder) {
         switch (theme) {
             case 0: {
                 GradientDrawable g = new GradientDrawable();
                 g.setCornerRadius(dp(16));
-                g.setColor(Color.argb(60, 255, 255, 255));
+                g.setColor(dk() ? Color.argb(60, 255, 255, 255) : Color.argb(150, 255, 255, 255));
                 g.setStroke(Math.max(1, dp(0.8f)), Color.argb(90, 255, 255, 255));
                 return folder ? g : null;
             }
             case 1: {
                 GradientDrawable g = new GradientDrawable();
                 g.setShape(GradientDrawable.OVAL);
-                g.setColor(Color.argb(folder ? 200 : 0, 18, 18, 22));
-                g.setStroke(Math.max(1, dp(1)), Color.argb(110, 255, 255, 255));
+                g.setColor(dk() ? Color.argb(folder ? 200 : 0, 18, 18, 22) : Color.argb(folder ? 220 : 0, 245, 245, 247));
+                g.setStroke(Math.max(1, dp(1)), dk() ? Color.argb(110, 255, 255, 255) : Color.argb(60, 0, 0, 0));
                 return g;
             }
             case 2: {
                 GradientDrawable g = new GradientDrawable();
                 g.setCornerRadius(dp(18));
-                g.setColor(0xE61F1D29);
-                g.setStroke(Math.max(1, dp(0.8f)), Color.argb(40, 255, 255, 255));
+                g.setColor(dk() ? 0xE61F1D29 : 0xE6F4F2FA);
+                g.setStroke(Math.max(1, dp(0.8f)), dk() ? Color.argb(40, 255, 255, 255) : Color.argb(30, 0, 0, 0));
                 return g;
             }
             default:
@@ -396,8 +410,8 @@ public class LauncherActivity extends Activity {
     /** Warna logo ikut tema. */
     private int glyphColor(String key) {
         switch (theme) {
-            case 1: return 0xFFE5E5EA;
-            case 2: return ThemedIcons.BENTO_FG[ThemedIcons.bentoIdx(key)];
+            case 1: return dk() ? 0xFFE5E5EA : 0xFF1C1C1E;
+            case 2: return dk() ? ThemedIcons.BENTO_FG[ThemedIcons.bentoIdx(key)] : ThemedIcons.BENTO_BG[ThemedIcons.bentoIdx(key)];
             case 3: return BentoViews.clayDark ? BentoViews.CLAY_ACCENT : BentoViews.CLAY_INK;
             default: return 0;
         }
@@ -414,14 +428,14 @@ public class LauncherActivity extends Activity {
             case 1: {
                 GradientDrawable g = new GradientDrawable();
                 g.setShape(GradientDrawable.OVAL);
-                g.setColor(0xFF1C1C22);
-                g.setStroke(Math.max(1, dp(1)), Color.argb(120, 255, 255, 255));
+                g.setColor(dk() ? 0xFF1C1C22 : 0xFFF2F2F7);
+                g.setStroke(Math.max(1, dp(1)), dk() ? Color.argb(120, 255, 255, 255) : Color.argb(70, 0, 0, 0));
                 return g;
             }
             case 2: {
                 GradientDrawable g = new GradientDrawable();
                 g.setCornerRadius(dp(16));
-                g.setColor(ThemedIcons.BENTO_BG[ThemedIcons.bentoIdx(key)]);
+                g.setColor(dk() ? ThemedIcons.BENTO_BG[ThemedIcons.bentoIdx(key)] : ThemedIcons.BENTO_FG[ThemedIcons.bentoIdx(key)]);
                 g.setStroke(Math.max(1, dp(0.8f)), Color.argb(30, 255, 255, 255));
                 return g;
             }
@@ -543,7 +557,7 @@ public class LauncherActivity extends Activity {
     private void build() {
         if (theme < 0) theme = styleOf(this);
         if (theme == 3) BentoViews.palette(this);
-        ThemedIcons.reset(theme + ":" + BentoViews.CLAY_INK + ":" + BentoViews.clayDark);
+        ThemedIcons.reset(theme + ":" + BentoViews.CLAY_INK + ":" + BentoViews.clayDark + ":" + GlassEngine.isDark(this));
         int keepPage = pager != null ? pager.cur : 0;
         root.removeAllViews();
         grids.clear();
@@ -705,7 +719,8 @@ public class LauncherActivity extends Activity {
         GridLayout g = new GridLayout(this);
         g.setColumnCount(2);
         int box = (getResources().getDisplayMetrics().widthPixels - dp(32) - dp(16)) / 2;
-        int ic = (box - dp(30)) / 2;
+        int ic = Math.min((box - dp(30)) / 2, dp(50)); // saiz sederhana
+        int libPad = Math.max(dp(9), (box - 2 * (ic + dp(6))) / 2);
         for (String cat : AppCats.ORDER) {
             List<App> l = by.get(cat);
             if (l == null || l.isEmpty()) continue;
@@ -713,7 +728,7 @@ public class LauncherActivity extends Activity {
             cell.setOrientation(LinearLayout.VERTICAL);
             GridLayout in = new GridLayout(this);
             in.setColumnCount(2);
-            in.setPadding(dp(9), dp(9), dp(9), dp(9));
+            in.setPadding(libPad, dp(12), libPad, dp(12));
             in.setBackground(libBoxBg());
             boolean more = l.size() > 4;
             int show = more ? 3 : l.size();
@@ -773,36 +788,18 @@ public class LauncherActivity extends Activity {
 
     private Drawable libBoxBg() {
         switch (theme) {
-            case 0: return Ui.glassStyled(this, 26, Ui.darkGlass(this));
-            case 1: {
-                GradientDrawable g = new GradientDrawable();
-                g.setCornerRadius(dp(30));
-                g.setColor(Color.argb(190, 14, 14, 18));
-                g.setStroke(Math.max(1, dp(1)), Color.argb(90, 255, 255, 255));
-                return g;
-            }
-            case 2: {
-                GradientDrawable g = new GradientDrawable();
-                g.setCornerRadius(dp(24));
-                g.setColor(0xF014131C);
-                g.setStroke(Math.max(1, dp(0.8f)), Color.argb(40, 255, 255, 255));
-                return g;
-            }
+            case 0: return Ui.glassStyled(this, 26, dk());
+            case 1: return panelFill(30, Color.argb(190, 14, 14, 18), Color.argb(210, 248, 248, 250), true);
+            case 2: return panelFill(24, 0xF014131C, 0xF0F4F2FA, true);
             default: return new BentoViews.Clay(this, BentoViews.CLAY_PANEL, 28, false);
         }
     }
 
     private Drawable searchBg() {
         if (theme == 3) return new BentoViews.Clay(this, BentoViews.CLAY_BASE, 24, false);
-        if (theme == 2) return Ui.round(0xFF262433, dp(24));
-        if (theme == 1) {
-            GradientDrawable g = new GradientDrawable();
-            g.setCornerRadius(dp(24));
-            g.setColor(Color.argb(200, 14, 14, 18));
-            g.setStroke(Math.max(1, dp(1)), Color.argb(90, 255, 255, 255));
-            return g;
-        }
-        return Ui.glassStyled(this, 24, Ui.darkGlass(this));
+        if (theme == 2) return panelFill(24, 0xFF262433, 0xFFE9E6F2, false);
+        if (theme == 1) return panelFill(24, Color.argb(200, 14, 14, 18), Color.argb(220, 248, 248, 250), true);
+        return Ui.glassStyled(this, 24, dk());
     }
 
     /** Senarai penuh satu kategori App Library. */
@@ -810,8 +807,8 @@ public class LauncherActivity extends Activity {
         folderLayer.removeAllViews();
         folderLayer.setBackgroundColor(Color.argb(110, 0, 0, 0));
         folderLayer.setOnClickListener(v -> closeFolder());
-        boolean lightClay = theme == 3 && !BentoViews.clayDark;
-        int fg = lightClay ? BentoViews.CLAY_INK : Color.WHITE;
+        boolean lightClay = lightUi();
+        int fg = lightClay ? uiInk() : Color.WHITE;
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(20), dp(18), dp(20), dp(18));
@@ -830,7 +827,7 @@ public class LauncherActivity extends Activity {
             View c = appCell(ap, true, tile);
             if (lightClay) {
                 TextView lt = (TextView) ((LinearLayout) c).getChildAt(1);
-                lt.setTextColor(BentoViews.CLAY_INK);
+                lt.setTextColor(uiInk());
                 lt.setShadowLayer(0, 0, 0, 0);
             }
             c.setOnClickListener(v -> { launch(ap, v); h.postDelayed(this::closeFolder, 400); });
@@ -1028,23 +1025,20 @@ public class LauncherActivity extends Activity {
 
     private int headerDp() { return theme == 2 ? 300 : theme == 1 ? 150 : 170; }
 
+    /** Latar gelap / terang untuk Liquid & Bento. */
+    private GradientDrawable panelFill(float radiusDp, int darkCol, int lightCol, boolean stroke) {
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(dp(radiusDp));
+        g.setColor(dk() ? darkCol : lightCol);
+        if (stroke) g.setStroke(Math.max(1, dp(0.8f)), dk() ? Color.argb(80, 255, 255, 255) : Color.argb(40, 0, 0, 0));
+        return g;
+    }
+
     private Drawable dockBg() {
         switch (theme) {
-            case 0: return Ui.glassStyled(this, 30, Ui.darkGlass(this));
-            case 1: {
-                GradientDrawable g = new GradientDrawable();
-                g.setCornerRadius(dp(34));
-                g.setColor(Color.argb(200, 14, 14, 18));
-                g.setStroke(Math.max(1, dp(1)), Color.argb(80, 255, 255, 255));
-                return g;
-            }
-            case 2: {
-                GradientDrawable g = new GradientDrawable();
-                g.setCornerRadius(dp(24));
-                g.setColor(0xF014131C);
-                g.setStroke(Math.max(1, dp(0.8f)), Color.argb(40, 255, 255, 255));
-                return g;
-            }
+            case 0: return Ui.glassStyled(this, 30, dk());
+            case 1: return panelFill(34, Color.argb(200, 14, 14, 18), Color.argb(215, 248, 248, 250), true);
+            case 2: return panelFill(24, 0xF014131C, 0xF0F4F2FA, true);
             default: return new BentoViews.Clay(this, BentoViews.CLAY_PANEL, 32, false);
         }
     }
@@ -1236,12 +1230,12 @@ public class LauncherActivity extends Activity {
         search.setSingleLine(true);
         search.setTextSize(16);
         search.setTypeface(Ui.font(500));
-        boolean lightClay = theme == 3 && !BentoViews.clayDark;
-        search.setTextColor(lightClay ? BentoViews.CLAY_INK : Color.WHITE);
-        search.setHintTextColor(lightClay ? BentoViews.CLAY_SOFT : Color.argb(150, 255, 255, 255));
+        boolean lightClay = lightUi();
+        search.setTextColor(lightClay ? uiInk() : Color.WHITE);
+        search.setHintTextColor(lightClay ? uiSoft() : Color.argb(150, 255, 255, 255));
         search.setPadding(dp(18), dp(12), dp(18), dp(12));
         search.setBackground(theme == 3 ? new BentoViews.Clay(this, BentoViews.CLAY_BASE, 24, false)
-                : Ui.round(theme == 2 ? 0xFF262433 : Color.argb(40, 255, 255, 255), dp(24)));
+                : searchBg());
         search.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
@@ -1254,15 +1248,15 @@ public class LauncherActivity extends Activity {
         LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
         sl.bottomMargin = dp(12);
         col.addView(search, sl);
-        calcView = Ui.text(this, 22, 700, lightClay ? BentoViews.CLAY_INK : Color.WHITE);
+        calcView = Ui.text(this, 22, 700, lightClay ? uiInk() : Color.WHITE);
         calcView.setPadding(dp(18), dp(14), dp(18), dp(14));
         calcView.setBackground(theme == 3 ? new BentoViews.Clay(this, BentoViews.CLAY_BASE, 22, false)
-                : Ui.round(theme == 2 ? 0xFF262433 : Color.argb(40, 255, 255, 255), dp(22)));
+                : searchBg());
         calcView.setVisibility(View.GONE);
         LinearLayout.LayoutParams cl2 = new LinearLayout.LayoutParams(-1, -2);
         cl2.bottomMargin = dp(12);
         col.addView(calcView, cl2);
-        sugTitle = Ui.text(this, 13, 600, lightClay ? BentoViews.CLAY_SOFT : Color.argb(170, 255, 255, 255));
+        sugTitle = Ui.text(this, 13, 600, lightClay ? uiSoft() : Color.argb(170, 255, 255, 255));
         sugTitle.setPadding(dp(6), 0, 0, dp(8));
         col.addView(sugTitle);
 
@@ -1282,7 +1276,7 @@ public class LauncherActivity extends Activity {
             public View getView(int i, View cv, ViewGroup p) {
                 App a = shown.get(i);
                 View c = appCell(a, true, tile);
-                if (lightClay) ((TextView) ((LinearLayout) c).getChildAt(1)).setTextColor(BentoViews.CLAY_INK);
+                if (lightClay) ((TextView) ((LinearLayout) c).getChildAt(1)).setTextColor(uiInk());
                 if (lightClay) ((TextView) ((LinearLayout) c).getChildAt(1)).setShadowLayer(0, 0, 0, 0);
                 c.setOnClickListener(v -> launch(a, v));
                 c.setOnLongClickListener(v -> { drawerMenu(a, v); return true; });
@@ -1324,9 +1318,9 @@ public class LauncherActivity extends Activity {
 
     private int drawerColor() {
         switch (theme) {
-            case 0: return Color.argb(165, 12, 14, 22);
-            case 1: return Color.argb(230, 0, 0, 0);
-            case 2: return 0xF514131C;
+            case 0: return dk() ? Color.argb(165, 12, 14, 22) : Color.argb(185, 242, 242, 247);
+            case 1: return dk() ? Color.argb(230, 0, 0, 0) : Color.argb(235, 246, 246, 248);
+            case 2: return dk() ? 0xF514131C : 0xF5F4F2FA;
             default: return (BentoViews.CLAY_PANEL & 0x00FFFFFF) | 0xF5000000;
         }
     }
@@ -1403,21 +1397,9 @@ public class LauncherActivity extends Activity {
 
     private Drawable folderCardBg() {
         switch (theme) {
-            case 0: return Ui.glassStyled(this, 32, true);
-            case 1: {
-                GradientDrawable g = new GradientDrawable();
-                g.setCornerRadius(dp(36));
-                g.setColor(Color.argb(235, 12, 12, 16));
-                g.setStroke(Math.max(1, dp(1)), Color.argb(90, 255, 255, 255));
-                return g;
-            }
-            case 2: {
-                GradientDrawable g = new GradientDrawable();
-                g.setCornerRadius(dp(28));
-                g.setColor(0xFA14131C);
-                g.setStroke(Math.max(1, dp(0.8f)), Color.argb(45, 255, 255, 255));
-                return g;
-            }
+            case 0: return Ui.glassStyled(this, 32, dk());
+            case 1: return panelFill(36, Color.argb(235, 12, 12, 16), Color.argb(240, 248, 248, 250), true);
+            case 2: return panelFill(28, 0xFA14131C, 0xFAF4F2FA, true);
             default: return new BentoViews.Clay(this, BentoViews.CLAY_PANEL, 34, false);
         }
     }
@@ -1429,8 +1411,8 @@ public class LauncherActivity extends Activity {
         folderLayer.removeAllViews();
         folderLayer.setBackgroundColor(Color.argb(110, 0, 0, 0));
         folderLayer.setOnClickListener(v -> closeFolder());
-        boolean lightClay = theme == 3 && !BentoViews.clayDark;
-        int fg = lightClay ? BentoViews.CLAY_INK : Color.WHITE;
+        boolean lightClay = lightUi();
+        int fg = lightClay ? uiInk() : Color.WHITE;
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -1467,7 +1449,7 @@ public class LauncherActivity extends Activity {
             View c = appCell(ap, true, tile);
             if (lightClay) {
                 TextView t = (TextView) ((LinearLayout) c).getChildAt(1);
-                t.setTextColor(BentoViews.CLAY_INK);
+                t.setTextColor(uiInk());
                 t.setShadowLayer(0, 0, 0, 0);
             }
             final String key = ap.key;
@@ -1501,7 +1483,7 @@ public class LauncherActivity extends Activity {
         add.setGravity(Gravity.CENTER);
         add.setPadding(dp(14), dp(12), dp(14), dp(12));
         add.setBackground(theme == 3 ? new BentoViews.Clay(this, BentoViews.CLAY_BASE, 22, false)
-                : Ui.round(Color.argb(theme == 2 ? 255 : 40, theme == 2 ? 0x26 : 255, theme == 2 ? 0x24 : 255, theme == 2 ? 0x33 : 255), dp(22)));
+                : searchBg());
         add.setOnClickListener(v -> pickApps(fo.optJSONArray("a"), sel -> { setFolderApps(idx, sel); openFolder(idx, null); }));
         Ui.press(add);
         LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, -2);

@@ -243,6 +243,14 @@ public class MainActivity extends Activity {
         th.addView(thd);
         choiceChips(th, new int[]{0, 1, 2, 3}, new int[]{R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
                 prefs.getInt(Prefs.THEME, prefs.getInt(Prefs.PANEL_STYLE, 1)), this::applyTheme);
+        label(th, R.string.theme_tone);
+        segmented(th, new int[]{R.string.clay_t_system, R.string.tone_light, R.string.tone_dark},
+                prefs.getInt(Prefs.THEME_TONE, 0), i -> {
+                    // satu mod untuk launcher, widget dan tanah liat
+                    prefs.edit().putInt(Prefs.THEME_TONE, i).putInt(Prefs.W_APPEAR, i == 0 ? 2 : i == 1 ? 0 : 1)
+                            .putInt(Prefs.CLAY_TONE, i).apply();
+                    clayChanged();
+                });
         label(th, R.string.l_style);
         choiceChips(th, new int[]{-1, 0, 1, 2, 3}, new int[]{R.string.follow_theme, R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
                 prefs.getInt(Prefs.L_STYLE, -1), i -> prefs.edit().putInt(Prefs.L_STYLE, i).apply());
@@ -536,7 +544,7 @@ public class MainActivity extends Activity {
                         R.string.clay_c_peach, R.string.clay_c_mint, R.string.clay_c_pink, R.string.clay_c_butter},
                 prefs.getInt(Prefs.CLAY_HUE, -1), i -> { prefs.edit().putInt(Prefs.CLAY_HUE, i).apply(); clayChanged(); });
         label(pan, R.string.clay_tone);
-        segmented(pan, new int[]{R.string.clay_t_system, R.string.clay_t_light},
+        segmented(pan, new int[]{R.string.clay_t_system, R.string.clay_t_light, R.string.clay_t_dark},
                 prefs.getInt(Prefs.CLAY_TONE, 0), i -> { prefs.edit().putInt(Prefs.CLAY_TONE, i).apply(); clayChanged(); });
         label(pan, R.string.notif_style);
         choiceChips(pan, new int[]{-1, 0, 2, 3}, new int[]{R.string.follow_system_panel, R.string.panel_classic, R.string.panel_bento, R.string.panel_clay},

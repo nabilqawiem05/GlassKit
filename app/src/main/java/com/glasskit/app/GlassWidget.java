@@ -114,19 +114,32 @@ public abstract class GlassWidget extends AppWidgetProvider {
             t.chip = (BentoViews.CLAY_ACCENT & 0x00FFFFFF) | 0x50000000;
             t.dark = BentoViews.clayDark;
         } else if (ws == 1) {
-            // Liquid island: monokrom, tiada warna aksen
-            t.primary = Color.WHITE;
-            t.secondary = Color.argb(205, 255, 255, 255);
-            t.muted = Color.argb(150, 255, 255, 255);
-            t.accent = 0xFFD1D1D6;
-            t.dark = true;
+            // Liquid island: monokrom, tiada warna aksen (gelap / terang ikut mod)
+            if (t.dark) {
+                t.primary = Color.WHITE;
+                t.secondary = Color.argb(205, 255, 255, 255);
+                t.muted = Color.argb(150, 255, 255, 255);
+                t.accent = 0xFFD1D1D6;
+            } else {
+                t.primary = 0xFF111114;
+                t.secondary = Color.argb(200, 17, 17, 20);
+                t.muted = Color.argb(140, 17, 17, 20);
+                t.accent = 0xFF3A3A3C;
+            }
         } else if (ws == 2) {
-            t.primary = Color.WHITE;
-            t.secondary = Color.argb(200, 255, 255, 255);
-            t.muted = Color.argb(150, 255, 255, 255);
-            t.hairline = Color.argb(40, 255, 255, 255);
-            t.chip = Color.argb(36, 255, 255, 255);
-            t.dark = true;
+            if (t.dark) {
+                t.primary = Color.WHITE;
+                t.secondary = Color.argb(200, 255, 255, 255);
+                t.muted = Color.argb(150, 255, 255, 255);
+                t.hairline = Color.argb(40, 255, 255, 255);
+                t.chip = Color.argb(36, 255, 255, 255);
+            } else {
+                t.primary = 0xFF1C1B22;
+                t.secondary = Color.argb(200, 28, 27, 34);
+                t.muted = Color.argb(140, 28, 27, 34);
+                t.hairline = Color.argb(30, 0, 0, 0);
+                t.chip = Color.argb(20, 0, 0, 0);
+            }
         }
         GlassEngine.cur = t;
         GlassEngine.skin = ws;
@@ -176,23 +189,24 @@ public abstract class GlassWidget extends AppWidgetProvider {
     static void bentoCard(Canvas cv, RectF r, float d) {
         android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
         float rad = 24 * d;
-        p.setColor(0xF014131C);
+        boolean dk = GlassEngine.cur == null || GlassEngine.cur.dark;
+        p.setColor(dk ? 0xF014131C : 0xF2F6F4FB);
         cv.drawRoundRect(r, rad, rad, p);
         cv.save();
         android.graphics.Path clip = new android.graphics.Path();
         clip.addRoundRect(r, rad, rad, android.graphics.Path.Direction.CW);
         cv.clipPath(clip);
         p.setShader(new android.graphics.RadialGradient(r.left + r.width() * 0.15f, r.top + r.height() * 0.1f, Math.max(r.width(), r.height()) * 0.7f,
-                Color.argb(120, 58, 74, 107), Color.argb(0, 58, 74, 107), android.graphics.Shader.TileMode.CLAMP));
+                dk ? Color.argb(120, 58, 74, 107) : Color.argb(110, 181, 212, 244), Color.argb(0, 58, 74, 107), android.graphics.Shader.TileMode.CLAMP));
         cv.drawRect(r, p);
         p.setShader(new android.graphics.RadialGradient(r.right - r.width() * 0.1f, r.bottom - r.height() * 0.1f, Math.max(r.width(), r.height()) * 0.7f,
-                Color.argb(110, 90, 42, 68), Color.argb(0, 90, 42, 68), android.graphics.Shader.TileMode.CLAMP));
+                dk ? Color.argb(110, 90, 42, 68) : Color.argb(100, 244, 192, 209), Color.argb(0, 90, 42, 68), android.graphics.Shader.TileMode.CLAMP));
         cv.drawRect(r, p);
         cv.restore();
         p.setShader(null);
         p.setStyle(android.graphics.Paint.Style.STROKE);
         p.setStrokeWidth(Math.max(1, d));
-        p.setColor(Color.argb(40, 255, 255, 255));
+        p.setColor(dk ? Color.argb(40, 255, 255, 255) : Color.argb(28, 0, 0, 0));
         cv.drawRoundRect(r, rad, rad, p);
     }
 
