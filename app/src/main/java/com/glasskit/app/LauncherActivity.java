@@ -1195,7 +1195,6 @@ public class LauncherActivity extends Activity {
             boolean onLib = pager != null && pager.cur == pager.getChildCount() - 1;
             if (vy > 0 && (!onLib || libScroll == null || !libScroll.canScrollVertically(-1))) { openDrawer(); return true; }
             return false;
-            return false;
         }
     });
 
