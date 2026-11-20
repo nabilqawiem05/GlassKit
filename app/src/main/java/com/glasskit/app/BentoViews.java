@@ -320,25 +320,25 @@ final class BentoViews {
     }
 
     /** Muka teks dengan warna sendiri (cth. putih atas latar berwarna). */
-    static LinearLayout face(Context c, String small, String big, String sub, int col) {
+    static LinearLayout face(Context c, String small, String big, String sub, int tc) {
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setGravity(Gravity.BOTTOM);
         col.setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 12));
         if (small != null) {
-            TextView s = Ui.line(c, 11, 500, (col & 0x00FFFFFF) | 0xD2000000);
+            TextView s = Ui.line(c, 11, 500, (tc & 0x00FFFFFF) | 0xD2000000);
             s.setText(small);
             col.addView(s);
         }
-        TextView b = Ui.line(c, 32, 650, col);
+        TextView b = Ui.line(c, 32, 650, tc);
         b.setText(big);
         b.setLetterSpacing(-0.02f);
-        if (col == Color.WHITE) b.setShadowLayer(dp(c, 6), 0, dp(c, 1), Color.argb(90, 0, 0, 0));
+        if (tc == Color.WHITE) b.setShadowLayer(dp(c, 6), 0, dp(c, 1), Color.argb(90, 0, 0, 0));
         col.addView(b);
         if (sub != null) {
-            TextView d = Ui.line(c, 11, 500, (col & 0x00FFFFFF) | 0xDC000000);
+            TextView d = Ui.line(c, 11, 500, (tc & 0x00FFFFFF) | 0xDC000000);
             d.setText(sub);
-            if (col == Color.WHITE) d.setShadowLayer(dp(c, 4), 0, dp(c, 1), Color.argb(90, 0, 0, 0));
+            if (tc == Color.WHITE) d.setShadowLayer(dp(c, 4), 0, dp(c, 1), Color.argb(90, 0, 0, 0));
             col.addView(d);
         }
         return col;
