@@ -3862,8 +3862,12 @@ final class Panels {
         chev.setGravity(Gravity.END);
         side.addView(chev);
         r.addView(side);
+        // riak terhad dalam baris (bukan bulatan besar tanpa had)
+        android.graphics.drawable.GradientDrawable rm = new android.graphics.drawable.GradientDrawable();
+        rm.setCornerRadius(dp(18));
+        rm.setColor(Color.WHITE);
         r.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(Color.argb(50, 255, 255, 255)), null, null));
+                android.content.res.ColorStateList.valueOf(clay() && !BentoViews.clayDark ? Color.argb(28, 60, 52, 137) : Color.argb(28, 255, 255, 255)), null, rm));
 
         // ---- kembang: baca penuh, gambar, butang tindakan (sama seperti kad Classic) ----
         final LinearLayout wrap = new LinearLayout(s);

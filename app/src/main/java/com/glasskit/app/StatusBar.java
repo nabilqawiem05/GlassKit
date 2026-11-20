@@ -250,7 +250,14 @@ class StatusBar extends View {
         return dp(27) + (charging ? dp(9) : 0);
     }
 
-    private boolean solid;
+    private boolean solid, rec;
+
+    /** Sedang merakam skrin: gaya iPhone lukis pil merah legap di belakang jam (menutup cip rakaman stock). */
+    void setRec(boolean v) {
+        if (rec == v) return;
+        rec = v;
+        invalidate();
+    }
 
     /** Kapsul legap: menutup cip rakaman / privasi status bar stock supaya tidak bertindih. */
     void setSolid(boolean v) {
@@ -298,14 +305,16 @@ class StatusBar extends View {
             rx = w - pad - (style == MINIMAL ? dp(6) : cpad) - rw;
         }
 
+        float lr = lx + lw + cpad;
+        if (rec && style != MINIMAL) lr = Math.max(lr, Math.min(cx - gapHalf - dp(4), dp(146)));
         if (style == CLAY) {
-            clayCapsule(c, lx - cpad, lx + lw + cpad, cy);
+            clayCapsule(c, lx - cpad, lr, cy);
             clayCapsule(c, rx - cpad, rx + rw + cpad, cy);
         } else if (style == TINT) {
-            tintCapsule(c, lx - cpad, lx + lw + cpad, cy);
+            tintCapsule(c, lx - cpad, lr, cy);
             tintCapsule(c, rx - cpad, rx + rw + cpad, cy);
         } else if (style != MINIMAL) {
-            capsule(c, lx - cpad, lx + lw + cpad, cy);
+            capsule(c, lx - cpad, lr, cy);
             capsule(c, rx - cpad, rx + rw + cpad, cy);
         }
 
@@ -462,7 +471,18 @@ class StatusBar extends View {
         float leftMid = (edge + (cx - g)) / 2f;
         Paint.FontMetrics fm = text.getFontMetrics();
         float base = cy - (fm.ascent + fm.descent) / 2f;
-        c.drawText(time, leftMid - text.measureText(time) / 2f, base, text);
+        if (rec) {
+            float hh = dp(13.5f);
+            float pr = Math.max(cx - g, dp(146));
+            cap.setShader(null);
+            cap.setColor(0xFFFF3B30);
+            c.drawRoundRect(new RectF(edge, cy - hh, pr, cy + hh), hh, hh, cap);
+            leftMid = (edge + pr) / 2f;
+            int keep = text.getColor();
+            text.setColor(Color.WHITE);
+            c.drawText(time, leftMid - text.measureText(time) / 2f, base, text);
+            text.setColor(keep);
+        } else c.drawText(time, leftMid - text.measureText(time) / 2f, base, text);
         // kanan
         float cw = (cell >= 0 || airplane ? dp(16) + dp(6) : 0) + (wifi >= 0 ? dp(17) + dp(6) : 0)
                 + (hotspot ? dp(17) + dp(6) : 0) + (dnd ? dp(13) + dp(6) : 0) + batteryWidth();

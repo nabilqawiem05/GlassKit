@@ -265,7 +265,7 @@ public class PillService extends AccessibilityService
     private int lastPriv = -1;
 
     void onPrivacy() {
-        if (sbar != null) sbar.setSolid(Recorder.recording() || (extras != null && extras.busy()));
+        if (sbar != null) { sbar.setSolid(Recorder.recording() || (extras != null && extras.busy())); sbar.setRec(Recorder.recording()); }
         if (privDot == null || extras == null) return;
         int k = extras.privacy();
         if (k != lastPriv) {
@@ -2389,7 +2389,7 @@ public class PillService extends AccessibilityService
     };
 
     void onRecChanged() {
-        if (sbar != null) sbar.setSolid(Recorder.recording() || (extras != null && extras.busy()));
+        if (sbar != null) { sbar.setSolid(Recorder.recording() || (extras != null && extras.busy())); sbar.setRec(Recorder.recording()); }
         h.removeCallbacks(recTick);
         if (Recorder.recording()) h.post(recTick);
         refresh();
