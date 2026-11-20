@@ -109,7 +109,11 @@ final class ThemedIcons {
             boolean trusted = mono != null;
             if (mono == null && a.getForeground() != null) {
                 // lapisan depan berwarna-warni (gambar / ikon lama dibalut sistem): ambil logo dari dalamnya
-                if (multiColour(a.getForeground()) || coverage(a.getForeground()) >= 0.55f) return detailed(d, s, color, true);
+                if (multiColour(a.getForeground()) || coverage(a.getForeground()) >= 0.55f) {
+                    Bitmap r = detailed(d, s, color, true);
+                    if (boxCover(r, Math.round(s * 0.17f), Math.round(s * 0.66f)) < 0.7f) return r;
+                    return duotone(d, s, color);
+                }
                 mono = a.getForeground();
             }
             if (mono != null) {
@@ -119,16 +123,84 @@ final class ThemedIcons {
                 m.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
                 m.draw(c);
                 m.setColorFilter(null);
-                if (trusted || coverageOf(b) > 0.02f) return b;
+                float cov = coverageOf(b);
+                // logo sebenar tidak memenuhi kotak: kotak penuh = lapisan "monokrom" palsu / gambar → cara lain
+                if (cov > 0.02f && boxCover(b, off, g) < 0.62f) return b;
                 b.eraseColor(0);
+                if (trusted) {
+                    Bitmap r = detailed(d, s, color, a.getForeground() != null && multiColour(a.getForeground()));
+                    if (boxCover(r, Math.round(s * 0.17f), Math.round(s * 0.66f)) < 0.7f) return r;
+                    return duotone(d, s, color);
+                }
             }
         }
         // ikon penuh gambar (lapisan depan menutup semua) atau ikon lama: kekalkan butiran ikut kecerahan
-        return detailed(d, s, color, false);
+        Bitmap r = detailed(d, s, color, d instanceof AdaptiveIconDrawable && multiColour(((AdaptiveIconDrawable) d).getForeground()));
+        if (boxCover(r, Math.round(s * 0.17f), Math.round(s * 0.66f)) < 0.7f) return r;
+        return duotone(d, s, color);
+    }
+
+    /** Peratus kotak logo yang legap (logo sebenar jarang melebihi ~60%). */
+    private static float boxCover(Bitmap b, int off, int g) {
+        int on = 0, n = 0;
+        int x1 = Math.min(b.getWidth(), off + g), y1 = Math.min(b.getHeight(), off + g);
+        for (int y = Math.max(0, off); y < y1; y += 3)
+            for (int x = Math.max(0, off); x < x1; x += 3) {
+                n++;
+                if (Color.alpha(b.getPixel(x, y)) > 128) on++;
+            }
+        return n == 0 ? 0 : on / (float) n;
+    }
+
+    /**
+     * Gantian terakhir untuk ikon bergambar penuh: gambar ikon dalam satu warna (cerah = warna logo,
+     * gelap = lutsinar), jadi butiran gambar masih nampak, bukan kotak kosong.
+     */
+    private static Bitmap duotone(Drawable d, int s, int color) {
+        int g = Math.round(s * 0.7f);
+        Bitmap src = Bitmap.createBitmap(g, g, Bitmap.Config.ARGB_8888);
+        Canvas sc = new Canvas(src);
+        Path clip = new Path();
+        clip.addRoundRect(new RectF(0, 0, g, g), g * 0.24f, g * 0.24f, Path.Direction.CW);
+        sc.clipPath(clip);
+        if (d instanceof AdaptiveIconDrawable) {
+            AdaptiveIconDrawable a = (AdaptiveIconDrawable) d;
+            int ext = Math.round(g * 0.25f);
+            if (a.getBackground() != null) { a.getBackground().setBounds(-ext, -ext, g + ext, g + ext); a.getBackground().draw(sc); }
+            if (a.getForeground() != null) { a.getForeground().setBounds(-ext, -ext, g + ext, g + ext); a.getForeground().draw(sc); }
+        } else {
+            d.setBounds(0, 0, g, g);
+            d.draw(sc);
+        }
+        int[] px = new int[g * g];
+        src.getPixels(px, 0, g, 0, 0, g, g);
+        src.recycle();
+        float lo = 1, hi = 0;
+        for (int p : px) {
+            if (Color.alpha(p) < 128) continue;
+            float l = (0.299f * Color.red(p) + 0.587f * Color.green(p) + 0.114f * Color.blue(p)) / 255f;
+            if (l < lo) lo = l;
+            if (l > hi) hi = l;
+        }
+        float span = Math.max(0.08f, hi - lo);
+        int rgb = color & 0x00FFFFFF;
+        int[] o = new int[g * g];
+        for (int k = 0; k < px.length; k++) {
+            int p = px[k];
+            if (Color.alpha(p) < 10) continue;
+            float l = (0.299f * Color.red(p) + 0.587f * Color.green(p) + 0.114f * Color.blue(p)) / 255f;
+            float v = 0.25f + 0.75f * ((l - lo) / span);       // gelap tetap samar supaya bentuk ikon nampak
+            o[k] = (Math.round(Math.min(1f, v) * Color.alpha(p)) << 24) | rgb;
+        }
+        Bitmap out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
+        int off = (s - g) / 2;
+        out.setPixels(o, 0, g, off, off, g, g);
+        return out;
     }
 
     /** Lapisan mempunyai lebih dari satu warna ketara (bukan logo satu warna)? */
     private static boolean multiColour(Drawable d) {
+        if (d == null) return false;
         Bitmap t = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888);
         d.setBounds(0, 0, 48, 48);
         d.draw(new Canvas(t));
@@ -236,16 +308,7 @@ final class ThemedIcons {
         float hi = m == 0 ? 0 : sortd[Math.min(m - 1, (int) (m * 0.97f))];
         Bitmap out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
         int off = (s - g) / 2;
-        if (hi < 0.05f) {
-            // ikon rata satu warna: tunjuk bentuk sebagai siluet lembut
-            Canvas bc = new Canvas(out);
-            Paint sp = new Paint(Paint.ANTI_ALIAS_FLAG);
-            sp.setColor(color);
-            sp.setAlpha(200);
-            float rr = g * 0.24f;
-            bc.drawRoundRect(new RectF(off, off, off + g, off + g), rr, rr, sp);
-            return out;
-        }
+        if (hi < 0.05f) return duotone(d, s, color); // hampir satu warna: guna gambar satu-warna
         int rgb = color & 0x00FFFFFF;
         int[] o = new int[g * g];
         for (int k = 0; k < px.length; k++) {
