@@ -650,6 +650,31 @@ final class Panels {
 
         void set(boolean on, String state) {
             if (hook != null) hook.accept(on);
+            int ps = s.prefs.getInt(Prefs.PANEL_STYLE, 1);
+            if (round && ps == 3) {
+                // tanah liat: bulatan lembut timbul; hidup = pastel warna suis
+                disc.setBackground(new BentoViews.Clay(s, on ? BentoViews.pastel(onColor) : BentoViews.CLAY_BASE, 99, true));
+                ic.setColor(on ? Color.WHITE : BentoViews.CLAY_INK);
+                if (label != null) label.setTextColor(BentoViews.CLAY_INK);
+                return;
+            }
+            if (round && ps == 1) {
+                // Liquid: tiada warna-warni — kaca jernih; hidup = kaca putih bercahaya, ikon gelap
+                android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+                g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                if (on) {
+                    g.setColors(new int[]{Color.WHITE, 0xFFD8D8DE});
+                    g.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+                    g.setGradientRadius(dp(44));
+                    g.setGradientCenter(0.35f, 0.25f);
+                } else {
+                    g.setColor(Color.argb(42, 255, 255, 255));
+                }
+                g.setStroke(Math.max(1, dp(0.8f)), on ? Color.argb(200, 255, 255, 255) : Color.argb(55, 255, 255, 255));
+                disc.setBackground(g);
+                ic.setColor(on ? 0xFF1C1C1E : Color.WHITE);
+                return;
+            }
             if (round) {
                 android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
                 g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
@@ -766,7 +791,7 @@ final class Panels {
     void openControl() {
         if (open == QS) return;
         int ps = s.prefs.getInt(Prefs.PANEL_STYLE, 1);
-        if (ps == 1 || ps == 2) {
+        if (ps >= 1) {
             openLiquid();
             return;
         }
@@ -796,6 +821,9 @@ final class Panels {
         LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(w, dp(52));
         sl.topMargin = dp(18);
         col.addView(sBright, sl);
+        LinearLayout.LayoutParams asl = new LinearLayout.LayoutParams(w, -2);
+        asl.topMargin = dp(10);
+        col.addView(autoSoundRow(), asl);
 
         int bw = (w - gap) / 2, bh = dp(72);
         tWifi = new Tile(Icon.WIFI, s.getString(R.string.tg_wifi), true, bh, v -> toggleWifi(), act(Settings.Panel.ACTION_WIFI));
@@ -1358,7 +1386,7 @@ final class Panels {
         java.util.Set<String> hiddenT = hiddenTiles();
         List<Tile> shown = new ArrayList<>();
         for (String k : keys) if (!hiddenT.contains(k)) shown.add(map.get(k));
-        if (s.prefs.getInt(Prefs.PANEL_STYLE, 1) == 2) {
+        if (s.prefs.getInt(Prefs.PANEL_STYLE, 1) >= 2) {
             fillBento(sheet, gap, map, shown);
             return;
         }
@@ -1407,6 +1435,11 @@ final class Panels {
         sheet.drops.add(vBright);
         sheet.drops.add(vVolume);
         b.addView(mid, new LinearLayout.LayoutParams(-1, -2));
+        View asr = autoSoundRow();
+        LinearLayout.LayoutParams asrl = new LinearLayout.LayoutParams(-1, -2);
+        asrl.topMargin = dp(14);
+        b.addView(asr, asrl);
+        sheet.drops.add(asr);
 
         // muzik: sentiasa ada (cantik untuk screenshot); tiada lagu = tekan main untuk sambung
         View media = mediaCard(true);
@@ -1456,6 +1489,61 @@ final class Panels {
 
     }
 
+    // ===================== Tema =====================
+
+    private boolean clay() { return s.prefs.getInt(Prefs.PANEL_STYLE, 1) == 3; }
+
+    private int ink() { return clay() ? BentoViews.CLAY_INK : Color.WHITE; }
+
+    private int inkSoft() { return clay() ? BentoViews.CLAY_SOFT : Color.argb(200, 255, 255, 255); }
+
+    private void applyTheme() {
+        BentoViews.clay = clay();
+        BentoViews.ink = ink();
+    }
+
+    /** Warnakan semula semua teks & ikon dalam satu pokok paparan (untuk tema tanah liat). */
+    private void tintTree(View v, int col) {
+        if (v instanceof TextView) ((TextView) v).setTextColor(col);
+        else if (v instanceof Icon) ((Icon) v).setColor(col);
+        else if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) tintTree(g.getChildAt(i), col);
+        }
+    }
+
+    /** Cip butang ikut tema (kaca / tanah liat). */
+    private View themedChip(String label, View.OnClickListener l) {
+        View v = chip(label, l);
+        if (clay() && v instanceof TextView) {
+            v.setBackground(BentoViews.boxBg(s, false, 0));
+            ((TextView) v).setTextColor(ink());
+        }
+        return v;
+    }
+
+    /** Baris "☀ Auto" + "🔊 Bunyi" (kecerahan auto & semua bunyi) untuk panel Classic / Liquid. */
+    private View autoSoundRow() {
+        LinearLayout r = new LinearLayout(s);
+        final TextView[] auto = new TextView[1];
+        View a = chip(autoLabel(), v -> {
+            toggleAutoBrightness();
+            auto[0].setText(autoLabel());
+        });
+        auto[0] = (TextView) a;
+        r.addView(a, new LinearLayout.LayoutParams(0, dp(44), 1f));
+        View b = chip("🔊  " + s.getString(R.string.sound_all), v -> showSoundSheet(tileMap != null ? tileMap.get("ringer") : null));
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        bl.leftMargin = dp(10);
+        r.addView(b, bl);
+        return r;
+    }
+
+    private String autoLabel() {
+        boolean on = Settings.System.getInt(s.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == 1;
+        return "☀  " + s.getString(R.string.bento_auto) + " · " + s.getString(on ? R.string.st_on : R.string.st_off);
+    }
+
     // ===================== Bento =====================
 
     /**
@@ -1465,6 +1553,16 @@ final class Panels {
     private void fillBento(LiquidSheet sheet, int gapIgnored, java.util.Map<String, Tile> map, List<Tile> shown) {
         LinearLayout b = sheet.body;
         sheet.dropStyle = new java.util.Random().nextInt(4);
+        applyTheme();
+        if (clay()) {
+            // panel tanah liat: latar pastel lembut menutup kaca
+            GradientDrawable pb = new GradientDrawable();
+            pb.setColor(BentoViews.CLAY_PANEL);
+            pb.setCornerRadius(dp(36));
+            b.setBackground(pb);
+            b.setPadding(dp(10), dp(10), dp(10), dp(14));
+            if (b.getChildCount() > 0 && b.getChildAt(0) instanceof ViewGroup) tintTree(b.getChildAt(0), ink());
+        }
         final int g = dp(8), u = dp(78);
         sBright = null;
         vBright = vVolume = null;
@@ -1497,7 +1595,8 @@ final class Panels {
         sheet.drops.add(r1b);
 
         // ---- baris 2: kecerahan penuh ----
-        sBright = new Widgets.HSlider(s, Icon.SUN, BentoViews.boxBg(s, false, 0), 0xFFFAC775, 0xFF412402);
+        sBright = new Widgets.HSlider(s, Icon.SUN, BentoViews.boxBg(s, false, 0),
+                clay() ? 0xFFAFA9EC : 0xFFFAC775, clay() ? Color.WHITE : 0xFF412402);
         sBright.setCb((v, done) -> {
             setBrightness(v, done);
             paintAuto(false); // seret = kecerahan manual
@@ -1509,20 +1608,37 @@ final class Panels {
         TextView at = Ui.line(s, 13, 700, Color.WHITE);
         at.setText("A");
         at.setGravity(Gravity.CENTER);
-        TextView al = Ui.line(s, 9, 600, Color.argb(220, 255, 255, 255));
+        TextView al = Ui.line(s, 9, 600, inkSoft());
         al.setText(R.string.bento_auto);
         al.setGravity(Gravity.CENTER);
         LinearLayout ac = new LinearLayout(s);
         ac.setOrientation(LinearLayout.VERTICAL);
         ac.setGravity(Gravity.CENTER);
-        ac.addView(new Icon(s, Icon.SUN, Color.WHITE), new LinearLayout.LayoutParams(dp(20), dp(20)));
+        ac.addView(new Icon(s, Icon.SUN, ink()), new LinearLayout.LayoutParams(dp(20), dp(20)));
         ac.addView(al);
         autoBox.addView(ac, new FrameLayout.LayoutParams(-1, -1));
         autoBox.setOnClickListener(v -> toggleAutoBrightness());
         Ui.press(autoBox);
-        LinearLayout.LayoutParams abl = new LinearLayout.LayoutParams(dp(68), dp(56));
+        LinearLayout.LayoutParams abl = new LinearLayout.LayoutParams(dp(62), dp(56));
         abl.leftMargin = g;
         brow.addView(autoBox, abl);
+        // butang semua bunyi (media, deringan, notifikasi, penggera, panggilan)
+        FrameLayout snd = new FrameLayout(s);
+        snd.setBackground(BentoViews.boxBg(s, false, 0));
+        LinearLayout sc = new LinearLayout(s);
+        sc.setOrientation(LinearLayout.VERTICAL);
+        sc.setGravity(Gravity.CENTER);
+        sc.addView(new Icon(s, Icon.SPEAKER, ink()), new LinearLayout.LayoutParams(dp(20), dp(20)));
+        TextView sl2 = Ui.line(s, 9, 600, inkSoft());
+        sl2.setText(R.string.sound_short);
+        sl2.setGravity(Gravity.CENTER);
+        sc.addView(sl2);
+        snd.addView(sc, new FrameLayout.LayoutParams(-1, -1));
+        snd.setOnClickListener(v -> showSoundSheet(map.get("ringer")));
+        Ui.press(snd);
+        LinearLayout.LayoutParams sdl = new LinearLayout.LayoutParams(dp(62), dp(56));
+        sdl.leftMargin = g;
+        brow.addView(snd, sdl);
         paintAuto(Settings.System.getInt(s.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == 1);
         LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
         bl.topMargin = g;
@@ -1578,16 +1694,16 @@ final class Panels {
         }
 
         LinearLayout foot = new LinearLayout(s);
-        foot.addView(chip(s.getString(R.string.system_panel), v -> {
+        foot.addView(themedChip(s.getString(R.string.system_panel), v -> {
             close();
             s.h.postDelayed(() -> s.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS), 450);
         }), new LinearLayout.LayoutParams(0, dp(42), 1f));
         LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(0, dp(42), 1f);
         fl.leftMargin = g;
-        foot.addView(chip(s.getString(R.string.cc_settings), v -> launch(new Intent(s, MainActivity.class))), fl);
+        foot.addView(themedChip(s.getString(R.string.cc_settings), v -> launch(new Intent(s, MainActivity.class))), fl);
         LinearLayout.LayoutParams fe = new LinearLayout.LayoutParams(dp(84), dp(42));
         fe.leftMargin = g;
-        foot.addView(chip(s.getString(R.string.tile_edit), v -> showTileEditor()), fe);
+        foot.addView(themedChip(s.getString(R.string.tile_edit), v -> showTileEditor()), fe);
         LinearLayout.LayoutParams fll = new LinearLayout.LayoutParams(-1, -2);
         fll.topMargin = dp(14);
         b.addView(foot, fll);
@@ -1629,6 +1745,7 @@ final class Panels {
         }
         if (t.label != null) {
             t.label.setTextSize(10.5f);
+            t.label.setTextColor(ink());
             t.label.setVisibility(wide ? View.GONE : View.VISIBLE);
         }
         final int col = t.onColor;
@@ -1639,7 +1756,7 @@ final class Panels {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12), 0, dp(12), 0);
             row.addView(t.v, new LinearLayout.LayoutParams(-2, -2));
-            TextView nm = Ui.line(s, 15, 600, Color.WHITE);
+            TextView nm = Ui.line(s, 15, 600, ink());
             nm.setText(t.name);
             nm.setPadding(dp(10), 0, 0, 0);
             row.addView(nm, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -1682,7 +1799,7 @@ final class Panels {
         FrameLayout faceA = new FrameLayout(s);
         faceA.addView(new BentoViews.Sky(s, w != null ? w.code : 2, w == null || w.day), new FrameLayout.LayoutParams(-1, -1));
         LinearLayout ta = BentoViews.face(s, w != null && w.city != null && !w.city.isEmpty() ? w.city : s.getString(R.string.wx_here),
-                w != null ? "0°" : "—", w != null ? Data.condition(s, w.code) : s.getString(R.string.wx_need));
+                w != null ? "0°" : "—", w != null ? Data.condition(s, w.code) : s.getString(R.string.wx_need), Color.WHITE);
         faceA.addView(ta, new FrameLayout.LayoutParams(-1, -1));
         if (w != null) BentoViews.countUp((TextView) ta.getChildAt(1), Math.round(w.temp), "°");
 
@@ -1690,7 +1807,7 @@ final class Panels {
         LinearLayout faceB = BentoViews.face(s,
                 new java.text.SimpleDateFormat("EEEE", java.util.Locale.getDefault()).format(cal.getTime()),
                 String.valueOf(cal.get(java.util.Calendar.DAY_OF_MONTH)),
-                new java.text.SimpleDateFormat("MMMM", java.util.Locale.getDefault()).format(cal.getTime()));
+                new java.text.SimpleDateFormat("MMMM", java.util.Locale.getDefault()).format(cal.getTime()), Color.WHITE);
         faceB.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFF993C1D, 0xFF4A1B0C}));
         final TextView evLine = (TextView) faceB.getChildAt(2);
         new Thread(() -> {
@@ -1733,7 +1850,7 @@ final class Panels {
         rl.topMargin = dp(12);
         rl.rightMargin = dp(12);
         faceB.addView(ring, rl);
-        faceB.addView(BentoViews.face(s, s.getString(R.string.bento_steps), String.valueOf(steps), "/ 8000"),
+        faceB.addView(BentoViews.face(s, s.getString(R.string.bento_steps), String.valueOf(steps), "/ 8000", Color.WHITE),
                 new FrameLayout.LayoutParams(-1, -1));
         ring.grow();
 
@@ -1753,8 +1870,8 @@ final class Panels {
         row.setPadding(dp(12), 0, dp(12), 0);
         LinearLayout txt = new LinearLayout(s);
         txt.setOrientation(LinearLayout.VERTICAL);
-        TextView a = Ui.line(s, 14, 650, Color.WHITE);
-        TextView bb = Ui.line(s, 11, 500, Color.argb(210, 255, 255, 255));
+        TextView a = Ui.line(s, 14, 650, ink());
+        TextView bb = Ui.line(s, 11, 500, inkSoft());
         if (pr != null) {
             a.setText(pr[0] + " " + pr[1]);
             bb.setText(String.valueOf(pr[2]));
@@ -2920,7 +3037,7 @@ final class Panels {
         col.setOnClickListener(v -> close());
         sv.addView(col, new ScrollView.LayoutParams(-1, -2));
 
-        if (s.prefs.getInt(Prefs.PANEL_STYLE, 1) == 2) {
+        if (s.prefs.getInt(Prefs.PANEL_STYLE, 1) >= 2) {
             openBentoNotifications(col, sv, w);
             return;
         }
@@ -3094,23 +3211,35 @@ final class Panels {
         bnStyle = new java.util.Random().nextInt(4);
         bnFilter = 0;
         tWifi = null;
+        applyTheme();
+        if (clay()) {
+            GradientDrawable pb = new GradientDrawable();
+            pb.setColor(BentoViews.CLAY_PANEL);
+            pb.setCornerRadius(dp(36));
+            col.setBackground(pb);
+            col.setPadding(col.getPaddingLeft() + dp(6), col.getPaddingTop() + dp(8), col.getPaddingRight() + dp(6), col.getPaddingBottom() + dp(8));
+        }
 
         // ---- dua kotak atas: jam | ringkasan ----
         LinearLayout top = new LinearLayout(s);
         LinearLayout clk = new LinearLayout(s);
         clk.setOrientation(LinearLayout.VERTICAL);
         clk.setPadding(dp(14), dp(12), dp(14), dp(12));
-        clk.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.argb(110, 55, 138, 221), Color.argb(70, 12, 68, 124)}));
-        ((GradientDrawable) clk.getBackground()).setCornerRadius(dp(22));
+        if (clay()) clk.setBackground(BentoViews.boxBg(s, true, 0xFF85B7EB));
+        else {
+            GradientDrawable cg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.argb(110, 55, 138, 221), Color.argb(70, 12, 68, 124)});
+            cg.setCornerRadius(dp(22));
+            clk.setBackground(cg);
+        }
         java.util.Date now = new java.util.Date();
-        TextView d1 = Ui.line(s, 11, 500, Color.argb(200, 255, 255, 255));
+        TextView d1 = Ui.line(s, 11, 500, inkSoft());
         d1.setText(new java.text.SimpleDateFormat("EEEE, d MMM", java.util.Locale.getDefault()).format(now));
-        TextView d2 = Ui.line(s, 32, 650, Color.WHITE);
+        TextView d2 = Ui.line(s, 32, 650, ink());
         d2.setText(new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(s) ? "HH:mm" : "h:mm",
                 java.util.Locale.getDefault()).format(now));
         d2.setLetterSpacing(-0.02f);
-        TextView d3 = Ui.line(s, 11, 500, Color.argb(210, 255, 255, 255));
+        TextView d3 = Ui.line(s, 11, 500, inkSoft());
         StringBuilder info = new StringBuilder();
         try {
             Data.Weather wx = Data.weather(s);
@@ -3129,9 +3258,9 @@ final class Panels {
         sum.setOrientation(LinearLayout.VERTICAL);
         sum.setPadding(dp(14), dp(12), dp(14), dp(12));
         sum.setBackground(BentoViews.boxBg(s, false, 0));
-        TextView s1 = Ui.line(s, 11, 500, Color.argb(160, 255, 255, 255));
+        TextView s1 = Ui.line(s, 11, 500, inkSoft());
         s1.setText(R.string.bento_notifs);
-        bnCount = Ui.line(s, 32, 650, Color.WHITE);
+        bnCount = Ui.line(s, 32, 650, ink());
         bnCount.setText("0");
         bnBar = new LinearLayout(s);
         bnBar.setClipToOutline(true);
@@ -3154,7 +3283,7 @@ final class Panels {
         int[] names = {R.string.bento_all, R.string.bento_msgs, R.string.bento_other};
         for (int i = 0; i < 3; i++) {
             final int idx = i;
-            TextView t = Ui.line(s, 12, 600, Color.WHITE);
+            TextView t = Ui.line(s, 12, 600, ink());
             t.setText(names[i]);
             t.setGravity(Gravity.CENTER);
             t.setPadding(dp(14), dp(7), dp(14), dp(7));
@@ -3188,9 +3317,9 @@ final class Panels {
 
         // ---- butang bawah sama besar ----
         LinearLayout foot = new LinearLayout(s);
-        View man = chip(s.getString(R.string.manage), v -> launch(new Intent("android.settings.NOTIFICATION_SETTINGS")));
+        View man = themedChip(s.getString(R.string.manage), v -> launch(new Intent("android.settings.NOTIFICATION_SETTINGS")));
         foot.addView(man, new LinearLayout.LayoutParams(0, dp(44), 1f));
-        View clr = chip(s.getString(R.string.clear_all), v -> clearBento());
+        View clr = themedChip(s.getString(R.string.clear_all), v -> clearBento());
         clr.setBackground(BentoViews.boxBg(s, true, 0xFFE24B4A));
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(0, dp(44), 1f);
         cl.leftMargin = g;
@@ -3212,8 +3341,14 @@ final class Panels {
     }
 
     private void paintTab(TextView t, boolean on) {
-        t.setBackground(on ? Ui.round(Color.WHITE, dp(16)) : BentoViews.boxBg(s, false, 0));
-        t.setTextColor(on ? 0xFF121119 : Color.WHITE);
+        if (clay()) {
+            t.setBackground(on ? BentoViews.boxBg(s, true, 0xFF7F77DD) : BentoViews.boxBg(s, false, 0));
+            t.setTextColor(on ? Color.WHITE : ink());
+            t.setPadding(dp(18), dp(11), dp(18), dp(11));
+        } else {
+            t.setBackground(on ? Ui.round(Color.WHITE, dp(16)) : BentoViews.boxBg(s, false, 0));
+            t.setTextColor(on ? 0xFF121119 : Color.WHITE);
+        }
     }
 
     private static final java.util.Set<String> MSG_APPS = new java.util.HashSet<>(java.util.Arrays.asList(
@@ -3281,11 +3416,11 @@ final class Panels {
         LinearLayout h = new LinearLayout(s);
         h.setGravity(Gravity.CENTER_VERTICAL);
         h.setPadding(dp(6), dp(14), dp(6), dp(8));
-        TextView a = Ui.line(s, 11, 650, Color.argb(160, 255, 255, 255));
+        TextView a = Ui.line(s, 11, 650, inkSoft());
         a.setText(left);
         a.setLetterSpacing(0.06f);
         h.addView(a, new LinearLayout.LayoutParams(0, -2, 1f));
-        TextView b = Ui.line(s, 11, 600, Color.argb(160, 255, 255, 255));
+        TextView b = Ui.line(s, 11, 600, inkSoft());
         b.setText(right);
         if (onRight != null) {
             b.setOnClickListener(onRight);
@@ -3335,7 +3470,7 @@ final class Panels {
         }
         int idx = 2;
         if (list.isEmpty()) {
-            TextView e = Ui.text(s, 14, 500, Color.argb(180, 255, 255, 255));
+            TextView e = Ui.text(s, 14, 500, inkSoft());
             e.setText(R.string.no_notifications);
             e.setGravity(Gravity.CENTER);
             e.setPadding(0, dp(28), 0, dp(28));
@@ -3364,6 +3499,22 @@ final class Panels {
                 String pkg = en.getKey();
                 List<StatusBarNotification> gg = en.getValue();
                 View v;
+                if (clay()) {
+                    LinearLayout cb = new LinearLayout(s);
+                    cb.setOrientation(LinearLayout.VERTICAL);
+                    cb.setBackground(BentoViews.boxBg(s, false, 0));
+                    cb.setPadding(dp(4), dp(4), dp(4), dp(4));
+                    for (StatusBarNotification x : gg) {
+                        View r = bnRow(x);
+                        if (r != null) cb.addView(r, new LinearLayout.LayoutParams(-1, -2));
+                    }
+                    if (cb.getChildCount() == 0) continue;
+                    LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+                    p.bottomMargin = dp(8);
+                    ncList.addView(cb, p);
+                    if (bnAnimate) bnEnter(cb, idx++);
+                    continue;
+                }
                 if (gg.size() == 1 || openGroups.contains(pkg)) {
                     for (StatusBarNotification x : gg) {
                         View c = card(x, true, true);
@@ -3397,7 +3548,8 @@ final class Panels {
             LinearLayout box = new LinearLayout(s);
             box.setOrientation(LinearLayout.VERTICAL);
             box.setBackground(BentoViews.boxBg(s, false, 0));
-            box.setClipToOutline(true);
+            if (clay()) box.setPadding(dp(4), dp(4), dp(4), dp(4));
+            box.setClipToOutline(!clay());
             box.setOutlineProvider(new ViewOutlineProvider() {
                 @Override
                 public void getOutline(View view, Outline o) { o.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(22)); }
@@ -3409,7 +3561,7 @@ final class Panels {
                 if (row == null) continue;
                 if (shown > 0) {
                     View div = new View(s);
-                    div.setBackgroundColor(Color.argb(22, 255, 255, 255));
+                    div.setBackgroundColor(clay() ? Color.argb(40, 127, 119, 221) : Color.argb(22, 255, 255, 255));
                     LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(-1, Math.max(1, dp(0.7f)));
                     dl.leftMargin = dp(58);
                     dl.rightMargin = dp(14);
@@ -3446,18 +3598,18 @@ final class Panels {
         LinearLayout mid = new LinearLayout(s);
         mid.setOrientation(LinearLayout.VERTICAL);
         mid.setPadding(dp(12), 0, dp(8), 0);
-        TextView a = Ui.line(s, 14, 600, Color.WHITE);
+        TextView a = Ui.line(s, 14, 600, ink());
         a.setText(android.text.TextUtils.isEmpty(t) ? appName(x.getPackageName()) : t);
         a.setSingleLine(true);
         a.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        TextView b = Ui.line(s, 12, 500, Color.argb(200, 255, 255, 255));
+        TextView b = Ui.line(s, 12, 500, inkSoft());
         b.setText((android.text.TextUtils.isEmpty(body) ? "" : body + " · ") + appName(x.getPackageName()));
         b.setSingleLine(true);
         b.setEllipsize(android.text.TextUtils.TruncateAt.END);
         mid.addView(a);
         mid.addView(b);
         r.addView(mid, new LinearLayout.LayoutParams(0, -2, 1f));
-        TextView tm = Ui.line(s, 11, 500, Color.argb(140, 255, 255, 255));
+        TextView tm = Ui.line(s, 11, 500, inkSoft());
         tm.setText(ago(x.getPostTime()));
         r.addView(tm);
         r.setOnClickListener(v -> openApp(x, n));

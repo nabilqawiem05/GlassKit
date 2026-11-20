@@ -684,4 +684,8 @@
     <string name="bank_pause_hint">App bank (MAE, CIMB, TNG…) menyekat telefon yang ada app kebolehcapaian dari luar Play Store. Bila kau buka app bank, GlassKit berehat sekejap, buka semula app bank, dan hidup semula bila kau keluar. Perlukan Shizuku.</string>
     <string name="bank_need_shizuku">Hidupkan Shizuku supaya GlassKit boleh berehat untuk app bank</string>
     <string name="bank_paused">GlassKit berehat untuk app bank</string>
+    <string name="sbar_clay">Tanah liat</string>
+    <string name="panel_clay">Tanah liat</string>
+    <string name="sound_all">Semua bunyi</string>
+    <string name="sound_short">Bunyi</string>
 </resources>

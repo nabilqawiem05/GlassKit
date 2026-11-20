@@ -477,8 +477,8 @@ public class MainActivity extends Activity {
         toggle(sb, R.string.sbar_pct, Prefs.SBAR_PCT, true);
         label(sb, R.string.sbar_style);
         // cip boleh skrol (6 gaya tidak muat dalam satu baris segmen)
-        int[] sbOrder = {5, 0, 1, 2, 3, 4};
-        int[] sbNames = {R.string.sbar_iphone, R.string.sbar_capsule, R.string.sbar_minimal, R.string.sbar_island,
+        int[] sbOrder = {6, 5, 0, 1, 2, 3, 4};
+        int[] sbNames = {R.string.sbar_clay, R.string.sbar_iphone, R.string.sbar_capsule, R.string.sbar_minimal, R.string.sbar_island,
                 R.string.sbar_chips, R.string.sbar_tint};
         choiceChips(sb, sbOrder, sbNames, prefs.getInt(Prefs.SBAR_STYLE, 0), i -> prefs.edit().putInt(Prefs.SBAR_STYLE, i).apply());
         LinearLayout sr = new LinearLayout(this);
@@ -512,7 +512,7 @@ public class MainActivity extends Activity {
                 });
         note(pan, getString(R.string.glass_mode_note));
         label(pan, R.string.panel_style);
-        segmented(pan, new int[]{R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento},
+        segmented(pan, new int[]{R.string.panel_classic, R.string.panel_liquid, R.string.panel_bento, R.string.panel_clay},
                 prefs.getInt(Prefs.PANEL_STYLE, 1), i -> prefs.edit().putInt(Prefs.PANEL_STYLE, i).apply());
         note(pan, getString(R.string.panel_style_note));
         note(pan, getString(R.string.panels_hint));

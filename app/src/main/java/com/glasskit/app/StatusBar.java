@@ -32,7 +32,10 @@ import java.util.Set;
 
 /** Status bar tersuai: jam, ikon notifikasi, signal, Wi-Fi, bateri pil. 3 gaya. */
 class StatusBar extends View {
-    static final int CAPSULE = 0, MINIMAL = 1, ISLAND = 2, CHIPS = 3, TINT = 4, IPHONE = 5;
+    static final int CAPSULE = 0, MINIMAL = 1, ISLAND = 2, CHIPS = 3, TINT = 4, IPHONE = 5, CLAY = 6;
+    private int ink = 0xFFFFFFFF; // warna teks & ikon
+
+    private int inkDim() { return (ink & 0x00FFFFFF) | 0x50000000; }
     // G · cip pintar
     private Data.Weather wx;
     private int ringer = 2; // AudioManager.RINGER_MODE_NORMAL
@@ -63,7 +66,7 @@ class StatusBar extends View {
     StatusBar(Context c) {
         super(c);
         prefs = Prefs.get(c);
-        text.setColor(Color.WHITE);
+        text.setColor(ink);
         text.setTypeface(Ui.font(650));
         text.setTextSize(dp(14.5f));
         text.setLetterSpacing(0.01f);
@@ -94,7 +97,9 @@ class StatusBar extends View {
         showPct = prefs.getBoolean(Prefs.SBAR_PCT, true);
         dark = Ui.darkGlass(c);
         boolean bare = style == MINIMAL || style == IPHONE;
-        setLayerType(bare ? LAYER_TYPE_SOFTWARE : LAYER_TYPE_HARDWARE, null);
+        ink = style == CLAY ? 0xFF3C3489 : 0xFFFFFFFF;
+        text.setColor(ink);
+        setLayerType(bare || style == CLAY ? LAYER_TYPE_SOFTWARE : LAYER_TYPE_HARDWARE, null);
         text.setShadowLayer(bare ? dp(3) : 0, 0, dp(0.6f), Color.argb(130, 0, 0, 0));
         text.setTypeface(Ui.font(style == IPHONE ? 700 : 650));
         text.setTextSize(dp(style == IPHONE ? 16.5f : 14.5f));
@@ -181,7 +186,7 @@ class StatusBar extends View {
                         Drawable d = n.getSmallIcon().loadDrawable(c);
                         if (d == null) continue;
                         d = d.mutate();
-                        d.setTint(Color.WHITE);
+                        d.setTint(ink);
                         notifs.add(d);
                     }
                 }
@@ -292,7 +297,10 @@ class StatusBar extends View {
             rx = w - pad - (style == MINIMAL ? dp(6) : cpad) - rw;
         }
 
-        if (style == TINT) {
+        if (style == CLAY) {
+            clayCapsule(c, lx - cpad, lx + lw + cpad, cy);
+            clayCapsule(c, rx - cpad, rx + rw + cpad, cy);
+        } else if (style == TINT) {
             tintCapsule(c, lx - cpad, lx + lw + cpad, cy);
             tintCapsule(c, rx - cpad, rx + rw + cpad, cy);
         } else if (style != MINIMAL) {
@@ -323,7 +331,7 @@ class StatusBar extends View {
         // ---- kanan: kelajuan, DND, signal, Wi-Fi, bateri ----
         x = rx;
         if (speed != null) {
-            sp.setColor(Color.WHITE);
+            sp.setColor(ink);
             Paint.FontMetrics sf = sp.getFontMetrics();
             c.drawText(speed, x, cy - (sf.ascent + sf.descent) / 2f, sp);
             x += speedWidth();
@@ -345,12 +353,34 @@ class StatusBar extends View {
             x += dp(17) + dp(6);
         }
         if (pctOutsideWidth() > 0) {
-            sp.setColor(battery <= 20 && !charging ? 0xFFFF6961 : Color.WHITE);
+            sp.setColor(battery <= 20 && !charging ? 0xFFFF6961 : ink);
             Paint.FontMetrics pf = sp.getFontMetrics();
             c.drawText(pctText(), x, cy - (pf.ascent + pf.descent) / 2f, sp);
             x += pctOutsideWidth();
         }
         drawBattery(c, x, cy);
+    }
+
+    // ===================== Tanah liat (Claymorphism) =====================
+
+    private final Paint clayP = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    /** Pil tanah liat: lavender lembut, bayang luar lembut, kilauan dalam di atas. */
+    private void clayCapsule(Canvas c, float l, float r, float cy) {
+        float hh = dp(13.5f);
+        RectF rf = new RectF(l, cy - hh, r, cy + hh);
+        clayP.setShader(null);
+        clayP.setColor(0xFFF3ECFB);
+        clayP.setShadowLayer(dp(5), dp(1.5f), dp(2.5f), Color.argb(90, 83, 74, 183));
+        c.drawRoundRect(rf, hh, hh, clayP);
+        clayP.setShadowLayer(dp(3), -dp(1), -dp(1), Color.argb(200, 255, 255, 255));
+        c.drawRoundRect(rf, hh, hh, clayP);
+        clayP.clearShadowLayer();
+        clayP.setShader(new LinearGradient(0, rf.top, 0, rf.bottom,
+                new int[]{Color.argb(170, 255, 255, 255), Color.argb(0, 255, 255, 255), Color.argb(40, 60, 52, 137)},
+                new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP));
+        c.drawRoundRect(rf, hh, hh, clayP);
+        clayP.setShader(null);
     }
 
     // ===================== H · warna ikut wallpaper =====================
@@ -466,7 +496,7 @@ class StatusBar extends View {
         cap.setShader(new LinearGradient(0, rf.top, 0, rf.bottom,
                 new int[]{Color.argb(dark ? 40 : 70, 255, 255, 255), Color.argb(0, 255, 255, 255)}, new float[]{0f, 0.7f}, Shader.TileMode.CLAMP));
         c.drawRoundRect(rf, hh, hh, cap);
-        capEdge.setColor(Color.argb(80, 255, 255, 255));
+        capEdge.setColor(inkDim());
         c.drawRoundRect(rf, hh, hh, capEdge);
         capEdge.setColor(Color.argb(55, 255, 255, 255));
     }
@@ -498,7 +528,7 @@ class StatusBar extends View {
         if (wt != null && x + ww <= leftLimit) {
             chip(c, x, x + ww, cy);
             drawWeatherGlyph(c, x + dp(8), cy, dp(15), wx.code);
-            sp.setColor(Color.WHITE);
+            sp.setColor(ink);
             c.drawText(wt, x + dp(8) + dp(15) + dp(4), sBase, sp);
             x += ww + gap;
         }
@@ -530,7 +560,7 @@ class StatusBar extends View {
             chip(c, l, rx, cy);
             float sx = l + dp(8);
             if (speed != null) {
-                sp.setColor(Color.WHITE);
+                sp.setColor(ink);
                 c.drawText(speed, sx, sBase, sp);
                 sx += speedWidth();
             }
@@ -565,7 +595,7 @@ class StatusBar extends View {
         fill.setColor(col);
         c.drawPath(path, fill);
         c.drawCircle(cx, cy + s * 0.7f, s * 0.18f, fill);
-        stroke.setColor(Color.WHITE);
+        stroke.setColor(ink);
         stroke.setStrokeWidth(dp(1.4f));
         c.drawLine(cx - s, cy - s, cx + s, cy + s, stroke);
     }
@@ -587,7 +617,7 @@ class StatusBar extends View {
         }
         boolean rain = code >= 51;
         float oy = rain ? -size * 0.12f : 0;
-        fill.setColor(Color.WHITE);
+        fill.setColor(ink);
         c.drawCircle(cx - size * 0.16f, cy + oy + size * 0.06f, size * 0.2f, fill);
         c.drawCircle(cx + size * 0.08f, cy + oy - size * 0.06f, size * 0.26f, fill);
         c.drawRoundRect(cx - size * 0.38f, cy + oy + size * 0.02f, cx + size * 0.4f, cy + oy + size * 0.26f, size * 0.12f, size * 0.12f, fill);
@@ -605,7 +635,7 @@ class StatusBar extends View {
         float bw = dp(3), gap = dp(1.4f), bottom = cy + dp(5.5f);
         for (int i = 0; i < 4; i++) {
             float bh = dp(4) + i * dp(2.4f);
-            fill.setColor(i < Math.max(level, 0) ? Color.WHITE : Color.argb(80, 255, 255, 255));
+            fill.setColor(i < Math.max(level, 0) ? ink : inkDim());
             float l = x + i * (bw + gap);
             c.drawRoundRect(l, bottom - bh, l + bw, bottom, dp(1), dp(1), fill);
         }
@@ -626,17 +656,17 @@ class StatusBar extends View {
             c.drawArc(o, 145, 70, false, stroke);
             c.drawArc(o, -35, 70, false, stroke);
         }
-        stroke.setColor(Color.WHITE);
+        stroke.setColor(ink);
     }
 
     private void drawWifi(Canvas c, float x, float cy, int level) {
         float cxw = x + dp(8.5f), base = cy + dp(5.5f);
         stroke.setStrokeWidth(dp(2.3f));
-        fill.setColor(level >= 1 ? Color.WHITE : Color.argb(80, 255, 255, 255));
+        fill.setColor(level >= 1 ? ink : inkDim());
         c.drawCircle(cxw, base - dp(0.8f), dp(1.8f), fill);
         float[] r = {dp(6f), dp(10.5f)};
         for (int i = 0; i < 2; i++) {
-            stroke.setColor(level >= i + 2 ? Color.WHITE : Color.argb(80, 255, 255, 255));
+            stroke.setColor(level >= i + 2 ? ink : inkDim());
             c.drawArc(new RectF(cxw - r[i], base - r[i], cxw + r[i], base + r[i]), 225, 90, false, stroke);
         }
     }
@@ -645,7 +675,7 @@ class StatusBar extends View {
         float bw = dp(25), bh = dp(12.5f), r = dp(4);
         RectF body = new RectF(x, cy - bh / 2, x + bw, cy + bh / 2);
         int lvl = Math.max(0, battery);
-        int col = charging ? 0xFF30D158 : (lvl <= 20 ? 0xFFFF453A : Color.WHITE);
+        int col = charging ? 0xFF30D158 : (lvl <= 20 ? 0xFFFF453A : ink);
 
         fill.setColor(Color.argb(85, 255, 255, 255));
         c.drawRoundRect(body, r, r, fill);
@@ -660,7 +690,7 @@ class StatusBar extends View {
         c.drawRoundRect(body.right + dp(1.2f), cy - dp(2.3f), body.right + dp(2.6f), cy + dp(2.3f), dp(1), dp(1), fill);
 
         if (showPct && battery >= 0 && style != MINIMAL) {
-            pct.setColor(lvl > 45 || charging ? Color.argb(235, 0, 0, 0) : Color.WHITE);
+            pct.setColor(lvl > 45 || charging ? Color.argb(235, 0, 0, 0) : ink);
             Paint.FontMetrics fm = pct.getFontMetrics();
             c.drawText(String.valueOf(battery), body.centerX(), cy - (fm.ascent + fm.descent) / 2f, pct);
         }
@@ -674,7 +704,7 @@ class StatusBar extends View {
             path.lineTo(bx + 19 * s, cy - 1.5f * s * 1.3f);
             path.lineTo(bx + 13 * s, cy - 1.5f * s * 1.3f);
             path.close();
-            fill.setColor(Color.WHITE);
+            fill.setColor(ink);
             c.drawPath(path, fill);
         }
     }
@@ -685,7 +715,7 @@ class StatusBar extends View {
         Path b = new Path();
         b.addCircle(x + dp(9.5f), cy - dp(3), dp(4.8f), Path.Direction.CW);
         a.op(b, Path.Op.DIFFERENCE);
-        fill.setColor(Color.WHITE);
+        fill.setColor(ink);
         c.drawPath(a, fill);
     }
 
@@ -699,7 +729,7 @@ class StatusBar extends View {
         path.lineTo(13.4f, 13); path.lineTo(13, 18.5f); path.lineTo(15.5f, 20.5f); path.lineTo(15.5f, 21.5f);
         path.lineTo(12, 20.5f); path.lineTo(8.5f, 21.5f); path.lineTo(8.5f, 20.5f); path.lineTo(11, 18.5f);
         path.lineTo(10.6f, 13); path.lineTo(2.5f, 15); path.lineTo(2.5f, 13.5f); path.lineTo(10.6f, 9); path.close();
-        fill.setColor(Color.WHITE);
+        fill.setColor(ink);
         c.drawPath(path, fill);
         c.restore();
     }

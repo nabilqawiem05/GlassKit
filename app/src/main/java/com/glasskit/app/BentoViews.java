@@ -22,8 +22,74 @@ final class BentoViews {
 
     static int dp(Context c, float v) { return Ui.dp(c, v); }
 
+    // ---- tema Claymorphism ----
+    static boolean clay;
+    static int ink = Color.WHITE;           // warna teks utama
+    static final int CLAY_INK = 0xFF3C3489, CLAY_SOFT = 0xFF7F77DD, CLAY_BASE = 0xFFF8F2FD, CLAY_PANEL = 0xFFF1E9F7;
+
+    /** Versi pastel sesuatu warna (untuk suis hidup dalam tema tanah liat). */
+    static int pastel(int c) {
+        float[] h = new float[3];
+        Color.colorToHSV(c, h);
+        h[1] = Math.min(0.55f, h[1] * 0.7f + 0.15f);
+        h[2] = 0.88f;
+        return Color.HSVToColor(h);
+    }
+
+    /**
+     * Kotak tanah liat: badan lembut tebal, bayang luar (gelap kanan-bawah, terang kiri-atas),
+     * kilauan dalam di atas dan bayang dalam di bawah. Dilukis dalam sempadan (inset) supaya tidak terpotong.
+     */
+    static final class Clay extends android.graphics.drawable.Drawable {
+        private final int color;
+        private final float r, inset;
+        private final boolean oval;
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        Clay(Context c, int color, float radiusDp, boolean oval) {
+            this.color = color;
+            this.r = dp(c, radiusDp);
+            this.inset = dp(c, 4);
+            this.oval = oval;
+        }
+
+        @Override
+        public void draw(Canvas c) {
+            android.graphics.Rect b = getBounds();
+            RectF f = new RectF(b.left + inset, b.top + inset, b.right - inset, b.bottom - inset);
+            float rr = oval ? Math.min(f.width(), f.height()) / 2f : Math.min(r, Math.min(f.width(), f.height()) / 2f);
+            float s = inset;
+            // bayang luar
+            p.setShader(null);
+            p.setColor(color);
+            p.setShadowLayer(s * 1.6f, s * 0.7f, s * 0.9f, Color.argb(80, 83, 74, 183));
+            c.drawRoundRect(f, rr, rr, p);
+            p.setShadowLayer(s * 1.2f, -s * 0.5f, -s * 0.5f, Color.argb(230, 255, 255, 255));
+            c.drawRoundRect(f, rr, rr, p);
+            p.clearShadowLayer();
+            // badan
+            p.setColor(color);
+            c.drawRoundRect(f, rr, rr, p);
+            // kilauan dalam (atas) & bayang dalam (bawah)
+            p.setShader(new LinearGradient(0, f.top, 0, f.bottom,
+                    new int[]{Color.argb(150, 255, 255, 255), Color.argb(0, 255, 255, 255), Color.argb(0, 0, 0, 0), Color.argb(38, 60, 52, 137)},
+                    new float[]{0f, 0.35f, 0.6f, 1f}, Shader.TileMode.CLAMP));
+            c.drawRoundRect(f, rr, rr, p);
+            p.setShader(null);
+        }
+
+        @Override public void setAlpha(int a) {}
+        @Override public void setColorFilter(android.graphics.ColorFilter cf) {}
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+    }
+
     /** Latar kotak bento: kaca lembut; bila hidup diwarnakan dengan warna suis. */
-    static GradientDrawable boxBg(Context c, boolean on, int color) {
+    static android.graphics.drawable.Drawable boxBg(Context c, boolean on, int color) {
+        if (clay) return new Clay(c, on && color != 0 ? pastel(color) : CLAY_BASE, 24, false);
+        return glassBox(c, on, color);
+    }
+
+    static GradientDrawable glassBox(Context c, boolean on, int color) {
         GradientDrawable g = new GradientDrawable();
         g.setCornerRadius(dp(c, 24));
         if (on) {
@@ -250,24 +316,29 @@ final class BentoViews {
 
     /** Muka teks: label kecil di atas, nilai besar, keterangan. */
     static LinearLayout face(Context c, String small, String big, String sub) {
+        return face(c, small, big, sub, ink);
+    }
+
+    /** Muka teks dengan warna sendiri (cth. putih atas latar berwarna). */
+    static LinearLayout face(Context c, String small, String big, String sub, int col) {
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setGravity(Gravity.BOTTOM);
         col.setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 12));
         if (small != null) {
-            TextView s = Ui.line(c, 11, 500, Color.argb(210, 255, 255, 255));
+            TextView s = Ui.line(c, 11, 500, (col & 0x00FFFFFF) | 0xD2000000);
             s.setText(small);
             col.addView(s);
         }
-        TextView b = Ui.line(c, 32, 650, Color.WHITE);
+        TextView b = Ui.line(c, 32, 650, col);
         b.setText(big);
         b.setLetterSpacing(-0.02f);
-        b.setShadowLayer(dp(c, 6), 0, dp(c, 1), Color.argb(90, 0, 0, 0));
+        if (col == Color.WHITE) b.setShadowLayer(dp(c, 6), 0, dp(c, 1), Color.argb(90, 0, 0, 0));
         col.addView(b);
         if (sub != null) {
-            TextView d = Ui.line(c, 11, 500, Color.argb(220, 255, 255, 255));
+            TextView d = Ui.line(c, 11, 500, (col & 0x00FFFFFF) | 0xDC000000);
             d.setText(sub);
-            d.setShadowLayer(dp(c, 4), 0, dp(c, 1), Color.argb(90, 0, 0, 0));
+            if (col == Color.WHITE) d.setShadowLayer(dp(c, 4), 0, dp(c, 1), Color.argb(90, 0, 0, 0));
             col.addView(d);
         }
         return col;

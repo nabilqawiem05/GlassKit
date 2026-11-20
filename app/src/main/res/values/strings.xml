@@ -691,4 +691,8 @@
     <string name="bank_pause_hint">Banking apps (MAE, CIMB, TNG…) block phones with accessibility apps from outside Play Store. When you open one, GlassKit turns itself off for a moment, restarts the bank app, and turns itself back on when you leave it. Needs Shizuku.</string>
     <string name="bank_need_shizuku">Start Shizuku so GlassKit can pause for banking apps</string>
     <string name="bank_paused">GlassKit paused for banking app</string>
+    <string name="sbar_clay">Clay</string>
+    <string name="panel_clay">Clay</string>
+    <string name="sound_all">All sounds</string>
+    <string name="sound_short">Sound</string>
 </resources>
